@@ -60,13 +60,13 @@ class CustomerController {
 
   async updateMe(req, res) {
     try {
-      const { name, phone } = req.body || {};
+      const { name, email } = req.body || {};
       const customer = await Customer.findByPk(req.user.id);
       if (!customer) return res.status(404).json({ message: "Customer not found" });
 
       const payload = {};
       if (typeof name === "string" && name.trim()) payload.name = name.trim();
-      if (typeof phone === "string" && phone.trim()) payload.phone = phone.trim();
+      if (typeof email === "string" && email.trim()) payload.email = email.trim().toLowerCase();
 
       await customer.update(payload);
       return res.status(200).json({ message: "Profile updated", customer });

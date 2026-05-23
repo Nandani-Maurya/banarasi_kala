@@ -404,10 +404,10 @@ const Header = () => {
                     <span>{userPhone}</span>
                   </div>
                   <button type="button" onClick={() => goProtected("/my-orders")}>
-                    My Orders
+                    Orders
                   </button>
                   <button type="button" onClick={() => goProtected("/profile")}>
-                    My Profile
+                    Account
                   </button>
                   <button type="button" onClick={() => goProtected("/wishlist")}>
                     Wishlist
@@ -558,7 +558,7 @@ const Header = () => {
             {user ? (
               <>
                 <button type="button" onClick={() => goProtected("/my-orders")}>
-                  My Orders
+                  Orders
                 </button>
                 <button type="button" onClick={() => goProtected("/wishlist")}>
                   Wishlist {getWishlistCount() > 0 ? `(${getWishlistCount()})` : ""}
