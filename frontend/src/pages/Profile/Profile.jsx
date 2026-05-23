@@ -653,6 +653,7 @@ export default function Profile() {
   };
 
   const resetAddressForm = () => {
+    setMapOpen(false);
     setAddrForm((prev) => ({
       ...emptyAddress,
       name: profile?.name || prev.name || "",
