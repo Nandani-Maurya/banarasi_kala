@@ -28,7 +28,10 @@ const config = {
   port: Number(process.env.PORT || 5003),
   databaseUrl,
   dbSchema: normalize(process.env.DB_SCHEMA, "vns_saree"),
-  corsOrigins: normalize(process.env.CORS_ORIGINS || process.env.CLIENT_URL || "*"),
+  // Purani line ko hata kar yeh likhein:
+  corsOrigins: process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(",").map(url => url.trim())
+    : ["https://banarasi-kala.vercel.app", "http://localhost:3000", "http://localhost:5173"],
   welcomeBonus: Number(process.env.WELCOME_BONUS || 50),
   referralSignupBonus: Number(process.env.REFERRAL_SIGNUP_BONUS || 100),
   referralOrderBonus: Number(process.env.REFERRAL_ORDER_BONUS || 50),
