@@ -1,18 +1,20 @@
 const { Sequelize } = require("sequelize");
 const { config } = require("./env");
 
+const SYNC_DATABASE = false;
+const SYNC_OPTIONS = { alter: true };
+
 if (!config.databaseUrl) {
   console.error("CRITICAL ERROR: DATABASE_URL is not defined in environment variables.");
 }
 
+const shouldUseSsl = (url) => url.includes("supabase.co") || url.includes("render.com");
+
 const sequelize = new Sequelize(config.databaseUrl, {
   dialect: "postgres",
-  logging: config.dbLogging ? console.log : false,
+  logging: false,
   dialectOptions: {
-    ssl: config.dbSsl === "true" ||
-         (config.dbSsl === "auto" &&
-           (config.databaseUrl.includes("supabase.co") ||
-            config.databaseUrl.includes("render.com"))) ? {
+    ssl: shouldUseSsl(config.databaseUrl) ? {
       require: true,
       rejectUnauthorized: false,
     } : false,
@@ -24,26 +26,14 @@ const sequelize = new Sequelize(config.databaseUrl, {
 });
 
 const runSchemaSync = async () => {
-  const syncMode = config.dbSyncMode;
-  if (config.isProduction && syncMode !== "none" && !config.allowProductionDbSync) {
-    throw new Error("Refusing production DB sync. Set ALLOW_PRODUCTION_DB_SYNC=true only when intentional.");
-  }
-
-  if (syncMode === "alter") {
-    console.log("Database schema sync started in alter mode.");
-    await sequelize.sync({ alter: true });
-    console.log("Database schema synchronized with alter mode.");
+  if (!SYNC_DATABASE) {
+    console.log("Database schema sync skipped.");
     return;
   }
 
-  if (syncMode === "create" || syncMode === "true") {
-    console.log("Database schema sync started in create-only mode.");
-    await sequelize.sync();
-    console.log("Database schema synchronized in create-only mode.");
-    return;
-  }
-
-  console.log("Database schema sync skipped. Set DB_SYNC=alter only when schema changes need to be applied.");
+  console.log("Database schema sync started.");
+  await sequelize.sync(SYNC_OPTIONS);
+  console.log("Database schema synchronized.");
 };
 
 const connectDB = async () => {

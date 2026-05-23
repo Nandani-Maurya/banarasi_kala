@@ -159,6 +159,7 @@ const ProductDetail = () => {
   const isChangingColor = Boolean(loadingColorId);
   const canAddToBag = !isSelectedOutOfStock && !isChangingColor;
   const formatMoney = (value) => `Rs. ${Number(value || 0).toLocaleString("en-IN")}`;
+  const productName = product?.name || "";
   const formatNumber = (value) => {
     const num = Number(value);
     return Number.isFinite(num) ? num.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "";
@@ -273,7 +274,7 @@ const ProductDetail = () => {
   const handleShare = async () => {
     try {
       if (navigator.share) {
-        await navigator.share({ title: product.name, text: product.name, url: window.location.href });
+        await navigator.share({ title: productName, text: productName, url: window.location.href });
       } else {
         await navigator.clipboard.writeText(window.location.href);
         showNotification("Product link copied with selected color!");
@@ -363,7 +364,7 @@ const ProductDetail = () => {
           <Icon icon="lucide:chevron-right" />
           <Link to="/collection">Collections</Link>
           <Icon icon="lucide:chevron-right" />
-          <span>{product.name}</span>
+          <span>{productName}</span>
         </nav>
 
         <div className="product-detail-grid">
@@ -385,13 +386,13 @@ const ProductDetail = () => {
                       <img
                         key={`${image.url}-${index}`}
                         src={image.url}
-                        alt={index === activeImageIndex ? product.name : ""}
+                        alt={index === activeImageIndex ? productName : ""}
                         className="product-main-image"
                       />
                     ))}
                   </div>
                 ) : mainImage ? (
-                  <img src={mainImage} alt={product.name} className="product-main-image" />
+                  <img src={mainImage} alt={productName} className="product-main-image" />
                 ) : null}
                 {Number(product.discount_percent || 0) > 0 && (
                   <span className="product-discount-badge">{product.discount_percent}% OFF</span>
@@ -441,7 +442,7 @@ const ProductDetail = () => {
             <span className="product-kicker">
               {[product.Variety?.name, product.Occasion?.name].filter(Boolean).join(" / ") || "Banarasi Kala"}
             </span>
-            <h1 className="product-detail-title">{product.name}</h1>
+            <h1 className="product-detail-title">{productName}</h1>
             <p className="product-detail-subtitle">
               {[product.Material?.name, selectedColor?.name].filter(Boolean).join(" / ")}
             </p>
@@ -582,6 +583,7 @@ const ProductDetail = () => {
                 const slideImages = images.length ? images : [{ url: fallbackImage }];
                 const activeSlide = relatedSlides[item.id] || 0;
                 const hasDiscount = Number(item.mrp_price || 0) > Number(item.selling_price || 0);
+                const relatedProductName = item.name;
 
                 return (
                   <Link
@@ -600,7 +602,7 @@ const ProductDetail = () => {
                         style={{ transform: `translateX(-${activeSlide * 100}%)` }}
                       >
                         {slideImages.map((image, index) => (
-                          <img key={`${item.id}-${image.url}-${index}`} src={image.url} alt={index === 0 ? item.name : ""} />
+                          <img key={`${item.id}-${image.url}-${index}`} src={image.url} alt={index === 0 ? relatedProductName : ""} />
                         ))}
                       </div>
                       {hasDiscount && <span className="product-related-discount">{item.discount_percent}% off</span>}
@@ -613,7 +615,7 @@ const ProductDetail = () => {
                       )}
                     </div>
                     <div className="product-related-body">
-                      <h3>{item.name}</h3>
+                      <h3>{relatedProductName}</h3>
                       {item.short_description && <p className="product-related-desc">{item.short_description}</p>}
                       <div className="product-related-price">
                         <strong>{formatMoney(item.selling_price)}</strong>

@@ -12,6 +12,7 @@ const generateReferralCode = () =>
   `VNS${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
 
 const normalizePhone = (value) => String(value || "").replace(/\D/g, "");
+const shouldBypassPhoneOtp = () => !config.requirePhoneOtp;
 
 class AuthService {
   async register(userData) {
@@ -35,7 +36,7 @@ class AuthService {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    let phoneVerified = false;
+    let phoneVerified = shouldBypassPhoneOtp();
     let firebasePhoneUid = null;
     if (firebase_id_token) {
       const admin = getFirebaseAdmin();
@@ -114,7 +115,7 @@ class AuthService {
       throw new Error("Invalid email or password");
     }
 
-    if (!customer.phone_verified) {
+    if (!customer.phone_verified && !shouldBypassPhoneOtp()) {
       const error = new Error("Phone number not verified. Please verify with OTP.");
       error.code = "PHONE_NOT_VERIFIED";
       error.phone = customer.phone;
@@ -125,6 +126,16 @@ class AuthService {
   }
 
   async verifyPhoneForCustomer({ customerId, firebaseIdToken }) {
+    if (shouldBypassPhoneOtp()) {
+      const customer = await Customer.findByPk(customerId);
+      if (!customer) throw new Error("Customer not found");
+      customer.phone_verified = true;
+      await customer.save();
+      return { message: "Phone verified successfully" };
+    }
+
+    if (!firebaseIdToken) throw new Error("firebase_id_token is required");
+
     const admin = getFirebaseAdmin();
     const decoded = await admin.auth().verifyIdToken(firebaseIdToken);
     const verifiedPhone = decoded.phone_number || "";
@@ -146,7 +157,9 @@ class AuthService {
 
   async verifyPhoneAndLogin({ email, password, firebaseIdToken }) {
     if (!email || !password) throw new Error("Email and password are required");
-    if (!firebaseIdToken) throw new Error("firebase_id_token is required");
+    if (!firebaseIdToken && !shouldBypassPhoneOtp()) {
+      throw new Error("firebase_id_token is required");
+    }
 
     const customer = await Customer.findOne({ where: { email } });
     if (!customer) {

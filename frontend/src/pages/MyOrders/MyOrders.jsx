@@ -115,12 +115,13 @@ const OrderCard = ({ order }) => {
           const imageUrl = getItemImage(item);
           const colorHex = item.color_hex || item.Color?.hex_code || "#d8b46a";
           const lineTotal = Number(item.price || 0) * Number(item.quantity || 1);
+          const productName = item.product_name || `Product #${item.product_id}`;
 
           return (
             <div key={`${item.product_id}-${item.colorId || index}`} className="order-product-item">
               <div className="order-product-media">
                 {imageUrl ? (
-                  <img src={imageUrl} alt={item.product_name || `Product ${index + 1}`} loading="lazy" />
+                  <img src={imageUrl} alt={productName || `Product ${index + 1}`} loading="lazy" />
                 ) : (
                   <div className="order-product-placeholder">
                     <Icon icon="lucide:image-off"></Icon>
@@ -131,7 +132,7 @@ const OrderCard = ({ order }) => {
 
               <div className="order-product-details">
                 <div className="order-product-name-row">
-                  <h3>{item.product_name || `Product #${item.product_id}`}</h3>
+                  <h3>{productName}</h3>
                   <span className="order-product-qty">Qty {item.quantity}</span>
                 </div>
 

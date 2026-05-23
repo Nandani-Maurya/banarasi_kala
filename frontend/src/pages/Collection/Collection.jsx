@@ -155,7 +155,7 @@ const Collection = () => {
           }
         });
       },
-      { threshold: 0.1 }
+      { threshold: 0.01, rootMargin: "0px 0px 220px 0px" }
     );
 
     const cards = document.querySelectorAll(".reveal-card:not(.visible)");

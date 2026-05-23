@@ -28,7 +28,7 @@ const NewArrivals = () => {
           observer.disconnect();
         }
       },
-      { rootMargin: "180px 0px", threshold: 0.01 },
+      { rootMargin: "420px 0px", threshold: 0.01 },
     );
 
     observer.observe(section);
@@ -74,7 +74,7 @@ const NewArrivals = () => {
           }
         });
       },
-      { threshold: 0.18, rootMargin: "0px 0px -6% 0px" },
+      { threshold: 0.01, rootMargin: "0px 0px 220px 0px" },
     );
 
     cards.forEach((card) => observer.observe(card));

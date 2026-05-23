@@ -8,6 +8,15 @@ const AuthContext = createContext();
 
 export const useAuth = () => useContext(AuthContext);
 
+const AUTH_STORAGE_KEYS = ["user", "customer", "accessToken", "refreshToken"];
+
+const clearStoredAuth = () => {
+  AUTH_STORAGE_KEYS.forEach((key) => {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  });
+};
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,21 +37,24 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
+  const persistAuth = ({ customer, accessToken, refreshToken, keepLoggedIn = true }) => {
+    clearStoredAuth();
+    setUser(customer);
+
+    const storage = keepLoggedIn ? localStorage : sessionStorage;
+    storage.setItem('customer', JSON.stringify(customer));
+    storage.setItem('accessToken', accessToken);
+    storage.setItem('refreshToken', refreshToken);
+    axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+  };
+
   const login = async (email, password, keepLoggedIn) => {
     try {
       const response = await axios.post(`${API_ENDPOINTS.auth}/login`, { email, password });
       const customer = response.data.customer || response.data.user;
       const { accessToken, refreshToken } = response.data;
 
-      setUser(customer);
-      
-      const storage = keepLoggedIn ? localStorage : sessionStorage;
-      storage.setItem('customer', JSON.stringify(customer));
-      storage.setItem('accessToken', accessToken);
-      storage.setItem('refreshToken', refreshToken);
-      
-      // Also set axios default header
-      axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+      persistAuth({ customer, accessToken, refreshToken, keepLoggedIn });
       
       return customer;
     } catch (error) {
@@ -50,6 +62,7 @@ export const AuthProvider = ({ children }) => {
       const err = new Error(data?.message || "Login failed");
       err.code = data?.code;
       err.phone = data?.phone;
+      err.status = error.response?.status;
       throw err;
     }
   };
@@ -64,13 +77,7 @@ export const AuthProvider = ({ children }) => {
     const customer = response.data.customer || response.data.user;
     const { accessToken, refreshToken } = response.data;
 
-    setUser(customer);
-
-    const storage = keepLoggedIn ? localStorage : sessionStorage;
-    storage.setItem('customer', JSON.stringify(customer));
-    storage.setItem('accessToken', accessToken);
-    storage.setItem('refreshToken', refreshToken);
-    axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+    persistAuth({ customer, accessToken, refreshToken, keepLoggedIn });
 
     return customer;
   };
@@ -81,16 +88,15 @@ export const AuthProvider = ({ children }) => {
       const customer = response.data.customer || response.data.user;
       const { accessToken, refreshToken } = response.data;
 
-      setUser(customer);
-      localStorage.setItem('customer', JSON.stringify(customer));
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
-      
-      axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+      persistAuth({ customer, accessToken, refreshToken, keepLoggedIn: true });
       
       return customer;
     } catch (error) {
-      throw error.response?.data?.message || 'Signup failed';
+      const data = error.response?.data;
+      const err = new Error(data?.message || "Signup failed");
+      err.code = data?.code;
+      err.status = error.response?.status;
+      throw err;
     }
   };
 
@@ -126,14 +132,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem('user');
-    localStorage.removeItem('customer');
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    sessionStorage.removeItem('user');
-    sessionStorage.removeItem('customer');
-    sessionStorage.removeItem('accessToken');
-    sessionStorage.removeItem('refreshToken');
+    clearStoredAuth();
     delete axios.defaults.headers.common['Authorization'];
   };
 

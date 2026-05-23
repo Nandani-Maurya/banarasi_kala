@@ -83,7 +83,6 @@ class AuthController {
   async verifyPhone(req, res) {
     try {
       const { firebase_id_token } = req.body || {};
-      if (!firebase_id_token) return res.status(400).json({ message: "firebase_id_token is required" });
       const result = await AuthService.verifyPhoneForCustomer({
         customerId: req.customer.id,
         firebaseIdToken: firebase_id_token,

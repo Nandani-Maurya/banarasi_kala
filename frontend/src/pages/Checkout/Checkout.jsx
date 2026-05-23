@@ -219,15 +219,19 @@ const Checkout = () => {
                 <div className="bg-white rounded-2xl p-8 shadow-xl border border-[#D4AF37]/20">
                   <h3 className="text-xl font-bold text-[#3D2817] mb-8 uppercase tracking-widest border-b border-[#D4AF37]/10 pb-4 brand-font">Order Summary</h3>
                   <div className="space-y-6 mb-8">
-                    {cart.map((item) => (
+                    {cart.map((item) => {
+                      const productName = item.name;
+
+                      return (
                       <div key={`${item.id}-${item.colorId}`} className="flex items-center space-x-4">
-                        <div className="w-16 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-[#F5F1E8]"><img src={item.image_url} className="w-full h-full object-cover" alt={item.name} /></div>
+                        <div className="w-16 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-[#F5F1E8]"><img src={item.image_url} className="w-full h-full object-cover" alt={productName} /></div>
                         <div className="flex-grow">
-                          <h4 className="text-xs font-bold text-[#3D2817] uppercase tracking-wider">{item.name}</h4>
+                          <h4 className="text-xs font-bold text-[#3D2817] tracking-wider">{productName}</h4>
                           <p className="text-[10px] text-gray-500 uppercase tracking-widest">{item.quantity} x ₹{Number(item.price).toLocaleString("en-IN")}</p>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   <div className="pt-6 border-t border-[#D4AF37]/10 space-y-4">

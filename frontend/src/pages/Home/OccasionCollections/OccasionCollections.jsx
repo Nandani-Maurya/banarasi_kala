@@ -21,7 +21,7 @@ const OccasionCollections = () => {
           observer.disconnect();
         }
       },
-      { rootMargin: "180px 0px", threshold: 0.01 },
+      { rootMargin: "420px 0px", threshold: 0.01 },
     );
 
     observer.observe(section);
@@ -51,8 +51,8 @@ const OccasionCollections = () => {
     <section className="bk-occasion-section" ref={sectionRef}>
       <div className="bk-occasion-shell">
         <div className="bk-occasion-heading">
-          <span>Occasion Edit</span>
-          <h2>Explore Most Loved Collections</h2>
+          <span>Occasion Wear</span>
+          <h2>Occasion Special Sarees</h2>
         </div>
 
         {loading ? (

@@ -103,6 +103,7 @@
   font-size: clamp(20px, 1.55vw, 27px);
   line-height: 1.12;
   text-align: center;
+  text-transform: none;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.44);
 }
 

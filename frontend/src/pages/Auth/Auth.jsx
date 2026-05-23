@@ -7,6 +7,28 @@ import { useAuth } from "../../context/AuthContext";
 import "./Auth.css";
 
 const strengthLabels = ["Weak", "Moderate", "Strong", "Very Strong"];
+const SUPPORT_MESSAGE = "Something went wrong. Please contact support or try again later.";
+
+const logAuthError = (action, error) => {
+  console.error(`[Auth] ${action} failed:`, error);
+};
+
+const isInvalidCredentialsError = (error) => {
+  const message = String(error?.message || error || "").toLowerCase();
+  return error?.status === 401 || message.includes("invalid email or password");
+};
+
+const getAuthErrorMessage = (error, fallback = SUPPORT_MESSAGE) => {
+  if (isInvalidCredentialsError(error)) {
+    return "Email or password is incorrect.";
+  }
+
+  if (error?.code === "PHONE_NOT_VERIFIED") {
+    return "Please verify your phone number to continue.";
+  }
+
+  return fallback;
+};
 
 const AuthField = ({
   icon,
@@ -41,6 +63,8 @@ const AuthField = ({
 );
 
 const Auth = () => {
+  const appMode = (import.meta.env.VITE_APP_MODE || "dev").toLowerCase();
+  const shouldBypassPhoneOtp = appMode !== "prod";
   const [activeTab, setActiveTab] = useState("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -211,16 +235,27 @@ const Auth = () => {
     } catch (err) {
       if (err?.code === "PHONE_NOT_VERIFIED" && err?.phone) {
         try {
+          if (shouldBypassPhoneOtp) {
+            await verifyPhoneAndLogin({
+              email: loginData.email,
+              password: loginData.password,
+              keepLoggedIn: loginData.keepLoggedIn,
+            });
+            return;
+          }
+
           const phoneE164 = err.phone?.startsWith("+") ? err.phone : `+91${err.phone}`;
           const confirmation = await sendPhoneOtp(phoneE164);
           setPhoneOtpSession(confirmation);
           setSuccess("OTP sent to your phone number.");
           switchMode("verifyLoginPhone");
         } catch (sendErr) {
-          setError(sendErr?.message || sendErr);
+          logAuthError("phone login verification", sendErr);
+          setError("Unable to continue login right now. Please contact support or try again later.");
         }
       } else {
-        setError(err?.message || err);
+        logAuthError("login", err);
+        setError(getAuthErrorMessage(err, "Unable to login right now. Please contact support or try again later."));
       }
     } finally {
       setLoading(false);
@@ -243,7 +278,8 @@ const Auth = () => {
         firebaseIdToken,
       });
     } catch (err) {
-      setError(err?.message || err);
+      logAuthError("login phone verification", err);
+      setError("Phone verification failed. Please check the OTP or try again.");
     } finally {
       setLoading(false);
     }
@@ -261,13 +297,19 @@ const Auth = () => {
     // Step 1: send OTP to phone
     setLoading(true);
     try {
+      if (shouldBypassPhoneOtp) {
+        await signup(signupData);
+        return;
+      }
+
       const phoneE164 = signupData.phone?.startsWith("+") ? signupData.phone : `+91${signupData.phone}`;
       const confirmation = await sendPhoneOtp(phoneE164);
       setPhoneOtpSession(confirmation);
       setSuccess("OTP sent to your phone number.");
       switchMode("verifyPhone");
     } catch (err) {
-      setError(err?.message || err);
+      logAuthError("signup", err);
+      setError(getAuthErrorMessage(err, "Unable to create your account right now. Please contact support or try again later."));
     } finally {
       setLoading(false);
     }
@@ -284,7 +326,8 @@ const Auth = () => {
       });
       await signup({ ...signupData, firebase_id_token: firebaseIdToken });
     } catch (err) {
-      setError(err?.message || err);
+      logAuthError("signup phone verification", err);
+      setError("Phone verification failed. Please check the OTP or try again.");
     } finally {
       setLoading(false);
     }
@@ -311,7 +354,8 @@ const Auth = () => {
       setSuccess("OTP sent to your email.");
       switchMode("verifyOTP");
     } catch (err) {
-      setError(err.message);
+      logAuthError("forgot password", err);
+      setError("Unable to send reset OTP right now. Please contact support or try again later.");
     } finally {
       setLoading(false);
     }
@@ -342,7 +386,8 @@ const Auth = () => {
       setSuccess("OTP verified. Set your new password.");
       switchMode("resetPassword");
     } catch (err) {
-      setError(err.message);
+      logAuthError("email OTP verification", err);
+      setError("OTP verification failed. Please check the OTP or try again.");
     } finally {
       setLoading(false);
     }
@@ -378,7 +423,8 @@ const Auth = () => {
       setSuccess("Password reset successfully. You can now login.");
       switchMode("login");
     } catch (err) {
-      setError(err.message);
+      logAuthError("password reset", err);
+      setError("Unable to reset password right now. Please contact support or try again later.");
     } finally {
       setLoading(false);
     }

@@ -5,6 +5,15 @@ const api = axios.create({
   baseURL: API_ENDPOINTS.base,
 });
 
+const AUTH_STORAGE_KEYS = ["user", "customer", "accessToken", "refreshToken"];
+
+const clearStoredAuth = () => {
+  AUTH_STORAGE_KEYS.forEach((key) => {
+    localStorage.removeItem(key);
+    sessionStorage.removeItem(key);
+  });
+};
+
 // Request interceptor for API calls
 api.interceptors.request.use(
   async config => {
@@ -34,18 +43,21 @@ api.interceptors.response.use(
         try {
           const res = await axios.post(`${API_ENDPOINTS.auth}/refresh-token`, { token: refreshToken });
           if (res.status === 200) {
-            const { accessToken } = res.data;
+            const { accessToken, refreshToken: nextRefreshToken } = res.data;
             const keepLoggedIn = !!localStorage.getItem('refreshToken');
             const storage = keepLoggedIn ? localStorage : sessionStorage;
             
             storage.setItem('accessToken', accessToken);
+            if (nextRefreshToken) storage.setItem('refreshToken', nextRefreshToken);
             api.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+            axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
+            originalRequest.headers = originalRequest.headers || {};
+            originalRequest.headers['Authorization'] = `Bearer ${accessToken}`;
             return api(originalRequest);
           }
         } catch {
           // Refresh token expired or invalid
-          localStorage.clear();
-          sessionStorage.clear();
+          clearStoredAuth();
           window.location.href = "/login?refresh=session";
         }
       } else {

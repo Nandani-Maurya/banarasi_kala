@@ -99,26 +99,6 @@ class CustomerController {
     }
   }
 
-  async updateMyLocation(req, res) {
-    try {
-      const { latitude, longitude } = req.body || {};
-      const lat = Number(latitude);
-      const lng = Number(longitude);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        return res.status(400).json({ message: "latitude and longitude are required" });
-      }
-
-      // Lat/lng persistence removed by request. Keep endpoint for compatibility.
-      return res.status(200).json({
-        message: "Location received",
-        latitude: lat,
-        longitude: lng,
-        at: new Date().toISOString(),
-      });
-    } catch (error) {
-      return res.status(500).json({ message: error.message });
-    }
-  }
 }
 
 module.exports = new CustomerController();

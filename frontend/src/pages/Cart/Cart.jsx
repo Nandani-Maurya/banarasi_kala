@@ -70,13 +70,16 @@ const Cart = () => {
           ) : (
             <div className="flex flex-col lg:flex-row gap-12 items-start">
               <div className="w-full lg:w-2/3 space-y-6">
-                {cart.map((item, index) => (
+                {cart.map((item, index) => {
+                  const productName = item.name;
+
+                  return (
                   <div key={`${item.id}-${item.colorId}`} className={`bg-white rounded-lg p-6 shadow-sm border border-[#D4AF37]/10 flex flex-col sm:flex-row items-center gap-6 item-row transition-all animate-slide-up cart-row-delay-${index % 8}`}>
                     <div className="w-32 h-40 flex-shrink-0 rounded overflow-hidden shadow-md">
-                      <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                      <img src={item.image_url} alt={productName} className="w-full h-full object-cover" />
                     </div>
                     <div className="flex-grow text-center sm:text-left">
-                      <h3 className="brand-font text-xl text-[#800020] mb-1">{item.name}</h3>
+                      <h3 className="brand-font text-xl text-[#800020] mb-1">{productName}</h3>
                       <p className="text-xs text-gray-500 uppercase tracking-widest mb-4 font-semibold">
                         {item.Material?.name || "Pure Silk"} • 
                         {item.colorId && <span className="ml-1 text-[#D4AF37]">Color Code: {item.colorId} •</span>} 
@@ -97,7 +100,8 @@ const Cart = () => {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
                 <div className="pt-8 flex flex-col sm:flex-row gap-6 border-t border-[#D4AF37]/20">
                   <div className="flex items-center space-x-3 opacity-60">
                     <Icon icon="lucide:truck" className="text-2xl text-[#800020]" />

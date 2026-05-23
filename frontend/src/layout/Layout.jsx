@@ -4,7 +4,6 @@ import Footer from "./Footer";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useEffect, useState } from "react";
-import { useNotification } from "../context/NotificationContext";
 import "./Layout.css";
 
 const WHATSAPP_NUMBER = "916307715455";
@@ -118,7 +117,6 @@ const SignupGiftPopup = ({ hidden = false }) => {
 const Layout = () => {
   const location = useLocation();
   const { user, loading } = useAuth();
-  const { showNotification } = useNotification();
   const [isRouteRefreshing, setIsRouteRefreshing] = useState(false);
   const footerlessAuthPages = ["/cart", "/wishlist", "/contact", "/feedback"];
   const hideFooter =
@@ -139,56 +137,6 @@ const Layout = () => {
     const timer = window.setTimeout(() => setIsRouteRefreshing(false), 520);
     return () => window.clearTimeout(timer);
   }, [location.state?.refreshKey]);
-
-  useEffect(() => {
-    const requestedKey = "bk_geo_requested_v1";
-    const geoKey = "bk_geo_v1";
-
-    const requestLocation = () => {
-      if (!("geolocation" in navigator)) return;
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const payload = {
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            accuracy: pos.coords.accuracy,
-            ts: Date.now(),
-          };
-          try {
-            localStorage.setItem(geoKey, JSON.stringify(payload));
-          } catch {
-            // ignore storage failures
-          }
-        },
-        (err) => {
-          if (err?.code === 1) {
-            showNotification("Location permission denied", "error");
-          }
-        },
-        { enableHighAccuracy: false, timeout: 8000, maximumAge: 600000 },
-      );
-    };
-
-    try {
-      const alreadyRequested = localStorage.getItem(requestedKey) === "1";
-      if (alreadyRequested) return;
-      localStorage.setItem(requestedKey, "1");
-    } catch {
-      // If storage fails, still attempt once per mount.
-    }
-
-    if ("permissions" in navigator && typeof navigator.permissions?.query === "function") {
-      navigator.permissions
-        .query({ name: "geolocation" })
-        .then((status) => {
-          if (status.state === "denied") return;
-          requestLocation(); // granted or prompt
-        })
-        .catch(() => requestLocation());
-    } else {
-      requestLocation();
-    }
-  }, [showNotification]);
 
   return (
     <>

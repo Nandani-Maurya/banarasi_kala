@@ -54,7 +54,7 @@ const PopularSarees = () => {
           }
         });
       },
-      { threshold: 0.22, rootMargin: "0px 0px -8% 0px" }
+      { threshold: 0.01, rootMargin: "0px 0px 220px 0px" }
     );
 
     cards.forEach((card) => observer.observe(card));
@@ -99,19 +99,6 @@ const PopularSarees = () => {
           <div className="bk-popular-title-wrap">
             <h2>Special Collection</h2>
           </div>
-          <Link to="/collection" className="bk-popular-view-all">
-            View All
-            <svg
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              viewBox="0 0 24 24"
-            >
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-          </Link>
         </div>
 
         {loading ? (
@@ -265,6 +252,23 @@ const PopularSarees = () => {
                 </article>
             );
           })}
+        </div>
+      )}
+      {!loading && products.length > 0 && (
+        <div className="bk-popular-footer">
+          <Link to="/collection" className="bk-popular-view-all">
+            View All
+            <svg
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              viewBox="0 0 24 24"
+            >
+              <path d="M9 18l6-6-6-6" />
+            </svg>
+          </Link>
         </div>
       )}
       </div>

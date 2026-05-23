@@ -151,6 +151,7 @@
   font-weight: 800;
   line-height: 1.4;
   text-decoration: none;
+  text-transform: none;
 }
 
 .wishlist-card-price {

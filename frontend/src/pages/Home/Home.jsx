@@ -34,7 +34,7 @@ const DeferredSection = ({
           observer.disconnect();
         }
       },
-      { rootMargin: "80px 0px", threshold: 0.01 },
+      { rootMargin: "420px 0px", threshold: 0.01 },
     );
 
     observer.observe(section);

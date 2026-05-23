@@ -27,6 +27,11 @@ const CustomerAddress = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    country: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "India",
+    },
     address_line1: {
       type: DataTypes.TEXT,
       allowNull: false,
@@ -45,6 +50,14 @@ const CustomerAddress = sequelize.define(
     },
     pincode: {
       type: DataTypes.STRING,
+      allowNull: true,
+    },
+    landmark: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    delivery_instructions: {
+      type: DataTypes.TEXT,
       allowNull: true,
     },
     is_default: {

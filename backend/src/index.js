@@ -19,7 +19,6 @@ const WalletRoutes = require("./routes/WalletRoutes");
 const ReferralRoutes = require("./routes/ReferralRoutes");
 const CustomerRoutes = require("./routes/CustomerRoutes");
 const CustomerAddressRoutes = require("./routes/CustomerAddressRoutes");
-const GeoRoutes = require("./routes/GeoRoutes");
 
 const allowedOrigins = [
   "http://localhost:5173",
@@ -92,7 +91,6 @@ app.use("/api/wallet", WalletRoutes);
 app.use("/api/referral", ReferralRoutes);
 app.use("/api/customers", CustomerRoutes);
 app.use("/api/addresses", CustomerAddressRoutes);
-app.use("/api/geo", GeoRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: "API route not found" });

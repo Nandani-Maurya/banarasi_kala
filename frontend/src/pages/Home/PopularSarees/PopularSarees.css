@@ -288,13 +288,19 @@
   color: #5a160f;
   font-family: "Cinzel", Georgia, "Times New Roman", serif;
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1.25;
-  text-transform: uppercase;
+  text-transform: none;
   display: -webkit-box;
   line-clamp: 2;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+
+.bk-popular-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
 }
 
 .bk-popular-price-row {

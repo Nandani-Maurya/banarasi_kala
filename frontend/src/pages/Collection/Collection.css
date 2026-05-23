@@ -46,7 +46,7 @@
 .page-title {
     font-size: 16px;
     font-weight: 700;
-    text-transform: capitalize;
+    text-transform: none;
     margin: 0;
     display: inline-block;
 }
@@ -286,6 +286,14 @@
     will-change: opacity, transform;
 }
 
+.reveal-card:nth-child(2n + 1) {
+    transform: translateX(-34px);
+}
+
+.reveal-card:nth-child(2n) {
+    transform: translateX(34px);
+}
+
 .reveal-card.visible {
     opacity: 1;
     transform: translateY(0);
@@ -489,7 +497,8 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-weight: 700;
+    font-weight: 600;
+    text-transform: none;
 }
 
 .product-short-desc {

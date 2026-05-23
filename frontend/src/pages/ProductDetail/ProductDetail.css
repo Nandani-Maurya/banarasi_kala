@@ -410,7 +410,7 @@
   font-size: clamp(27px, 3.6vw, 46px);
   font-weight: 950;
   line-height: 1.02;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .product-detail-subtitle {

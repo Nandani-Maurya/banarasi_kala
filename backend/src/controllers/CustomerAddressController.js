@@ -2,6 +2,12 @@ const CustomerAddress = require("../models/CustomerAddress");
 
 const MAX_ADDRESSES = 3;
 
+const cleanText = (value) => {
+  if (value === undefined || value === null) return null;
+  const text = String(value).trim();
+  return text || null;
+};
+
 class CustomerAddressController {
   async list(req, res) {
     try {
@@ -28,28 +34,34 @@ class CustomerAddressController {
         label,
         name,
         phone,
+        country,
         address_line1,
         address_line2,
         city,
         state,
         pincode,
+        landmark,
+        delivery_instructions,
         is_default,
       } = req.body || {};
 
-      if (!address_line1 || !String(address_line1).trim()) {
+      if (!cleanText(address_line1)) {
         return res.status(400).json({ message: "Please enter Address Line 1." });
       }
 
       const payload = {
         customer_id: req.user.id,
-        label: label ? String(label).trim() : null,
-        name: name ? String(name).trim() : null,
-        phone: phone ? String(phone).trim() : null,
-        address_line1: String(address_line1).trim(),
-        address_line2: address_line2 ? String(address_line2).trim() : null,
-        city: city ? String(city).trim() : null,
-        state: state ? String(state).trim() : null,
-        pincode: pincode ? String(pincode).trim() : null,
+        label: cleanText(label),
+        name: cleanText(name),
+        phone: cleanText(phone),
+        country: cleanText(country) || "India",
+        address_line1: cleanText(address_line1),
+        address_line2: cleanText(address_line2),
+        city: cleanText(city),
+        state: cleanText(state),
+        pincode: cleanText(pincode),
+        landmark: cleanText(landmark),
+        delivery_instructions: cleanText(delivery_instructions),
         is_default: !!is_default,
       };
 
@@ -79,23 +91,29 @@ class CustomerAddressController {
         label,
         name,
         phone,
+        country,
         address_line1,
         address_line2,
         city,
         state,
         pincode,
+        landmark,
+        delivery_instructions,
         is_default,
       } = req.body || {};
 
       const payload = {};
-      if (label !== undefined) payload.label = label ? String(label).trim() : null;
-      if (name !== undefined) payload.name = name ? String(name).trim() : null;
-      if (phone !== undefined) payload.phone = phone ? String(phone).trim() : null;
-      if (address_line1 !== undefined) payload.address_line1 = String(address_line1 || "").trim();
-      if (address_line2 !== undefined) payload.address_line2 = address_line2 ? String(address_line2).trim() : null;
-      if (city !== undefined) payload.city = city ? String(city).trim() : null;
-      if (state !== undefined) payload.state = state ? String(state).trim() : null;
-      if (pincode !== undefined) payload.pincode = pincode ? String(pincode).trim() : null;
+      if (label !== undefined) payload.label = cleanText(label);
+      if (name !== undefined) payload.name = cleanText(name);
+      if (phone !== undefined) payload.phone = cleanText(phone);
+      if (country !== undefined) payload.country = cleanText(country) || "India";
+      if (address_line1 !== undefined) payload.address_line1 = cleanText(address_line1);
+      if (address_line2 !== undefined) payload.address_line2 = cleanText(address_line2);
+      if (city !== undefined) payload.city = cleanText(city);
+      if (state !== undefined) payload.state = cleanText(state);
+      if (pincode !== undefined) payload.pincode = cleanText(pincode);
+      if (landmark !== undefined) payload.landmark = cleanText(landmark);
+      if (delivery_instructions !== undefined) payload.delivery_instructions = cleanText(delivery_instructions);
       if (is_default !== undefined) payload.is_default = !!is_default;
 
       if (payload.address_line1 !== undefined && !payload.address_line1) {

@@ -30,7 +30,7 @@ const BrowseCircles = () => {
           observer.disconnect();
         }
       },
-      { rootMargin: "180px 0px", threshold: 0.01 },
+      { rootMargin: "420px 0px", threshold: 0.01 },
     );
 
     observer.observe(section);
@@ -64,8 +64,8 @@ const BrowseCircles = () => {
     <section className="bk-browse-section" ref={sectionRef}>
       <div className="bk-browse-shell">
         <div className="bk-browse-header">
-          <span>Handpicked Banarasi Weaves</span>
-          <h2>Choose Your Signature Banarasi Saree Weave</h2>
+          <span>Variety of Authentic Banarasi Sarees</span>
+          <h2>Premium Variety</h2>
         </div>
 
         {loading ? (
