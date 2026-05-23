@@ -1,82 +1,151 @@
 .preloader-container {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: #8b4e08;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  inset: 0;
   z-index: 9999;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    linear-gradient(rgba(255, 247, 232, 0.7), rgba(255, 242, 220, 0.86)),
+    var(--preloader-bg),
+    #fff4df;
+  background-size: 100% 100%, cover, 100% 100%;
+  background-position: center;
 }
 
-.loader {
-  animation: rotate 1s infinite;
-  height: 50px;
-  width: 50px;
+.preloader-container::before,
+.preloader-container::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
 }
 
-.loader:before,
-.loader:after {
+.preloader-container::before {
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(255, 255, 255, 0.72), transparent 28%),
+    radial-gradient(circle at 50% 50%, rgba(128, 0, 32, 0.12), transparent 58%);
+  animation: preloaderGlow 1.6s ease-in-out infinite;
+}
+
+.preloader-container::after {
+  inset: auto 0 0;
+  height: 34%;
+  background: linear-gradient(180deg, transparent, rgba(94, 38, 14, 0.08));
+}
+
+.preloader-mark {
+  position: relative;
+  width: clamp(118px, 15vw, 162px);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  animation: preloaderLogoIn 0.72s cubic-bezier(0.2, 0.72, 0.2, 1) both;
+}
+
+.preloader-ring {
+  position: absolute;
+  inset: -13px;
   border-radius: 50%;
-  content: '';
+  border: 1px solid rgba(128, 0, 32, 0.12);
+  background:
+    conic-gradient(from 0deg, transparent 0 18%, rgba(128, 0, 32, 0.48) 24%, transparent 32% 100%),
+    radial-gradient(circle, transparent 64%, rgba(218, 170, 76, 0.18) 65%, transparent 72%);
+  mask: radial-gradient(circle, transparent 62%, #000 63%);
+  animation: preloaderRing 1.18s linear infinite;
+}
+
+.preloader-mark img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: auto;
   display: block;
-  height: 20px;
-  width: 20px;
+  filter: drop-shadow(0 16px 26px rgba(78, 27, 10, 0.18));
+  animation: preloaderBreathe 1.55s ease-in-out 0.4s infinite;
 }
 
-.loader:before {
-  animation: ball1 1s infinite;
-  background-color: #cb2025;
-  box-shadow: 30px 0 0 #f8b334;
-  margin-bottom: 10px;
+.preloader-progress {
+  position: absolute;
+  left: 50%;
+  bottom: -24px;
+  width: 96px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(128, 0, 32, 0.12);
+  transform: translateX(-50%);
 }
 
-.loader:after {
-  animation: ball2 1s infinite;
-  background-color: #00a096;
-  box-shadow: 30px 0 0 #97bf0d;
+.preloader-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 44%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, #800020, transparent);
+  animation: preloaderProgress 1.05s ease-in-out infinite;
 }
 
-@keyframes rotate {
-  0% {
-    transform: rotate(0deg) scale(0.8);
+@keyframes preloaderLogoIn {
+  from {
+    opacity: 0;
+    transform: scale(0.68);
+    filter: blur(7px);
   }
-  50% {
-    transform: rotate(360deg) scale(1.2);
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
   }
+}
+
+@keyframes preloaderBreathe {
+  0%,
   100% {
-    transform: rotate(720deg) scale(0.8);
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.035);
   }
 }
 
-@keyframes ball1 {
-  0% {
-    box-shadow: 30px 0 0 #f8b334;
-  }
-  50% {
-    box-shadow: 0 0 0 #f8b334;
-    margin-bottom: 0;
-    transform: translate(15px, 15px);
-  }
-  100% {
-    box-shadow: 30px 0 0 #f8b334;
-    margin-bottom: 10px;
+@keyframes preloaderRing {
+  to {
+    transform: rotate(360deg);
   }
 }
 
-@keyframes ball2 {
-  0% {
-    box-shadow: 30px 0 0 #97bf0d;
+@keyframes preloaderProgress {
+  from {
+    transform: translateX(-120%);
   }
-  50% {
-    box-shadow: 0 0 0 #97bf0d;
-    margin-top: -20px;
-    transform: translate(15px, 15px);
+
+  to {
+    transform: translateX(230%);
   }
+}
+
+@keyframes preloaderGlow {
+  0%,
   100% {
-    box-shadow: 30px 0 0 #97bf0d;
-    margin-top: 0;
+    opacity: 0.86;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .preloader-mark {
+    width: 124px;
+  }
+
+  .preloader-progress {
+    width: 82px;
+    bottom: -20px;
   }
 }
