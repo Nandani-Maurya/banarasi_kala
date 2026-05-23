@@ -1,18 +1,14 @@
 import { Icon } from "@iconify/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import api from "../../utils/api";
 import "./Profile.css";
 
-const formatMoney = (value) => {
-  const num = Number(value || 0);
-  if (!Number.isFinite(num)) return "Rs. 0";
-  return `Rs. ${num.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
-};
-
 const SUPPORT_ERROR_MESSAGE = "Something went wrong. Please contact support or try again later.";
+const MAP_SUPPORT_ERROR_MESSAGE = "Map is not available right now. Please enter the address manually or contact admin.";
 const TECHNICAL_ERROR_PATTERNS = [
+  /.*/i,
   /column .* does not exist/i,
   /relation .* does not exist/i,
   /syntax error/i,
@@ -27,6 +23,10 @@ const getFriendlyError = (err, fallback = SUPPORT_ERROR_MESSAGE) => {
   if (TECHNICAL_ERROR_PATTERNS.some((pattern) => pattern.test(message))) return fallback;
   return message;
 };
+
+const getMapFriendlyError = () => MAP_SUPPORT_ERROR_MESSAGE;
+
+const normalizeIndianPhone = (value) => String(value || "").trim().replace(/^0+/, "");
 
 const toDateString = (value) => {
   if (!value) return "-";
@@ -143,6 +143,7 @@ function LocationPickerModal({ open, initialQuery, onClose, onConfirm }) {
   const [isSearching, setIsSearching] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [status, setStatus] = useState("");
+  const canConfirmLocation = Boolean(selected?.center && selected?.displayName && selected?.house_building);
 
   const reverseGeocode = async (center) => {
     if (!MAPBOX_TOKEN) return null;
@@ -152,7 +153,7 @@ function LocationPickerModal({ open, initialQuery, onClose, onConfirm }) {
     url.searchParams.set("access_token", MAPBOX_TOKEN);
     url.searchParams.set("country", "in");
     const response = await fetch(url);
-    if (!response.ok) throw new Error("Could not read this location.");
+    if (!response.ok) throw new Error("MAP_REVERSE_FAILED");
     const data = await response.json();
     return data.features?.[0] || null;
   };
@@ -179,8 +180,8 @@ function LocationPickerModal({ open, initialQuery, onClose, onConfirm }) {
         selectFeature(feature, 15);
         return;
       }
-    } catch (err) {
-      setStatus(err.message || "Could not read this location.");
+    } catch {
+      setStatus(getMapFriendlyError());
     }
     setSelected(null);
     markerRef.current?.setLngLat(center);
@@ -189,7 +190,7 @@ function LocationPickerModal({ open, initialQuery, onClose, onConfirm }) {
 
   const handleCurrentLocation = () => {
     if (!navigator.geolocation) {
-      setStatus("Current location is not available in this browser.");
+      setStatus("Current location is not available. Please search or enter the address manually.");
       return;
     }
     setIsLocating(true);
@@ -201,7 +202,7 @@ function LocationPickerModal({ open, initialQuery, onClose, onConfirm }) {
         selectCenter(center, "Current location").finally(() => setIsLocating(false));
       },
       () => {
-        setStatus("Location permission was not allowed. Search or choose manually.");
+        setStatus("Current location could not be used. Please search or enter the address manually.");
         setIsLocating(false);
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
@@ -217,7 +218,7 @@ function LocationPickerModal({ open, initialQuery, onClose, onConfirm }) {
     let cancelled = false;
     const setupMap = async () => {
       if (!MAPBOX_TOKEN) {
-        setStatus("Mapbox key is missing. Please add VITE_MAPBOX_ACCESS_TOKEN.");
+        setStatus(getMapFriendlyError());
         return;
       }
 
@@ -249,8 +250,8 @@ function LocationPickerModal({ open, initialQuery, onClose, onConfirm }) {
           }
         });
         window.setTimeout(() => mapRef.current?.resize(), 120);
-      } catch (err) {
-        setStatus(err.message || "Map failed to load.");
+      } catch {
+        setStatus(getMapFriendlyError());
       }
     };
 
@@ -295,11 +296,11 @@ function LocationPickerModal({ open, initialQuery, onClose, onConfirm }) {
         url.searchParams.set("types", "poi,address,neighborhood,locality,place,postcode");
         url.searchParams.set("proximity", userCenterRef.current.join(","));
         const response = await fetch(url, { signal: controller.signal });
-        if (!response.ok) throw new Error("Search failed. Please try again.");
+        if (!response.ok) throw new Error("MAP_SEARCH_FAILED");
         const data = await response.json();
         setResults(data.features || []);
       } catch (err) {
-        if (err.name !== "AbortError") setStatus(err.message || "Search failed.");
+        if (err.name !== "AbortError") setStatus(getMapFriendlyError());
       } finally {
         if (!controller.signal.aborted) setIsSearching(false);
       }
@@ -316,7 +317,7 @@ function LocationPickerModal({ open, initialQuery, onClose, onConfirm }) {
         <div className="profile-map-head">
           <button type="button" onClick={onClose}>Cancel</button>
           <h2>Add Location on Map</h2>
-          <button type="button" onClick={() => selected && onConfirm(selected)} disabled={!selected}>Done</button>
+          <button type="button" onClick={() => canConfirmLocation && onConfirm(selected)} disabled={!canConfirmLocation}>Done</button>
         </div>
 
         <div className="profile-map-content">
@@ -357,8 +358,13 @@ function LocationPickerModal({ open, initialQuery, onClose, onConfirm }) {
               <strong>{selected?.house_building || "Choose delivery location"}</strong>
               <p>{selected?.displayName || "Search, use current location, or tap the map."}</p>
             </div>
-          <button type="button" className="profile-btn profile-btn-primary" onClick={() => selected && onConfirm(selected)} disabled={!selected}>
-            {selected ? "Confirm location" : "Set a location first"}
+          <button
+            type="button"
+            className="profile-btn profile-btn-primary"
+            onClick={() => canConfirmLocation && onConfirm(selected)}
+            disabled={!canConfirmLocation}
+          >
+            Confirm location
           </button>
             <button type="button" className="profile-map-manual" onClick={onClose}>
               Or, enter address manually
@@ -436,6 +442,12 @@ function ProfileMiniModal({ modal, onClose, onConfirm }) {
               {modal.loading ? "Deleting..." : "Delete"}
             </button>
           </div>
+        ) : modal.type === "error" ? (
+          <div className="profile-mini-actions single">
+            <button type="button" className="profile-mini-btn" onClick={onClose}>
+              OK
+            </button>
+          </div>
         ) : null}
       </div>
     </div>
@@ -446,12 +458,10 @@ export default function Profile() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
-  const [wallet, setWallet] = useState(null);
   const [addresses, setAddresses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "" });
@@ -461,19 +471,29 @@ export default function Profile() {
   const [addrError, setAddrError] = useState("");
   const [addrFieldErrors, setAddrFieldErrors] = useState({});
   const [editingAddressId, setEditingAddressId] = useState(null);
+  const [showAddressForm, setShowAddressForm] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   const [miniModal, setMiniModal] = useState(null);
   const [deleteAddressId, setDeleteAddressId] = useState(null);
   const [deletingAddressId, setDeletingAddressId] = useState(null);
-  const referralCode = profile?.referral_code || "";
+  const profileErrorRef = useRef(null);
+  const addressErrorRef = useRef(null);
 
-  const referralLink = useMemo(() => {
-    if (!referralCode) return "";
-    const url = new URL("/login", window.location.origin);
-    url.searchParams.set("mode", "signup");
-    url.searchParams.set("ref", referralCode);
-    return url.toString();
-  }, [referralCode]);
+  const scrollToRef = (ref) => {
+    window.setTimeout(() => {
+      ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+  };
+
+  const setProfileInlineError = (message) => {
+    setError(message);
+    scrollToRef(profileErrorRef);
+  };
+
+  const setAddressInlineError = (message) => {
+    setAddrError(message);
+    scrollToRef(addressErrorRef);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -484,14 +504,10 @@ export default function Profile() {
       setAddrError("");
       setAddrLoading(true);
       try {
-        const [meRes, walletRes] = await Promise.all([
-          api.get("/api/customers/me"),
-          api.get("/api/wallet"),
-        ]);
+        const meRes = await api.get("/api/customers/me");
 
         if (!alive) return;
         setProfile(meRes.data);
-        setWallet(walletRes.data);
         try {
           const addressRes = await api.get("/api/addresses");
           if (!alive) return;
@@ -499,13 +515,13 @@ export default function Profile() {
         } catch (addressErr) {
           if (!alive) return;
           setAddresses([]);
-          setAddrError(getFriendlyError(addressErr, "Unable to load addresses. Please try again later."));
+          setAddressInlineError(getFriendlyError(addressErr, "Unable to load addresses. Please try again later."));
         } finally {
           if (alive) setAddrLoading(false);
         }
       } catch (err) {
         if (!alive) return;
-        setError(getFriendlyError(err, "Unable to load profile. Please contact support or try again later."));
+        setProfileInlineError(getFriendlyError(err, "Unable to load profile. Please contact support or try again later."));
         setAddrLoading(false);
       } finally {
         if (alive) setLoading(false);
@@ -558,38 +574,10 @@ export default function Profile() {
       const res = await api.get("/api/addresses");
       setAddresses(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
-      setAddrError(getFriendlyError(err, "Unable to load addresses. Please try again later."));
+      setAddressInlineError(getFriendlyError(err, "Unable to load addresses. Please try again later."));
     } finally {
       setAddrLoading(false);
     }
-  };
-
-  const onCopyReferral = async () => {
-    if (!referralLink) return;
-    try {
-      await navigator.clipboard.writeText(referralLink);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
-    } catch {
-      setCopied(false);
-    }
-  };
-
-  const onShareReferral = async () => {
-    if (!referralLink) return;
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: "Refer & Earn",
-          text: "Sign up using my referral link and get wallet rewards.",
-          url: referralLink,
-        });
-        return;
-      }
-    } catch {
-      // Fall back to copy.
-    }
-    await onCopyReferral();
   };
 
   const onPickAvatar = async (event) => {
@@ -606,7 +594,7 @@ export default function Profile() {
       });
       setProfile((prev) => (prev ? { ...prev, avatar_url: res.data.avatar_url } : prev));
     } catch (err) {
-      setError(getFriendlyError(err, "Avatar upload failed. Please try again later."));
+      setProfileInlineError(getFriendlyError(err, "Avatar upload failed. Please try again later."));
     } finally {
       setUploading(false);
       event.target.value = "";
@@ -632,8 +620,9 @@ export default function Profile() {
       const updated = res.data?.customer || res.data;
       setProfile((prev) => (prev ? { ...prev, ...updated } : prev));
       setIsEditing(false);
+      showSuccess("Profile updated", "Your account details were saved.");
     } catch (err) {
-      setError(getFriendlyError(err, "Failed to update profile. Please try again later."));
+      setProfileInlineError(getFriendlyError(err, "Failed to update profile. Please try again later."));
     } finally {
       setSaving(false);
     }
@@ -650,8 +639,8 @@ export default function Profile() {
       setAddrForm((prev) => ({
         ...prev,
         use_account_contact: checked,
-        name: checked ? profile?.name || "" : prev.name,
-        phone: checked ? profile?.phone || "" : prev.phone,
+        name: checked ? profile?.name || "" : "",
+        phone: checked ? profile?.phone || "" : "",
       }));
       setAddrFieldErrors((prev) => ({ ...prev, name: "", phone: "" }));
       return;
@@ -673,37 +662,46 @@ export default function Profile() {
     }));
     setAddrFieldErrors({});
     setEditingAddressId(null);
+    setShowAddressForm(false);
   };
 
   const validateAddressForm = () => {
     const errors = {};
     if (!addrForm.name.trim()) errors.name = "Name is required.";
-    if (!addrForm.phone.trim()) errors.phone = "Phone is required.";
+    const receiverPhone = normalizeIndianPhone(addrForm.phone);
+    const alternatePhone = normalizeIndianPhone(addrForm.alternate_phone);
+    if (!receiverPhone) errors.phone = "Phone is required.";
     if (!addrForm.house_building.trim()) errors.house_building = "Address is required.";
     if (!addrForm.city.trim()) errors.city = "City is required.";
     if (!addrForm.state.trim()) errors.state = "State is required.";
     if (!addrForm.pincode.trim()) errors.pincode = "Pincode is required.";
-    if (addrForm.phone.trim() && !/^[6-9]\d{9}$/.test(addrForm.phone.trim())) {
+    if (receiverPhone && !/^[6-9]\d{9}$/.test(receiverPhone)) {
       errors.phone = "Enter a valid 10 digit mobile number.";
     }
-    if (addrForm.alternate_phone.trim() && !/^[6-9]\d{9}$/.test(addrForm.alternate_phone.trim())) {
+    if (alternatePhone && !/^[6-9]\d{9}$/.test(alternatePhone)) {
       errors.alternate_phone = "Enter a valid 10 digit mobile number.";
     }
-    if (addrForm.alternate_phone.trim() && addrForm.alternate_phone.trim() === addrForm.phone.trim()) {
+    if (alternatePhone && alternatePhone === receiverPhone) {
       errors.alternate_phone = "Alternate number must be different.";
     }
     if (addrForm.pincode.trim() && !/^\d{6}$/.test(addrForm.pincode.trim())) {
       errors.pincode = "Enter a valid 6 digit pincode.";
     }
     setAddrFieldErrors(errors);
-    return Object.keys(errors).length === 0;
+    const isValid = Object.keys(errors).length === 0;
+    if (!isValid) {
+      window.setTimeout(() => {
+        document.querySelector(".profile-address-form em")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 50);
+    }
+    return isValid;
   };
 
   const buildAddressPayload = () => ({
     ...addrForm,
     name: addrForm.name.trim(),
-    phone: addrForm.phone.trim(),
-    alternate_phone: addrForm.alternate_phone.trim(),
+    phone: normalizeIndianPhone(addrForm.phone),
+    alternate_phone: normalizeIndianPhone(addrForm.alternate_phone),
     house_building: addrForm.house_building.trim(),
     area_street: addrForm.area_street.trim(),
     city: addrForm.city.trim(),
@@ -718,6 +716,7 @@ export default function Profile() {
 
   const onEditAddress = (address) => {
     setEditingAddressId(address.id);
+    setShowAddressForm(true);
     setAddrError("");
     setAddrFieldErrors({});
     setAddrForm({
@@ -771,7 +770,7 @@ export default function Profile() {
       await refreshAddresses();
       showSuccess(wasEditing ? "Address updated" : "Address saved", wasEditing ? "Your delivery details were updated." : "Your delivery address was saved.");
     } catch (err) {
-      setAddrError(getFriendlyError(err, "Failed to save address. Please try again later."));
+      setAddressInlineError(getFriendlyError(err, "Failed to save address. Please try again later."));
     } finally {
       setAddrSaving(false);
     }
@@ -824,8 +823,9 @@ export default function Profile() {
       setDeleteAddressId(null);
       showSuccess("Address deleted", "The saved address was removed.");
     } catch (err) {
-      setAddrError(getFriendlyError(err, "Failed to delete address. Please try again later."));
       setMiniModal(null);
+      setDeleteAddressId(null);
+      setAddressInlineError(getFriendlyError(err, "Failed to delete address. Please try again later."));
     }
     setDeletingAddressId(null);
   };
@@ -838,7 +838,7 @@ export default function Profile() {
       await refreshAddresses();
       showSuccess("Default updated", "This address is now your default.");
     } catch (err) {
-      setAddrError(getFriendlyError(err, "Failed to update address. Please try again later."));
+      setAddressInlineError(getFriendlyError(err, "Failed to update address. Please try again later."));
     }
   };
 
@@ -912,7 +912,7 @@ export default function Profile() {
           </div>
         </header>
 
-        {error && <p className="profile-error">{error}</p>}
+        {error && <p className="profile-error" ref={profileErrorRef}>{error}</p>}
 
         {isEditing && (
           <section className="profile-panel">
@@ -964,69 +964,6 @@ export default function Profile() {
         </section>
 
         <div className="profile-grid">
-          <section className="profile-panel profile-wallet-panel">
-            <div className="profile-section-title">
-              <Icon icon="lucide:wallet-cards" />
-              <div>
-                <h2>Wallet</h2>
-                <p>Rewards and referral credits</p>
-              </div>
-            </div>
-            {loading && !wallet ? (
-              <div className="profile-wallet-skeleton">
-                <span className="profile-skeleton profile-skeleton-balance" />
-                <span className="profile-skeleton profile-skeleton-row" />
-                <span className="profile-skeleton profile-skeleton-row" />
-              </div>
-            ) : (
-              <>
-                <div className="profile-wallet-balance">{formatMoney(wallet?.wallet_balance ?? profile?.wallet_balance)}</div>
-                <div className="profile-transactions">
-                  {(wallet?.transactions || []).slice(0, 5).map((tx) => (
-                    <div className="profile-tx" key={tx.id}>
-                      <div>
-                        <strong>{tx.type}</strong>
-                        <span>{toDateString(tx.created_at || tx.createdAt)}</span>
-                      </div>
-                      <div className={`profile-tx-amount ${Number(tx.amount) >= 0 ? "is-plus" : "is-minus"}`}>
-                        {formatMoney(tx.amount)}
-                        <span>{tx.status}</span>
-                      </div>
-                    </div>
-                  ))}
-                  {(!wallet?.transactions || wallet.transactions.length === 0) && (
-                    <p className="profile-empty-text">No wallet transactions yet.</p>
-                  )}
-                </div>
-              </>
-            )}
-          </section>
-
-          <section className="profile-panel">
-            <div className="profile-section-title">
-              <Icon icon="lucide:gift" />
-              <div>
-                <h2>Refer & Earn</h2>
-                <p>Invite friends and earn wallet rewards</p>
-              </div>
-            </div>
-            <div className="profile-referral-code">
-              <span>Referral code</span>
-              {loading && !profile ? <span className="profile-skeleton profile-skeleton-code" /> : <strong>{profile?.referral_code || "-"}</strong>}
-            </div>
-            <div className="profile-referral">
-              <input value={referralLink || "Referral code not available"} readOnly />
-              <div className="profile-referral-actions">
-                <button type="button" className="profile-btn" onClick={onCopyReferral} disabled={!referralLink}>
-                  {copied ? "Copied" : "Copy"}
-                </button>
-                <button type="button" className="profile-btn profile-btn-primary" onClick={onShareReferral} disabled={!referralLink}>
-                  Share
-                </button>
-              </div>
-            </div>
-          </section>
-
           <section className="profile-panel profile-panel-wide">
             <div className="profile-section-title profile-section-title-row">
               <Icon icon="lucide:map-pin-house" />
@@ -1037,7 +974,7 @@ export default function Profile() {
               <span className="profile-count-pill">{addresses.length}/3 saved</span>
             </div>
 
-            {addrError && <p className="profile-error">{addrError}</p>}
+            {addrError && <p className="profile-error" ref={addressErrorRef}>{addrError}</p>}
 
             <div className="profile-address-list">
               {addrLoading ? (
@@ -1095,13 +1032,24 @@ export default function Profile() {
 
             {addresses.length < 3 || editingAddressId ? (
               <div className="profile-address-form">
-                <div className="profile-section-title profile-form-heading">
-                  <Icon icon={editingAddressId ? "lucide:pencil" : "lucide:plus-circle"} />
-                  <div>
-                    <h2>{editingAddressId ? "Edit address" : "Add new address"}</h2>
-                    <p>Required fields are marked with *.</p>
-                  </div>
-                </div>
+                {!showAddressForm ? (
+                  <button type="button" className="profile-add-address-trigger" onClick={() => setShowAddressForm(true)}>
+                    <Icon icon="lucide:plus-circle" />
+                    <span>Add new address</span>
+                  </button>
+                ) : (
+                  <div className="profile-address-modal" role="dialog" aria-modal="true" aria-label={editingAddressId ? "Edit address" : "Add new address"}>
+                    <div className="profile-address-modal-card">
+                      <button type="button" className="profile-address-modal-close" onClick={resetAddressForm} aria-label="Close address form">
+                        <Icon icon="lucide:x" />
+                      </button>
+                    <div className="profile-section-title profile-form-heading">
+                      <Icon icon={editingAddressId ? "lucide:pencil" : "lucide:plus-circle"} />
+                      <div>
+                        <h2>{editingAddressId ? "Edit address" : "Add new address"}</h2>
+                        <p>Required fields are marked with *.</p>
+                      </div>
+                    </div>
                 <div className="profile-location-card">
                   <div>
                     <span>Map address</span>
@@ -1240,6 +1188,9 @@ export default function Profile() {
                     {addrSaving ? "Saving..." : editingAddressId ? "Save Address" : "Add Address"}
                   </button>
                 </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="profile-empty-text">You reached the maximum of 3 saved addresses.</p>

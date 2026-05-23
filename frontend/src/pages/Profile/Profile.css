@@ -3,9 +3,9 @@
   min-height: calc(100vh - 120px);
   padding: 28px clamp(14px, 4vw, 54px) 64px;
   background:
-    linear-gradient(rgba(255, 247, 235, 0.86), rgba(255, 247, 235, 0.88)),
+    linear-gradient(rgba(255, 255, 255, 0.9), rgba(255, 250, 242, 0.92)),
     var(--bk-header-bg, none),
-    #fff5e7;
+    #fffaf4;
   color: #2d1b0e;
 }
 
@@ -202,7 +202,6 @@
   height: 18px;
 }
 
-.profile-wallet-skeleton,
 .profile-address-skeletons {
   display: grid;
   gap: 10px;
@@ -218,7 +217,6 @@
 }
 
 .profile-hero-actions,
-.profile-referral-actions,
 .profile-form-actions,
 .profile-address-actions {
   display: flex;
@@ -268,6 +266,7 @@
 }
 
 .profile-quick-grid {
+  order: 1;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
@@ -303,6 +302,7 @@
 }
 
 .profile-grid {
+  order: 2;
   display: grid;
   grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
   gap: 16px;
@@ -373,85 +373,6 @@
   padding: 3px 8px;
 }
 
-.profile-wallet-balance {
-  margin: 8px 0 16px;
-  color: #800020;
-  font-family: "Cinzel", Georgia, serif;
-  font-size: clamp(28px, 4vw, 42px);
-  font-weight: 700;
-  line-height: 1;
-}
-
-.profile-transactions {
-  display: grid;
-  gap: 10px;
-}
-
-.profile-tx {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 12px;
-  background: #fff5e7;
-  border: 1px solid rgba(128, 0, 32, 0.08);
-  border-radius: 6px;
-}
-
-.profile-tx strong,
-.profile-tx-amount {
-  display: grid;
-  gap: 4px;
-  color: #3d2817;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.profile-tx span {
-  color: rgba(45, 27, 14, 0.58);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.profile-tx-amount {
-  text-align: right;
-}
-
-.profile-tx-amount.is-plus {
-  color: #087443;
-}
-
-.profile-tx-amount.is-minus {
-  color: #b42318;
-}
-
-.profile-referral-code {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px;
-  margin-bottom: 12px;
-  background: #fff5e7;
-  border: 1px dashed rgba(128, 0, 32, 0.22);
-  border-radius: 6px;
-}
-
-.profile-referral-code span {
-  color: rgba(45, 27, 14, 0.62);
-  font-size: 12px;
-}
-
-.profile-referral-code strong {
-  color: #800020;
-  font-size: 16px;
-}
-
-.profile-referral {
-  display: grid;
-  gap: 10px;
-}
-
-.profile-referral input,
 .profile-edit input,
 .profile-address-form input,
 .profile-address-form select {
@@ -561,6 +482,83 @@
   display: grid;
   gap: 12px;
   border-top: 1px solid rgba(128, 0, 32, 0.1);
+}
+
+.profile-address-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10010;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  overflow: auto;
+  background: rgba(45, 27, 14, 0.36);
+  backdrop-filter: blur(7px);
+}
+
+.profile-address-modal-card {
+  position: relative;
+  width: min(760px, 100%);
+  max-height: min(820px, calc(100vh - 36px));
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  background: #fffaf2;
+  border: 1px solid rgba(128, 0, 32, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 28px 78px rgba(45, 27, 14, 0.28);
+}
+
+.profile-address-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  color: #800020;
+  background: #fffdf8;
+  border: 1px solid rgba(128, 0, 32, 0.14);
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.profile-address-modal-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.profile-address-modal .profile-form-heading {
+  padding-right: 42px;
+}
+
+.profile-add-address-trigger {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  justify-self: flex-start;
+  padding: 10px 15px;
+  color: #800020;
+  background: #fffdf8;
+  border: 1px solid rgba(128, 0, 32, 0.16);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.profile-add-address-trigger svg {
+  width: 20px;
+  height: 20px;
+}
+
+.profile-add-address-trigger:hover {
+  background: #fff3e4;
 }
 
 .profile-location-card {
@@ -827,6 +825,10 @@
   margin-top: 8px;
 }
 
+.profile-mini-actions.single {
+  grid-template-columns: 1fr;
+}
+
 .profile-mini-btn {
   min-height: 38px;
   color: #3d2817;
@@ -1088,6 +1090,7 @@
 .profile-map-bottom .profile-btn {
   min-width: 170px;
   min-height: 44px;
+  text-align: center;
 }
 
 .profile-map-manual {
@@ -1257,18 +1260,33 @@
     font-size: 15px;
   }
 
-  .profile-wallet-balance {
-    margin: 6px 0 10px;
-    font-size: 25px;
-  }
-
   .profile-address-form {
     margin-top: 12px;
     padding-top: 12px;
     gap: 10px;
   }
 
-  .profile-referral input,
+  .profile-address-modal {
+    padding: 0;
+    place-items: stretch;
+  }
+
+  .profile-address-modal-card {
+    width: 100%;
+    min-height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+    border: 0;
+    padding: 14px 12px 18px;
+  }
+
+  .profile-address-modal-close {
+    top: 10px;
+    right: 10px;
+    width: 31px;
+    height: 31px;
+  }
+
   .profile-edit input,
   .profile-address-form input,
   .profile-address-form select,
@@ -1281,6 +1299,12 @@
   .profile-receiver-box,
   .profile-address {
     padding: 11px;
+  }
+
+  .profile-add-address-trigger {
+    width: 100%;
+    min-height: 42px;
+    padding: 9px 12px;
   }
 
   .profile-btn {

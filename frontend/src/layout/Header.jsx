@@ -1,12 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useCart } from "../context/CartContext";
 import { useWishlist } from "../context/WishlistContext";
 import { API_ENDPOINTS } from "../config/api";
+import api from "../utils/api";
 import verticalLogo from "../assets/vertical_logo.png";
 import headerBackground from "../assets/header_backgroung.png";
 import "./Header.css";
+
+const formatHeaderMoney = (value) => {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return "Rs. 0";
+  return `Rs. ${amount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+};
 
 const Header = () => {
   const navigate = useNavigate();
@@ -21,6 +28,10 @@ const Header = () => {
   const [headerSearch, setHeaderSearch] = useState("");
   const [sareeVarieties, setSareeVarieties] = useState([]);
   const [sareeVarietiesStatus, setSareeVarietiesStatus] = useState("idle");
+  const [walletBalance, setWalletBalance] = useState(null);
+  const [referralCode, setReferralCode] = useState(user?.referral_code || "");
+  const [referModalOpen, setReferModalOpen] = useState(false);
+  const [referCopied, setReferCopied] = useState(false);
   const sareeMenuRef = useRef(null);
   const profileMenuRef = useRef(null);
   const mobilePanelRef = useRef(null);
@@ -30,6 +41,62 @@ const Header = () => {
   const userName = user?.name || "User";
   const firstName = userName.split(" ")[0];
   const userPhone = user?.phone || "Welcome to Banarasi Kala";
+  const displayedWalletBalance = walletBalance ?? user?.wallet_balance ?? user?.walletBalance ?? 0;
+  const walletLabel = formatHeaderMoney(displayedWalletBalance);
+  const referralLink = useMemo(() => {
+    if (!referralCode) return "";
+    const url = new URL("/login", window.location.origin);
+    url.searchParams.set("mode", "signup");
+    url.searchParams.set("ref", referralCode);
+    return url.toString();
+  }, [referralCode]);
+
+  useEffect(() => {
+    if (!user) {
+      setWalletBalance(null);
+      setReferralCode("");
+      return undefined;
+    }
+
+    let active = true;
+    const fallbackBalance = user?.wallet_balance ?? user?.walletBalance ?? 0;
+
+    const loadAccountExtras = async () => {
+      try {
+        const [walletResponse, profileResponse] = await Promise.allSettled([
+          api.get("/api/wallet"),
+          api.get("/api/customers/me"),
+        ]);
+        if (!active) return;
+
+        if (walletResponse.status === "fulfilled") {
+          setWalletBalance(
+            walletResponse.value.data?.wallet_balance ??
+              walletResponse.value.data?.balance ??
+              fallbackBalance,
+          );
+        } else {
+          setWalletBalance(fallbackBalance);
+        }
+
+        if (profileResponse.status === "fulfilled") {
+          setReferralCode(profileResponse.value.data?.referral_code || user?.referral_code || "");
+        } else {
+          setReferralCode(user?.referral_code || "");
+        }
+      } catch {
+        if (!active) return;
+        setWalletBalance(fallbackBalance);
+        setReferralCode(user?.referral_code || "");
+      }
+    };
+
+    loadAccountExtras();
+
+    return () => {
+      active = false;
+    };
+  }, [user?.id, user?.wallet_balance, user?.walletBalance, user?.referral_code]);
 
   useEffect(() => {
     if (location.pathname !== "/collection") return;
@@ -179,6 +246,40 @@ const Header = () => {
       replace: currentPath === path,
       state: currentPath === path ? { refreshKey: Date.now() } : undefined,
     });
+  };
+
+  const openReferModal = () => {
+    closeMenus();
+    setReferCopied(false);
+    setReferModalOpen(true);
+  };
+
+  const copyReferralLink = async () => {
+    if (!referralLink) return;
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      setReferCopied(true);
+      window.setTimeout(() => setReferCopied(false), 1300);
+    } catch {
+      setReferCopied(false);
+    }
+  };
+
+  const shareReferralLink = async () => {
+    if (!referralLink) return;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: "Refer & Earn",
+          text: "Sign up using my referral link and get wallet rewards.",
+          url: referralLink,
+        });
+        return;
+      }
+    } catch {
+      // Copy fallback keeps sharing available on browsers without native share.
+    }
+    await copyReferralLink();
   };
 
   const openLogin = (event) => {
@@ -409,6 +510,9 @@ const Header = () => {
                   <button type="button" onClick={() => goProtected("/profile")}>
                     Account
                   </button>
+                  <button type="button" onClick={openReferModal}>
+                    Refer & Earn
+                  </button>
                   <button type="button" onClick={() => goProtected("/wishlist")}>
                     Wishlist
                   </button>
@@ -421,6 +525,32 @@ const Header = () => {
                 </div>
               )}
             </div>
+          )}
+
+          {user && (
+            <button
+              type="button"
+              onClick={() => goProtected("/profile")}
+              className="bk-icon-link bk-wallet-action"
+              aria-label={`Wallet balance ${walletLabel}`}
+            >
+              <span className="bk-icon-wrap">
+                <svg
+                  width="29"
+                  height="29"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2" />
+                  <path d="M3 7h18v10H3z" />
+                  <path d="M16 12h.01" />
+                </svg>
+              </span>
+              <span>Wallet</span>
+              <small>{walletLabel}</small>
+            </button>
           )}
 
           {user && (
@@ -504,6 +634,12 @@ const Header = () => {
           <div className="bk-mobile-panel-head">
             <span>{user ? `Hello ${firstName}` : "Welcome"}</span>
             <p>{user ? userPhone : "Sign in for orders, wishlist and cart"}</p>
+            {user ? (
+              <button type="button" className="bk-mobile-wallet" onClick={() => goProtected("/profile")}>
+                <span>Wallet</span>
+                <strong>{walletLabel}</strong>
+              </button>
+            ) : null}
           </div>
 
           <div className="bk-mobile-panel-section">
@@ -560,6 +696,15 @@ const Header = () => {
                 <button type="button" onClick={() => goProtected("/my-orders")}>
                   Orders
                 </button>
+                <button type="button" onClick={() => goProtected("/profile")}>
+                  Account
+                </button>
+                <button type="button" onClick={() => goProtected("/profile")}>
+                  Wallet {walletLabel}
+                </button>
+                <button type="button" onClick={openReferModal}>
+                  Refer & Earn
+                </button>
                 <button type="button" onClick={() => goProtected("/wishlist")}>
                   Wishlist {getWishlistCount() > 0 ? `(${getWishlistCount()})` : ""}
                 </button>
@@ -580,6 +725,47 @@ const Header = () => {
             )}
           </div>
         </nav>
+      )}
+
+      {referModalOpen && user && (
+        <div className="bk-refer-modal" role="dialog" aria-modal="true" aria-labelledby="bk-refer-title">
+          <div className="bk-refer-card">
+            <button
+              type="button"
+              className="bk-refer-close"
+              onClick={() => setReferModalOpen(false)}
+              aria-label="Close refer and earn"
+            >
+              <svg width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+              </svg>
+            </button>
+
+            <span className="bk-refer-kicker">Refer & Earn</span>
+            <h2 id="bk-refer-title">Invite friends, earn wallet rewards</h2>
+            <p>Share your referral link. Your friend can sign up from this link and rewards will be added as per the active offer.</p>
+
+            <div className="bk-refer-code">
+              <span>Your code</span>
+              <strong>{referralCode || "Not available"}</strong>
+            </div>
+
+            <label className="bk-refer-link">
+              <span>Referral link</span>
+              <input value={referralLink || "Referral link not available"} readOnly />
+            </label>
+
+            <div className="bk-refer-actions">
+              <button type="button" onClick={copyReferralLink} disabled={!referralLink}>
+                {referCopied ? "Copied" : "Copy Link"}
+              </button>
+              <button type="button" className="primary" onClick={shareReferralLink} disabled={!referralLink}>
+                Share
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </header>
   );
