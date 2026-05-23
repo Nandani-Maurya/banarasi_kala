@@ -1,8 +1,6 @@
 import { createContext, useState, useContext, useEffect } from 'react';
 import axios from 'axios';
 import { API_ENDPOINTS } from '../config/api';
-import { firebaseAuth, isFirebaseConfigured } from "../config/firebase";
-import { RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 
 const AuthContext = createContext();
 
@@ -48,9 +46,9 @@ export const AuthProvider = ({ children }) => {
     axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
   };
 
-  const login = async (email, password, keepLoggedIn) => {
+  const login = async (phone, keepLoggedIn) => {
     try {
-      const response = await axios.post(`${API_ENDPOINTS.auth}/login`, { email, password });
+      const response = await axios.post(`${API_ENDPOINTS.auth}/login-phone`, { phone });
       const customer = response.data.customer || response.data.user;
       const { accessToken, refreshToken } = response.data;
 
@@ -65,21 +63,6 @@ export const AuthProvider = ({ children }) => {
       err.status = error.response?.status;
       throw err;
     }
-  };
-
-  const verifyPhoneAndLogin = async ({ email, password, keepLoggedIn, firebaseIdToken }) => {
-    const response = await axios.post(`${API_ENDPOINTS.auth}/verify-phone-login`, {
-      email,
-      password,
-      firebase_id_token: firebaseIdToken,
-    });
-
-    const customer = response.data.customer || response.data.user;
-    const { accessToken, refreshToken } = response.data;
-
-    persistAuth({ customer, accessToken, refreshToken, keepLoggedIn });
-
-    return customer;
   };
 
   const signup = async (userData) => {
@@ -100,34 +83,11 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const sendPhoneOtp = async (phoneNumber) => {
-    if (!phoneNumber) throw new Error("Phone number is required");
-    if (!isFirebaseConfigured || !firebaseAuth) {
-      throw new Error(
-        "Phone OTP is not configured. Please set VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_APP_ID.",
-      );
-    }
-
-    // Ensure a single verifier instance.
-    if (!window.__vnsRecaptchaVerifier) {
-      window.__vnsRecaptchaVerifier = new RecaptchaVerifier(
-        firebaseAuth,
-        "firebase-recaptcha",
-        { size: "invisible" },
-      );
-    }
-
-    const verifier = window.__vnsRecaptchaVerifier;
-    const confirmation = await signInWithPhoneNumber(firebaseAuth, phoneNumber, verifier);
-    return confirmation;
-  };
-
-  const verifyPhoneOtpAndGetIdToken = async ({ confirmation, otp }) => {
-    if (!confirmation) throw new Error("OTP session missing");
-    if (!otp) throw new Error("OTP is required");
-    const result = await confirmation.confirm(otp);
-    const idToken = await result.user.getIdToken();
-    return idToken;
+  const verifyMsg91AccessToken = async (accessToken) => {
+    const response = await axios.post(`${API_ENDPOINTS.auth}/verify-msg91-access-token`, {
+      accessToken,
+    });
+    return response.data;
   };
 
   const logout = () => {
@@ -137,7 +97,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout, loading, sendPhoneOtp, verifyPhoneOtpAndGetIdToken, verifyPhoneAndLogin }}>
+    <AuthContext.Provider value={{ user, login, signup, logout, loading, verifyMsg91AccessToken }}>
       {children}
     </AuthContext.Provider>
   );

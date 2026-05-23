@@ -24,7 +24,6 @@ const config = {
   appMode,
   isDevelopment: appMode === "dev",
   isProduction: appMode === "prod",
-  requirePhoneOtp: appMode === "prod",
   port: Number(process.env.PORT || 5003),
   databaseUrl,
   dbSchema: normalize(process.env.DB_SCHEMA, "vns_saree"),
@@ -38,9 +37,7 @@ const config = {
   referralOrderDelayDays: Number(process.env.REFERRAL_ORDER_DELAY_DAYS || 7),
   referralMilestoneCount: Number(process.env.REFERRAL_MILESTONE_COUNT || 3),
   referralMilestoneBonus: Number(process.env.REFERRAL_MILESTONE_BONUS || 1000),
-  firebaseProjectId: normalize(process.env.FIREBASE_PROJECT_ID),
-  firebaseClientEmail: normalize(process.env.FIREBASE_CLIENT_EMAIL),
-  firebasePrivateKey: normalize(process.env.FIREBASE_PRIVATE_KEY),
+  msg91AuthKey: normalize(process.env.MSG91_AUTHKEY),
 };
 
 module.exports = { config, parseBoolean };

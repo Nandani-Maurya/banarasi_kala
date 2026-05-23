@@ -15,12 +15,12 @@ const logAuthError = (action, error) => {
 
 const isInvalidCredentialsError = (error) => {
   const message = String(error?.message || error || "").toLowerCase();
-  return error?.status === 401 || message.includes("invalid email or password");
+  return error?.status === 401 || message.includes("invalid email or password") || message.includes("phone number");
 };
 
 const getAuthErrorMessage = (error, fallback = SUPPORT_MESSAGE) => {
   if (isInvalidCredentialsError(error)) {
-    return "Email or password is incorrect.";
+    return "Phone number is incorrect or not registered.";
   }
 
   if (error?.code === "PHONE_NOT_VERIFIED") {
@@ -63,27 +63,24 @@ const AuthField = ({
 );
 
 const Auth = () => {
-  const appMode = (import.meta.env.VITE_APP_MODE || "dev").toLowerCase();
-  const shouldBypassPhoneOtp = appMode !== "prod";
   const [activeTab, setActiveTab] = useState("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [animationKey, setAnimationKey] = useState(0);
-  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
-  const [phoneOtpSession, setPhoneOtpSession] = useState(null);
-  const [phoneOtp, setPhoneOtp] = useState("");
+  const [msg91AccessToken, setMsg91AccessToken] = useState("");
+  const [phoneVerified, setPhoneVerified] = useState(false);
 
-  const { login, signup, user, sendPhoneOtp, verifyPhoneOtpAndGetIdToken, verifyPhoneAndLogin } = useAuth();
+
+  const { login, signup, user, verifyMsg91AccessToken } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const [loginData, setLoginData] = useState({
-    email: "",
-    password: "",
+    phone: "",
     keepLoggedIn: false,
   });
   const [signupData, setSignupData] = useState({
@@ -144,10 +141,48 @@ const Auth = () => {
   }, [location.search]);
 
   useEffect(() => {
+    const onOtpSuccess = (event) => {
+      const isVerified =
+        event?.detail?.success === true ||
+        event?.detail?.verified === true ||
+        event?.detail?.data?.success === true ||
+        event?.detail?.data?.verified === true;
+      const token =
+        event?.detail?.accessToken ||
+        event?.detail?.access_token ||
+        event?.detail?.data?.accessToken ||
+        event?.detail?.data?.access_token ||
+        event?.detail?.jwt ||
+        event?.detail?.token ||
+        event?.detail?.jwtToken ||
+        "";
+      if (isVerified || token) {
+        setMsg91AccessToken(token || "");
+        setPhoneVerified(true);
+        setSuccess("Phone OTP verified successfully.");
+        setError("");
+      }
+    };
+    const onOtpFailure = () => {
+      setPhoneVerified(false);
+      setMsg91AccessToken("");
+      setError("Phone OTP verification failed. Please try again.");
+    };
+    window.addEventListener("msg91:otp-success", onOtpSuccess);
+    window.addEventListener("msg91:otp-failure", onOtpFailure);
+    return () => {
+      window.removeEventListener("msg91:otp-success", onOtpSuccess);
+      window.removeEventListener("msg91:otp-failure", onOtpFailure);
+    };
+  }, []);
+
+  useEffect(() => {
     const refreshAuthCard = () => {
       setActiveTab("login");
       setError("");
       setSuccess("");
+      setPhoneVerified(false);
+      setMsg91AccessToken("");
       setAnimationKey((key) => key + 1);
     };
 
@@ -231,55 +266,16 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      await login(loginData.email, loginData.password, loginData.keepLoggedIn);
-    } catch (err) {
-      if (err?.code === "PHONE_NOT_VERIFIED" && err?.phone) {
-        try {
-          if (shouldBypassPhoneOtp) {
-            await verifyPhoneAndLogin({
-              email: loginData.email,
-              password: loginData.password,
-              keepLoggedIn: loginData.keepLoggedIn,
-            });
-            return;
-          }
-
-          const phoneE164 = err.phone?.startsWith("+") ? err.phone : `+91${err.phone}`;
-          const confirmation = await sendPhoneOtp(phoneE164);
-          setPhoneOtpSession(confirmation);
-          setSuccess("OTP sent to your phone number.");
-          switchMode("verifyLoginPhone");
-        } catch (sendErr) {
-          logAuthError("phone login verification", sendErr);
-          setError("Unable to continue login right now. Please contact support or try again later.");
-        }
-      } else {
-        logAuthError("login", err);
-        setError(getAuthErrorMessage(err, "Unable to login right now. Please contact support or try again later."));
+      if (!phoneVerified) {
+        throw new Error("Please verify your phone OTP first.");
       }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyPhoneOtpForLogin = async (e) => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      const firebaseIdToken = await verifyPhoneOtpAndGetIdToken({
-        confirmation: phoneOtpSession,
-        otp: phoneOtp,
-      });
-      await verifyPhoneAndLogin({
-        email: loginData.email,
-        password: loginData.password,
-        keepLoggedIn: loginData.keepLoggedIn,
-        firebaseIdToken,
-      });
+      if (msg91AccessToken) {
+        await verifyMsg91AccessToken(msg91AccessToken);
+      }
+      await login(loginData.phone, loginData.keepLoggedIn);
     } catch (err) {
-      logAuthError("login phone verification", err);
-      setError("Phone verification failed. Please check the OTP or try again.");
+      logAuthError("login", err);
+      setError(getAuthErrorMessage(err, "Unable to login right now. Please contact support or try again later."));
     } finally {
       setLoading(false);
     }
@@ -297,16 +293,13 @@ const Auth = () => {
     // Step 1: send OTP to phone
     setLoading(true);
     try {
-      if (shouldBypassPhoneOtp) {
-        await signup(signupData);
-        return;
+      if (!phoneVerified) {
+        throw new Error("Please verify your phone OTP first.");
       }
-
-      const phoneE164 = signupData.phone?.startsWith("+") ? signupData.phone : `+91${signupData.phone}`;
-      const confirmation = await sendPhoneOtp(phoneE164);
-      setPhoneOtpSession(confirmation);
-      setSuccess("OTP sent to your phone number.");
-      switchMode("verifyPhone");
+      if (msg91AccessToken) {
+        await verifyMsg91AccessToken(msg91AccessToken);
+      }
+      await signup(signupData);
     } catch (err) {
       logAuthError("signup", err);
       setError(getAuthErrorMessage(err, "Unable to create your account right now. Please contact support or try again later."));
@@ -315,22 +308,27 @@ const Auth = () => {
     }
   };
 
-  const handleVerifyPhoneOtpForSignup = async (e) => {
-    e.preventDefault();
+  const startMsg91Otp = () => {
     setError("");
-    setLoading(true);
-    try {
-      const firebaseIdToken = await verifyPhoneOtpAndGetIdToken({
-        confirmation: phoneOtpSession,
-        otp: phoneOtp,
-      });
-      await signup({ ...signupData, firebase_id_token: firebaseIdToken });
-    } catch (err) {
-      logAuthError("signup phone verification", err);
-      setError("Phone verification failed. Please check the OTP or try again.");
-    } finally {
-      setLoading(false);
+    setSuccess("");
+    setPhoneVerified(false);
+    setMsg91AccessToken("");
+    if (typeof window.initSendOTP !== "function") {
+      setError("MSG91 OTP service is not loaded yet. Please refresh and try again.");
+      return;
     }
+    const identifier = activeTab === "signup" ? signupData.phone : loginData.phone;
+    if (!identifier) {
+      setError("Please enter phone number before OTP verification.");
+      return;
+    }
+    const normalized = String(identifier).replace(/\D/g, "");
+    const e164 = normalized.startsWith("91") ? `+${normalized}` : `+91${normalized}`;
+    const conf = { ...window.configuration, identifier: e164 };
+    console.log("MSG91 Triggering with config:", conf);
+    window.initSendOTP(conf);
+    setPhoneVerified(true);
+
   };
 
   const handleForgotPassword = async (e) => {
@@ -435,7 +433,6 @@ const Auth = () => {
       className="auth-page"
       style={{ "--auth-bg": `url(${headerBackground})` }}
     >
-      <div id="firebase-recaptcha" />
       <section className="auth-panel" key={animationKey}>
         <header className="auth-heading">
           <h1>{authCopy.title}</h1>
@@ -448,35 +445,15 @@ const Auth = () => {
         {activeTab === "login" && (
           <form className="auth-form" onSubmit={onLogin}>
             <AuthField
-              icon="lucide:mail"
-              label="Email Address"
-              name="email"
-              type="email"
-              value={loginData.email}
-              placeholder="Enter your email"
+              icon="lucide:phone"
+              label="Phone Number"
+              name="phone"
+              type="tel"
+              value={loginData.phone}
+              placeholder="Enter your phone number"
               onChange={handleLoginChange}
+              inputMode="tel"
             />
-
-            <AuthField
-              icon="lucide:lock"
-              label="Password"
-              name="password"
-              type={showLoginPassword ? "text" : "password"}
-              value={loginData.password}
-              placeholder="Enter your password"
-              onChange={handleLoginChange}
-              rightAction={
-                <button
-                  type="button"
-                  className="auth-eye"
-                  aria-label={showLoginPassword ? "Hide password" : "Show password"}
-                  onClick={() => setShowLoginPassword((visible) => !visible)}
-                >
-                  <Icon icon={showLoginPassword ? "lucide:eye-off" : "lucide:eye"} />
-                </button>
-              }
-            />
-
             <div className="auth-row">
               <label className="auth-remember">
                 <input
@@ -487,12 +464,14 @@ const Auth = () => {
                 />
                 <span>Keep me logged in</span>
               </label>
-              <button type="button" onClick={() => switchMode("forgotPassword")}>
-                Forgot Password?
-              </button>
             </div>
 
-            <button type="submit" disabled={loading} className="auth-primary">
+            <button type="button" className="auth-secondary" onClick={startMsg91Otp}>
+              Send & Verify OTP
+            </button>
+            {!phoneVerified && <p className="auth-terms">Step 1: Click "Send & Verify OTP"</p>}
+            {phoneVerified && <p className="auth-terms">Step 2 complete: Phone verified. Now tap Login.</p>}
+            <button type="submit" disabled={loading || !phoneVerified} className="auth-primary">
               {loading ? "Please wait..." : "Login"}
             </button>
 
@@ -600,8 +579,12 @@ const Auth = () => {
             </label>
 
             <button type="submit" disabled={loading} className="auth-primary">
-              {loading ? "Sending OTP..." : "Verify Phone & Sign Up"}
+              {loading ? "Creating account..." : "Create Account"}
             </button>
+            <button type="button" className="auth-secondary" onClick={startMsg91Otp}>
+              Verify Phone OTP
+            </button>
+            {phoneVerified && <p className="auth-terms">Phone verified</p>}
 
             <div className="auth-divider">
               <span />
@@ -627,47 +610,7 @@ const Auth = () => {
           </form>
         )}
 
-        {activeTab === "verifyPhone" && (
-          <form className="auth-form" onSubmit={handleVerifyPhoneOtpForSignup}>
-            <AuthField
-              icon="lucide:key-round"
-              label="OTP"
-              name="otp"
-              value={phoneOtp}
-              placeholder="Enter OTP"
-              onChange={(e) => setPhoneOtp(e.target.value)}
-              maxLength={6}
-              inputMode="numeric"
-            />
-            <button type="submit" disabled={loading} className="auth-primary">
-              {loading ? "Verifying..." : "Verify & Create Account"}
-            </button>
-            <button type="button" className="auth-text-button" onClick={() => switchMode("signup")}>
-              Back
-            </button>
-          </form>
-        )}
-
-        {activeTab === "verifyLoginPhone" && (
-          <form className="auth-form" onSubmit={handleVerifyPhoneOtpForLogin}>
-            <AuthField
-              icon="lucide:key-round"
-              label="OTP"
-              name="otp"
-              value={phoneOtp}
-              placeholder="Enter OTP"
-              onChange={(e) => setPhoneOtp(e.target.value)}
-              maxLength={6}
-              inputMode="numeric"
-            />
-            <button type="submit" disabled={loading} className="auth-primary">
-              {loading ? "Verifying..." : "Verify Phone"}
-            </button>
-            <button type="button" className="auth-text-button" onClick={() => switchMode("login")}>
-              Back to Login
-            </button>
-          </form>
-        )}
+        
 
         {activeTab === "forgotPassword" && (
           <form className="auth-form" onSubmit={handleForgotPassword}>

@@ -77,6 +77,44 @@
         <div class="loader"></div>
       </div>
     </div>
+    <script type="text/javascript">
+      var configuration = {
+        widgetId: "366577734f49393335383531",
+        tokenAuth: "519342TgUdnaZxC26a1205e7P1",
+        identifier: "<enter mobile number/email here> (optional)",
+        exposeMethods: false,
+        success: (data) => {
+          console.log("success response", data);
+          window.dispatchEvent(new CustomEvent("msg91:otp-success", { detail: data }));
+        },
+        failure: (error) => {
+          console.log("failure reason", error);
+          window.dispatchEvent(new CustomEvent("msg91:otp-failure", { detail: error }));
+        },
+      };
+    </script>
+    <script type="text/javascript">
+      (function loadOtpScript(urls) {
+        let i = 0;
+        function attempt() {
+          const s = document.createElement("script");
+          s.src = urls[i];
+          s.async = true;
+          s.onload = () => {};
+          s.onerror = () => {
+            i++;
+            if (i < urls.length) {
+              attempt();
+            }
+          };
+          document.head.appendChild(s);
+        }
+        attempt();
+      })([
+        "https://verify.msg91.com/otp-provider.js",
+        "https://verify.phone91.com/otp-provider.js",
+      ]);
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

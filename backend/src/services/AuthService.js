@@ -6,17 +6,13 @@ const EmailService = require("./EmailService");
 const { Op } = require("sequelize");
 const WalletService = require("./WalletService");
 const { config } = require("../config/env");
-const { getFirebaseAdmin } = require("../config/firebaseAdmin");
 
 const generateReferralCode = () =>
   `VNS${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
 
-const normalizePhone = (value) => String(value || "").replace(/\D/g, "");
-const shouldBypassPhoneOtp = () => !config.requirePhoneOtp;
-
 class AuthService {
   async register(userData) {
-    const { name, phone, email, password, referral_code, firebase_id_token } = userData;
+    const { name, phone, email, password, referral_code } = userData;
 
     const existingPhone = await Customer.findOne({ where: { phone } });
     if (existingPhone) {
@@ -36,22 +32,6 @@ class AuthService {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    let phoneVerified = shouldBypassPhoneOtp();
-    let firebasePhoneUid = null;
-    if (firebase_id_token) {
-      const admin = getFirebaseAdmin();
-      const decoded = await admin.auth().verifyIdToken(firebase_id_token);
-      const verifiedPhone = decoded.phone_number || "";
-      if (!verifiedPhone) {
-        throw new Error("Phone verification failed. Please try again.");
-      }
-      if (normalizePhone(verifiedPhone).slice(-10) !== normalizePhone(phone).slice(-10)) {
-        throw new Error("Verified phone number does not match.");
-      }
-      phoneVerified = true;
-      firebasePhoneUid = decoded.uid;
-    }
-
     let customer = null;
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
@@ -61,8 +41,7 @@ class AuthService {
           email,
           password: hashedPassword,
           referral_code: generateReferralCode(),
-          phone_verified: phoneVerified,
-          firebase_phone_uid: firebasePhoneUid,
+          phone_verified: true,
         });
         break;
       } catch (err) {
@@ -115,63 +94,17 @@ class AuthService {
       throw new Error("Invalid email or password");
     }
 
-    if (!customer.phone_verified && !shouldBypassPhoneOtp()) {
-      const error = new Error("Phone number not verified. Please verify with OTP.");
-      error.code = "PHONE_NOT_VERIFIED";
-      error.phone = customer.phone;
-      throw error;
-    }
-
     return this.generateTokens(customer, "customer");
   }
 
-  async verifyPhoneForCustomer({ customerId, firebaseIdToken }) {
-    if (shouldBypassPhoneOtp()) {
-      const customer = await Customer.findByPk(customerId);
-      if (!customer) throw new Error("Customer not found");
-      customer.phone_verified = true;
-      await customer.save();
-      return { message: "Phone verified successfully" };
+  async loginWithPhone(phone) {
+    if (!phone) {
+      throw new Error("Phone number is required");
     }
-
-    if (!firebaseIdToken) throw new Error("firebase_id_token is required");
-
-    const admin = getFirebaseAdmin();
-    const decoded = await admin.auth().verifyIdToken(firebaseIdToken);
-    const verifiedPhone = decoded.phone_number || "";
-    if (!verifiedPhone) throw new Error("Phone verification failed. Please try again.");
-
-    const customer = await Customer.findByPk(customerId);
-    if (!customer) throw new Error("Customer not found");
-
-    if (normalizePhone(verifiedPhone).slice(-10) !== normalizePhone(customer.phone).slice(-10)) {
-      throw new Error("Verified phone number does not match.");
-    }
-
-    customer.phone_verified = true;
-    customer.firebase_phone_uid = decoded.uid;
-    await customer.save();
-
-    return { message: "Phone verified successfully" };
-  }
-
-  async verifyPhoneAndLogin({ email, password, firebaseIdToken }) {
-    if (!email || !password) throw new Error("Email and password are required");
-    if (!firebaseIdToken && !shouldBypassPhoneOtp()) {
-      throw new Error("firebase_id_token is required");
-    }
-
-    const customer = await Customer.findOne({ where: { email } });
+    const customer = await Customer.findOne({ where: { phone } });
     if (!customer) {
-      throw new Error("Invalid email or password");
+      throw new Error("No account found with this phone number");
     }
-
-    const isMatch = await bcrypt.compare(password, customer.password);
-    if (!isMatch) {
-      throw new Error("Invalid email or password");
-    }
-
-    await this.verifyPhoneForCustomer({ customerId: customer.id, firebaseIdToken });
     return this.generateTokens(customer, "customer");
   }
 
