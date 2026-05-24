@@ -7,7 +7,7 @@ export const validateEmail = (email) => {
 
 export const validatePhone = (phone) => {
   // Indian phone number validation (10 digits, optional +91)
-  const re = /^(\+91[-\s]?)?[0]?(91)?[789]\d{9}$/;
+  const re = /^(\+91[-\s]?)?[0]?(91)?[6-9]\d{9}$/;
   return re.test(phone);
 };
 
