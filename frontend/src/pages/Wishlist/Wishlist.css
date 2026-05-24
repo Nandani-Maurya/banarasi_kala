@@ -146,7 +146,7 @@
   display: block;
   min-height: 38px;
   color: #4a160f;
-  font-family: "Inter", "Poppins", Arial, sans-serif;
+  font-family: "Poppins", sans-serif;
   font-size: 13.5px;
   font-weight: 800;
   line-height: 1.4;
@@ -164,13 +164,14 @@
 
 .wishlist-card-price strong {
   color: #800020;
-  font-family: "Inter", "Poppins", Arial, sans-serif;
+  font-family: "Poppins", sans-serif;
   font-size: 16px;
   font-weight: 900;
 }
 
 .wishlist-card-price span {
   color: #9f9188;
+  font-family: "Poppins", sans-serif;
   font-size: 11px;
   text-decoration: line-through;
 }

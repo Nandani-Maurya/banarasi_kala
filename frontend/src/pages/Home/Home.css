@@ -94,6 +94,72 @@
   --home-deferred-min-height: 260px;
 }
 
+.home-page
+  :where(
+    .bk-fabric-strip,
+    .home-deferred-section
+  )
+  :where(*):not(:where(h1, h2, h1 *, h2 *, .bk-occasion-heading, .bk-occasion-heading *)) {
+  font-family: "Poppins", sans-serif !important;
+}
+
+.home-page
+  :where(
+    .bk-fabric-strip,
+    .home-deferred-section
+  )
+  :where(p, span, a, button, small, em):not(:where(h1 *, h2 *, .bk-occasion-heading, .bk-occasion-heading *)) {
+  font-weight: 500 !important;
+}
+
+.home-page
+  :where(
+    .bk-fabric-strip,
+    .home-deferred-section
+  )
+  :where(
+    p,
+    .bk-story-copy p,
+    .bk-review-card p,
+    .bk-faq-answer,
+    .bk-popular-empty p
+  ) {
+  font-weight: 400 !important;
+}
+
+.home-page
+  :where(
+    .bk-fabric-label,
+    .bk-popular-card-body h3,
+    .bk-popular-price,
+    .bk-popular-mrp,
+    .bk-arrival-info h3,
+    .bk-arrival-price,
+    .bk-arrival-mrp,
+    .bk-browse-name,
+    .bk-occasion-name,
+    .bk-faq-question,
+    .bk-story-cta,
+    .bk-popular-view-all,
+    .bk-arrivals-link
+  ) {
+  font-weight: 600 !important;
+}
+
+.home-page
+  :where(
+    .bk-popular-header h2,
+    .bk-browse-header h2,
+    .bk-arrivals-copy h2,
+    .bk-occasion-heading h2,
+    .bk-story-copy h2,
+    .bk-review-heading h2,
+    .bk-faq-shell h2
+  ) {
+  font-size: 18px !important;
+  line-height: 1 !important;
+}
+
 @keyframes bkHomeDeferredShimmer {
   from {
     background-position: 120% 0;
@@ -118,6 +184,19 @@
 @media (max-width: 640px) {
   .bk-home-main {
     padding-top: 136px;
+  }
+
+  .home-page
+    :where(
+      .bk-popular-header h2,
+      .bk-browse-header h2,
+      .bk-arrivals-copy h2,
+      .bk-occasion-heading h2,
+      .bk-story-copy h2,
+      .bk-review-heading h2,
+      .bk-faq-shell h2
+    ) {
+    font-size: 15px !important;
   }
 
   .home-deferred-section--popular,

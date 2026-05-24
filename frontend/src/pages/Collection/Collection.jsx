@@ -364,8 +364,8 @@ const Collection = () => {
             onChange={handlePriceChange}
           />
           <div className="collection-price-range">
-            <span>₹0</span>
-            <span>₹{Number(filters.maxPrice).toLocaleString()}</span>
+            <span>Rs. 0</span>
+            <span>Rs. {Number(filters.maxPrice).toLocaleString("en-IN")}</span>
           </div>
         </div>
       </div>
@@ -519,12 +519,12 @@ const Collection = () => {
                     )}
                     <div className="price-container">
                       <span className="selling-price">
-                        ₹{Number(product.selling_price || 0).toLocaleString("en-IN")}
+                        Rs. {Number(product.selling_price || 0).toLocaleString("en-IN")}
                       </span>
                       {Number(product.mrp_price || product.mrp || 0) > Number(product.selling_price || 0) && (
                         <>
                           <span className="mrp-price">
-                            ₹{Number(product.mrp_price || product.mrp).toLocaleString("en-IN")}
+                            Rs. {Number(product.mrp_price || product.mrp).toLocaleString("en-IN")}
                           </span>
                           <span className="discount-text">
                             ({calculateDiscount(product.mrp_price || product.mrp, product.selling_price)}% OFF)

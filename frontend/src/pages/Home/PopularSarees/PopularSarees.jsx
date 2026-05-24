@@ -223,11 +223,11 @@ const PopularSarees = () => {
                       <h3>{product.name}</h3>
                       <div className="bk-popular-price-row">
                         <span className="bk-popular-price">
-                          &#8377;{sell.toLocaleString("en-IN")}
+                          Rs. {sell.toLocaleString("en-IN")}
                         </span>
                         {mrp > sell && (
                           <span className="bk-popular-mrp">
-                            &#8377;{mrp.toLocaleString("en-IN")}
+                            Rs. {mrp.toLocaleString("en-IN")}
                           </span>
                         )}
                         {disc > 0 && (

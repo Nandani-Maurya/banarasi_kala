@@ -172,8 +172,8 @@ const Wishlist = () => {
                     {item.name}
                   </Link>
                   <div className="wishlist-card-price">
-                    <strong>₹{price.toLocaleString("en-IN")}</strong>
-                    {hasDiscount && <span>₹{mrp.toLocaleString("en-IN")}</span>}
+                    <strong>Rs. {price.toLocaleString("en-IN")}</strong>
+                    {hasDiscount && <span>Rs. {mrp.toLocaleString("en-IN")}</span>}
                   </div>
                   <div className="wishlist-card-actions">
                     <button

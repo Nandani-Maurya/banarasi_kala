@@ -114,94 +114,99 @@ const NewArrivals = () => {
           <span className="bk-arrivals-kicker">Fresh Drapes</span>
           <h2>New Arrivals</h2>
           <p>Freshly added sarees, ready for the first glance and the next celebration.</p>
-          <Link to="/collection" className="bk-arrivals-link">
-            View Collection
-            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-              <path d="M9 18l6-6-6-6" />
-            </svg>
-          </Link>
         </div>
 
-        {loading ? (
-          <div className="bk-arrivals-rail bk-arrivals-skeleton-rail">
-            {[...Array(5)].map((_, index) => (
-              <div key={index} className="bk-arrival-card bk-arrival-skeleton">
-                <div className="bk-arrival-skeleton-image" />
-                <div className="bk-arrival-info">
-                  <div className="bk-arrival-skeleton-line wide" />
-                  <div className="bk-arrival-skeleton-line" />
+        <div className="bk-arrivals-products">
+          {loading ? (
+            <div className="bk-arrivals-rail bk-arrivals-skeleton-rail">
+              {[...Array(5)].map((_, index) => (
+                <div key={index} className="bk-arrival-card bk-arrival-skeleton">
+                  <div className="bk-arrival-skeleton-image" />
+                  <div className="bk-arrival-info">
+                    <div className="bk-arrival-skeleton-line wide" />
+                    <div className="bk-arrival-skeleton-line" />
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        ) : products.length === 0 ? (
-          <div className="bk-arrivals-empty" role="status">
-            <h3>New Arrivals Coming Soon</h3>
-            <p>Once fresh active stock is marked as new arrival, it will appear here.</p>
-          </div>
-        ) : (
-          <div className="bk-arrivals-rail">
-            {products.map((product, index) => {
-              const sell = Number(product.selling_price || product.price);
-              const mrp = Number(product.mrp_price || product.mrp || 0);
-              const disc = calcDiscount(mrp, sell);
-              const cover = getProductCoverImage(product);
-              const cardImages = getProductImages(product);
-              const sliderImages = cardImages.length > 0 ? cardImages : [{ url: cover }];
-              const activeIndex = activeSlides[product.id] || 0;
+              ))}
+            </div>
+          ) : products.length === 0 ? (
+            <div className="bk-arrivals-empty" role="status">
+              <h3>New Arrivals Coming Soon</h3>
+              <p>Once fresh active stock is marked as new arrival, it will appear here.</p>
+            </div>
+          ) : (
+            <div className="bk-arrivals-rail">
+              {products.map((product, index) => {
+                const sell = Number(product.selling_price || product.price);
+                const mrp = Number(product.mrp_price || product.mrp || 0);
+                const disc = calcDiscount(mrp, sell);
+                const cover = getProductCoverImage(product);
+                const cardImages = getProductImages(product);
+                const sliderImages = cardImages.length > 0 ? cardImages : [{ url: cover }];
+                const activeIndex = activeSlides[product.id] || 0;
 
-              return (
-                <article
-                  key={product.id}
-                  className="bk-arrival-card"
-                  onMouseEnter={() => handleCardEnter(product.id)}
-                  onMouseLeave={() => handleCardLeave(product.id)}
-                  onFocus={() => handleCardEnter(product.id)}
-                  onBlur={() => handleCardLeave(product.id)}
-                  style={{ transitionDelay: `${Math.min(index * 70, 490)}ms` }}
-                >
-                  <Link to={`/product/${product.slug}`} className="bk-arrival-link">
-                    <div className="bk-arrival-media">
-                      <div
-                        className="bk-arrival-track"
-                        style={{
-                          "--arrival-slide-count": sliderImages.length,
-                          transform: `translateX(-${activeIndex * (100 / sliderImages.length)}%)`,
-                        }}
-                      >
-                        {sliderImages.map((image, imageIndex) => (
-                          <span className="bk-arrival-slide" key={`${image.url}-${imageIndex}`}>
-                            <img src={image.url} alt="" className="bk-arrival-image-bg" aria-hidden="true" />
-                            <img src={image.url} alt={product.name} className="bk-arrival-image" />
-                          </span>
-                        ))}
-                      </div>
-                      {sliderImages.length > 1 && (
-                        <div className="bk-arrival-dots" aria-hidden="true">
-                          {sliderImages.map((image, dotIndex) => (
-                            <span
-                              key={`${image.url}-dot-${dotIndex}`}
-                              className={dotIndex === activeIndex ? "is-active" : ""}
-                            />
+                return (
+                  <article
+                    key={product.id}
+                    className="bk-arrival-card"
+                    onMouseEnter={() => handleCardEnter(product.id)}
+                    onMouseLeave={() => handleCardLeave(product.id)}
+                    onFocus={() => handleCardEnter(product.id)}
+                    onBlur={() => handleCardLeave(product.id)}
+                    style={{ transitionDelay: `${Math.min(index * 70, 490)}ms` }}
+                  >
+                    <Link to={`/product/${product.slug}`} className="bk-arrival-link">
+                      <div className="bk-arrival-media">
+                        <div
+                          className="bk-arrival-track"
+                          style={{
+                            "--arrival-slide-count": sliderImages.length,
+                            transform: `translateX(-${activeIndex * (100 / sliderImages.length)}%)`,
+                          }}
+                        >
+                          {sliderImages.map((image, imageIndex) => (
+                            <span className="bk-arrival-slide" key={`${image.url}-${imageIndex}`}>
+                              <img src={image.url} alt="" className="bk-arrival-image-bg" aria-hidden="true" />
+                              <img src={image.url} alt={product.name} className="bk-arrival-image" />
+                            </span>
                           ))}
                         </div>
-                      )}
-                    </div>
-
-                    <div className="bk-arrival-info">
-                      <h3>{product.name}</h3>
-                      <div className="bk-arrival-price-row">
-                        <span className="bk-arrival-price">&#8377;{sell.toLocaleString("en-IN")}</span>
-                        {mrp > sell && <span className="bk-arrival-mrp">&#8377;{mrp.toLocaleString("en-IN")}</span>}
-                        {disc > 0 && <span className="bk-arrival-discount">{disc}% OFF</span>}
+                        {sliderImages.length > 1 && (
+                          <div className="bk-arrival-dots" aria-hidden="true">
+                            {sliderImages.map((image, dotIndex) => (
+                              <span
+                                key={`${image.url}-dot-${dotIndex}`}
+                                className={dotIndex === activeIndex ? "is-active" : ""}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  </Link>
-                </article>
-              );
-            })}
+
+                      <div className="bk-arrival-info">
+                        <h3>{product.name}</h3>
+                        <div className="bk-arrival-price-row">
+                          <span className="bk-arrival-price">Rs. {sell.toLocaleString("en-IN")}</span>
+                          {mrp > sell && <span className="bk-arrival-mrp">Rs. {mrp.toLocaleString("en-IN")}</span>}
+                          {disc > 0 && <span className="bk-arrival-discount">{disc}% OFF</span>}
+                        </div>
+                      </div>
+                    </Link>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="bk-arrivals-footer">
+            <Link to="/collection" className="bk-arrivals-link">
+              View Collection
+              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </Link>
           </div>
-        )}
+        </div>
       </div>
     </section>
   );

@@ -491,6 +491,7 @@
 }
 
 .product-title {
+    font-family: "Poppins", sans-serif;
     font-size: 16px;
     color: #212121;
     margin: 0 0 4px;
@@ -524,12 +525,14 @@
 }
 
 .selling-price {
+    font-family: "Poppins", sans-serif;
     font-size: 16px;
     font-weight: 800;
     color: #212121;
 }
 
 .mrp-price {
+    font-family: "Poppins", sans-serif;
     font-size: 13px;
     text-decoration: line-through;
     color: #9e9e9e;

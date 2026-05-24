@@ -286,7 +286,7 @@
   margin: 0 0 9px;
   overflow: hidden;
   color: #5a160f;
-  font-family: "Cinzel", Georgia, "Times New Roman", serif;
+  font-family: "Poppins", sans-serif;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.25;
@@ -313,12 +313,14 @@
 
 .bk-popular-price {
   color: #46130d;
+  font-family: "Poppins", sans-serif;
   font-size: 14px;
   font-weight: 950;
 }
 
 .bk-popular-mrp {
   color: rgba(78, 45, 27, 0.48);
+  font-family: "Poppins", sans-serif;
   font-size: 10px;
   font-weight: 800;
   text-decoration: line-through;

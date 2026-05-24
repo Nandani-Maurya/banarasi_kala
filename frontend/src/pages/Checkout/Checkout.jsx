@@ -227,7 +227,7 @@ const Checkout = () => {
                         <div className="w-16 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-[#F5F1E8]"><img src={item.image_url} className="w-full h-full object-cover" alt={productName} /></div>
                         <div className="flex-grow">
                           <h4 className="text-xs font-bold text-[#3D2817] tracking-wider">{productName}</h4>
-                          <p className="text-[10px] text-gray-500 uppercase tracking-widest">{item.quantity} x ₹{Number(item.price).toLocaleString("en-IN")}</p>
+                          <p className="text-[10px] text-gray-500 uppercase tracking-widest">{item.quantity} x Rs. {Number(item.price).toLocaleString("en-IN")}</p>
                         </div>
                       </div>
                       );
@@ -237,13 +237,13 @@ const Checkout = () => {
                   <div className="pt-6 border-t border-[#D4AF37]/10 space-y-4">
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-gray-500 uppercase tracking-widest font-bold">Subtotal</span>
-                      <span className="font-bold text-[#3D2817]">₹{subtotal.toLocaleString("en-IN")}</span>
+                      <span className="font-bold text-[#3D2817]">Rs. {subtotal.toLocaleString("en-IN")}</span>
                     </div>
 
                     {appliedCoupon && (
                       <div className="flex justify-between items-center text-xs text-emerald-600 font-bold">
                         <div className="flex items-center gap-1"><Icon icon="lucide:ticket" /><span>COUPON ({appliedCoupon.code})</span></div>
-                        <span>-₹{discountAmount.toLocaleString("en-IN")}</span>
+                        <span>-Rs. {discountAmount.toLocaleString("en-IN")}</span>
                       </div>
                     )}
 
@@ -256,7 +256,7 @@ const Checkout = () => {
                   <div className="mt-10 pt-6 border-t-2 border-[#D4AF37]/20">
                     <div className="flex justify-between items-center mb-8">
                       <span className="text-sm font-bold text-[#3D2817] uppercase tracking-[0.2em]">Total Payable</span>
-                      <span className="text-2xl font-bold text-[#800020]">₹{total.toLocaleString("en-IN")}</span>
+                      <span className="text-2xl font-bold text-[#800020]">Rs. {total.toLocaleString("en-IN")}</span>
                     </div>
                     
                     <div className="flex flex-col items-end mb-6">

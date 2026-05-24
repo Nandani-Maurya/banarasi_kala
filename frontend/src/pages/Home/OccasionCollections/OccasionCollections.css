@@ -35,12 +35,13 @@
 
 .bk-occasion-heading h2 {
   margin: 0;
-  color: #34402c;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(24px, 2.45vw, 38px);
-  font-style: italic;
-  font-weight: 400;
-  line-height: 1;
+  color: #5a160f;
+  font-family: "Cinzel", Georgia, "Times New Roman", serif;
+  font-size: clamp(28px, 3.5vw, 52px);
+  font-style: normal;
+  font-weight: 900;
+  line-height: 0.96;
+  text-transform: uppercase;
 }
 
 .bk-occasion-row {
@@ -112,11 +113,12 @@
   display: grid;
   place-items: center;
   color: #6a4c3c;
+  font-family: "Poppins", sans-serif;
   background: rgba(255, 255, 255, 0.56);
   border: 1px solid rgba(128, 0, 32, 0.08);
   border-radius: 12px;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 500;
 }
 
 .bk-occasion-skeleton {

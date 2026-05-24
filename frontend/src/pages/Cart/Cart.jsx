@@ -92,7 +92,7 @@ const Cart = () => {
                       </div>
                     </div>
                     <div className="flex flex-col items-center sm:items-end gap-4">
-                      <span className="text-xl font-bold text-[#3D2817]">₹{Number(item.price).toLocaleString("en-IN")}</span>
+                      <span className="text-xl font-bold text-[#3D2817]">Rs. {Number(item.price).toLocaleString("en-IN")}</span>
                       <div className="flex items-center border border-[#D4AF37]/30 rounded-sm bg-white overflow-hidden">
                         <button onClick={() => updateQuantity(item.id, item.quantity - 1, item.colorId)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-[#800020] transition-colors"><Icon icon="lucide:minus" /></button>
                         <input type="number" value={item.quantity} readOnly className="w-10 text-center text-sm font-bold bg-transparent outline-none border-none" />
@@ -121,7 +121,7 @@ const Cart = () => {
                   <div className="space-y-4 mb-8">
                     <div className="flex justify-between text-[#3D2817]/70">
                       <span>Subtotal ({cart.length} items)</span>
-                      <span className="font-semibold">₹{subtotal.toLocaleString("en-IN")}</span>
+                      <span className="font-semibold">Rs. {subtotal.toLocaleString("en-IN")}</span>
                     </div>
                     <div className="flex justify-between text-[#3D2817]/70">
                       <span>Shipping</span>
@@ -135,7 +135,7 @@ const Cart = () => {
                           <span className="text-xs uppercase">{appliedCoupon.code}</span>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="text-sm">-₹{discountAmount.toLocaleString()}</span>
+                          <span className="text-sm">-Rs. {discountAmount.toLocaleString("en-IN")}</span>
                           <button onClick={removeCoupon} className="text-gray-400 hover:text-red-500"><Icon icon="lucide:x" /></button>
                         </div>
                       </div>
@@ -144,7 +144,7 @@ const Cart = () => {
                     <div className="pt-6 border-t border-[#D4AF37]/30">
                       <div className="flex justify-between items-baseline text-3xl font-black text-[#800020] mb-2">
                         <span className="brand-font uppercase tracking-tighter">Final Total</span>
-                        <span>₹{total.toLocaleString("en-IN")}</span>
+                        <span>Rs. {total.toLocaleString("en-IN")}</span>
                       </div>
                       
                       <div className="flex flex-col gap-1.5 mt-4 pt-4 border-t border-dashed border-[#D4AF37]/20">
@@ -208,8 +208,8 @@ const Cart = () => {
                       <button onClick={() => handleApplyCoupon(coupon)} className="bg-[#800020] text-[#D4AF37] text-[10px] font-black px-4 py-2 rounded-full uppercase tracking-widest hover:scale-105 transition-transform">Apply</button>
                     </div>
                     <div className="space-y-2 pt-4 border-t border-dashed border-gray-100">
-                      <div className="flex items-center gap-2 text-[10px] font-bold text-[#3D2817]/60 uppercase tracking-tighter"><Icon icon="lucide:info" /><span>Save {coupon.discount_type === 'percentage' ? `${coupon.discount_percent}%` : `₹${coupon.discount_amount}`} on this order</span></div>
-                      <div className="flex items-center gap-2 text-[10px] font-bold text-[#3D2817]/60 uppercase tracking-tighter"><Icon icon="lucide:shopping-cart" /><span>Min purchase: ₹{Number(coupon.min_purchase_amount).toLocaleString()}</span></div>
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-[#3D2817]/60 uppercase tracking-tighter"><Icon icon="lucide:info" /><span>Save {coupon.discount_type === 'percentage' ? `${coupon.discount_percent}%` : `Rs. ${Number(coupon.discount_amount).toLocaleString("en-IN")}`} on this order</span></div>
+                      <div className="flex items-center gap-2 text-[10px] font-bold text-[#3D2817]/60 uppercase tracking-tighter"><Icon icon="lucide:shopping-cart" /><span>Min purchase: Rs. {Number(coupon.min_purchase_amount).toLocaleString("en-IN")}</span></div>
                       {/* Restore the 3rd line for applicability */}
                       {(coupon.applicable_variety_id?.length > 0 || coupon.applicable_product_id?.length > 0) && (
                         <div className="flex items-center gap-2 text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">

@@ -85,6 +85,20 @@
   transform: translateX(4px);
 }
 
+.bk-arrivals-products {
+  display: grid;
+  gap: 18px;
+}
+
+.bk-arrivals-footer {
+  display: flex;
+  justify-content: center;
+}
+
+.bk-arrivals-footer .bk-arrivals-link {
+  margin-top: 0;
+}
+
 .bk-arrivals-rail {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -266,7 +280,7 @@
   margin: 0 0 9px;
   overflow: hidden;
   color: #5a160f;
-  font-family: "Cinzel", Georgia, "Times New Roman", serif;
+  font-family: "Poppins", sans-serif;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.25;
@@ -286,12 +300,14 @@
 
 .bk-arrival-price {
   color: #46130d;
+  font-family: "Poppins", sans-serif;
   font-size: 14px;
   font-weight: 950;
 }
 
 .bk-arrival-mrp {
   color: rgba(78, 45, 27, 0.48);
+  font-family: "Poppins", sans-serif;
   font-size: 10px;
   font-weight: 800;
   text-decoration: line-through;
