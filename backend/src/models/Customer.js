@@ -43,14 +43,6 @@ const Customer = sequelize.define(
       allowNull: false,
       defaultValue: false,
     },
-    reset_otp: {
-      type: DataTypes.STRING(6),
-      allowNull: true,
-    },
-    reset_otp_expiry: {
-      type: DataTypes.DATE,
-      allowNull: true,
-    },
     referral_code: {
       type: DataTypes.STRING,
       allowNull: true,

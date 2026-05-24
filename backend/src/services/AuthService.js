@@ -2,28 +2,41 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const Customer = require("../models/Customer");
 const Admin = require("../models/Admin");
-const EmailService = require("./EmailService");
 const { Op } = require("sequelize");
 const WalletService = require("./WalletService");
 const { config } = require("../config/env");
+const Msg91Service = require("./Msg91Service");
 
 const generateReferralCode = () =>
   `VNS${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
 
+const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
+const normalizePhone = (value) => Msg91Service.normalizePhone(value);
+const possiblePhoneValues = (phone) => {
+  const normalized = normalizePhone(phone);
+  return [...new Set([normalized, `0${normalized}`, `91${normalized}`, `+91${normalized}`].filter(Boolean))];
+};
+
 class AuthService {
   async register(userData) {
-    const { name, phone, email, password, referral_code } = userData;
+    const { name, phone, email, password, referral_code, msg91_access_token } = userData;
+    const cleanName = String(name || "").trim();
+    const cleanEmail = normalizeEmail(email);
+    const cleanPhone = normalizePhone(phone);
 
-    const existingPhone = await Customer.findOne({ where: { phone } });
+    if (!cleanName) throw new Error("Name is required.");
+    if (!cleanEmail) throw new Error("Email is required for registration.");
+    if (!cleanPhone || cleanPhone.length !== 10) throw new Error("Please enter a valid 10 digit mobile number.");
+    if (!password || String(password).length < 6) throw new Error("Password must be at least 6 characters.");
+
+    await Msg91Service.verifyAccessToken({ accessToken: msg91_access_token, phone: cleanPhone });
+
+    const existingPhone = await Customer.findOne({ where: { phone: { [Op.in]: possiblePhoneValues(cleanPhone) } } });
     if (existingPhone) {
       throw new Error("Phone number already registered");
     }
 
-    if (!email) {
-      throw new Error("Email is required for registration");
-    }
-
-    const existingEmail = await Customer.findOne({ where: { email } });
+    const existingEmail = await Customer.findOne({ where: { email: cleanEmail } });
     if (existingEmail) {
       throw new Error("Email already registered");
     }
@@ -36,9 +49,9 @@ class AuthService {
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
         customer = await Customer.create({
-          name,
-          phone,
-          email,
+          name: cleanName,
+          phone: cleanPhone,
+          email: cleanEmail,
           password: hashedPassword,
           referral_code: generateReferralCode(),
           phone_verified: true,
@@ -84,7 +97,12 @@ class AuthService {
   }
 
   async login(email, password) {
-    const customer = await Customer.findOne({ where: { email } });
+    const identifier = String(email || "").trim();
+    const normalizedPhone = normalizePhone(identifier);
+    const where = identifier.includes("@")
+      ? { email: normalizeEmail(identifier) }
+      : { phone: { [Op.in]: possiblePhoneValues(normalizedPhone) } };
+    const customer = await Customer.findOne({ where });
     if (!customer) {
       throw new Error("Invalid email or password");
     }
@@ -94,17 +112,6 @@ class AuthService {
       throw new Error("Invalid email or password");
     }
 
-    return this.generateTokens(customer, "customer");
-  }
-
-  async loginWithPhone(phone) {
-    if (!phone) {
-      throw new Error("Phone number is required");
-    }
-    const customer = await Customer.findOne({ where: { phone } });
-    if (!customer) {
-      throw new Error("No account found with this phone number");
-    }
     return this.generateTokens(customer, "customer");
   }
 
@@ -182,61 +189,35 @@ class AuthService {
     };
   }
 
-  async forgotPassword(email, role = "customer") {
-    const Model = role === "admin" ? Admin : Customer;
-    const user = await Model.findOne({ where: { email } });
-
-    if (!user) {
-      throw new Error("No user found with this email");
-    }
-
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-    user.reset_otp = otp;
-    user.reset_otp_expiry = expiry;
-    await user.save();
-
-    await EmailService.sendOTP(email, otp, user.name);
-    return { message: "OTP sent to your email" };
+  async startPasswordReset(phone) {
+    const cleanPhone = normalizePhone(phone);
+    if (!cleanPhone || cleanPhone.length !== 10) throw new Error("Please enter a valid 10 digit mobile number.");
+    const user = await Customer.findOne({ where: { phone: { [Op.in]: possiblePhoneValues(cleanPhone) } } });
+    if (!user) throw new Error("No account found with this phone number.");
+    return {
+      message: "Account found. Please verify phone OTP to reset password.",
+      phone: cleanPhone,
+      maskedPhone: `******${cleanPhone.slice(-4)}`,
+    };
   }
 
-  async verifyOTP(email, otp, role = "customer") {
-    const Model = role === "admin" ? Admin : Customer;
-    const user = await Model.findOne({
-      where: {
-        email,
-        reset_otp: otp,
-        reset_otp_expiry: { [Op.gt]: new Date() },
-      },
-    });
-
-    if (!user) {
-      throw new Error("Invalid or expired OTP");
-    }
-
-    return { message: "OTP verified successfully" };
+  async verifyResetPhone(phone, msg91AccessToken) {
+    const cleanPhone = normalizePhone(phone);
+    const user = await Customer.findOne({ where: { phone: { [Op.in]: possiblePhoneValues(cleanPhone) } } });
+    if (!user) throw new Error("No account found with this phone number.");
+    await Msg91Service.verifyAccessToken({ accessToken: msg91AccessToken, phone: cleanPhone });
+    return { message: "Phone verified. You can set a new password." };
   }
 
-  async resetPassword(email, otp, newPassword, role = "customer") {
-    const Model = role === "admin" ? Admin : Customer;
-    const user = await Model.findOne({
-      where: {
-        email,
-        reset_otp: otp,
-        reset_otp_expiry: { [Op.gt]: new Date() },
-      },
-    });
-
-    if (!user) {
-      throw new Error("Invalid or expired OTP");
-    }
+  async resetPasswordWithMsg91(phone, msg91AccessToken, newPassword) {
+    const cleanPhone = normalizePhone(phone);
+    const user = await Customer.findOne({ where: { phone: { [Op.in]: possiblePhoneValues(cleanPhone) } } });
+    if (!user) throw new Error("No account found with this phone number.");
+    if (!newPassword || String(newPassword).length < 6) throw new Error("Password must be at least 6 characters.");
+    await Msg91Service.verifyAccessToken({ accessToken: msg91AccessToken, phone: cleanPhone });
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(newPassword, salt);
-    user.reset_otp = null;
-    user.reset_otp_expiry = null;
     await user.save();
 
     return { message: "Password reset successfully" };

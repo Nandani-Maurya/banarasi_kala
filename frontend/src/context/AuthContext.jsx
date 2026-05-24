@@ -46,9 +46,9 @@ export const AuthProvider = ({ children }) => {
     axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
   };
 
-  const login = async (phone, keepLoggedIn) => {
+  const login = async (identifier, password, keepLoggedIn) => {
     try {
-      const response = await axios.post(`${API_ENDPOINTS.auth}/login-phone`, { phone });
+      const response = await axios.post(`${API_ENDPOINTS.auth}/login`, { identifier, password });
       const customer = response.data.customer || response.data.user;
       const { accessToken, refreshToken } = response.data;
 
@@ -56,6 +56,7 @@ export const AuthProvider = ({ children }) => {
       
       return customer;
     } catch (error) {
+      console.log(error)
       const data = error.response?.data;
       const err = new Error(data?.message || "Login failed");
       err.code = data?.code;
@@ -79,15 +80,9 @@ export const AuthProvider = ({ children }) => {
       const err = new Error(data?.message || "Signup failed");
       err.code = data?.code;
       err.status = error.response?.status;
+      err.details = data;
       throw err;
     }
-  };
-
-  const verifyMsg91AccessToken = async (accessToken) => {
-    const response = await axios.post(`${API_ENDPOINTS.auth}/verify-msg91-access-token`, {
-      accessToken,
-    });
-    return response.data;
   };
 
   const logout = () => {
@@ -97,7 +92,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout, loading, verifyMsg91AccessToken }}>
+    <AuthContext.Provider value={{ user, login, signup, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

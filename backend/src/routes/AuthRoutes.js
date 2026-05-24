@@ -5,7 +5,6 @@ const AuthController = require("../controllers/AuthController");
 // Public customer auth
 router.post("/register", AuthController.register);
 router.post("/login", AuthController.login);
-router.post("/login-phone", AuthController.loginWithPhone);
 
 // Public admin auth entrypoint
 router.post("/admin-login", AuthController.adminLogin);
@@ -15,6 +14,5 @@ router.post("/refresh-token", AuthController.refreshToken);
 router.post("/forgot-password", AuthController.forgotPassword);
 router.post("/verify-otp", AuthController.verifyOTP);
 router.post("/reset-password", AuthController.resetPassword);
-router.post("/verify-msg91-access-token", AuthController.verifyMsg91AccessToken);
 
 module.exports = router;

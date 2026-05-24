@@ -8,10 +8,13 @@ const PreLoader = () => {
       className="preloader-container"
       style={{ "--preloader-bg": `url(${headerBackground})` }}
     >
-      <div className="preloader-mark" aria-label="Loading Banarasi Kala">
-        <span className="preloader-ring" aria-hidden="true" />
+      <div className="preloader-splash" aria-label="Loading Banarasi Kala">
         <img src={verticalLogo} alt="Banarasi Kala" />
-        <span className="preloader-progress" aria-hidden="true" />
+        <div className="preloader-copy">
+          <strong>Banarasi Kala</strong>
+          <span>Handwoven elegance, arriving softly</span>
+        </div>
+        <span className="preloader-thread" aria-hidden="true" />
       </div>
     </div>
   );

@@ -38,6 +38,7 @@ const config = {
   referralMilestoneCount: Number(process.env.REFERRAL_MILESTONE_COUNT || 3),
   referralMilestoneBonus: Number(process.env.REFERRAL_MILESTONE_BONUS || 1000),
   msg91AuthKey: normalize(process.env.MSG91_AUTHKEY),
+  requireMsg91Otp: appMode === "prod" || parseBoolean(process.env.REQUIRE_MSG91_OTP, false),
 };
 
 module.exports = { config, parseBoolean };
