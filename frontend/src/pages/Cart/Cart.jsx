@@ -45,21 +45,28 @@ const Cart = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F1E8] flex flex-col">
-      <main className="flex-grow py-12 lg:py-20">
-        <div className="w-full px-4 lg:px-12">
-          <div className="mb-12 text-center animate-slide-up">
+    <div className="cart-page min-h-screen bg-[#F5F1E8] flex flex-col">
+      <section className="cart-hero animate-slide-up">
+        <div className="cart-hero-content">
+          <span className="cart-hero-icon">
+            <Icon icon="lucide:shopping-bag" />
+          </span>
+          <div>
+            <p className="cart-eyebrow">Banarasi Kala</p>
             <h1 className="text-4xl lg:text-5xl font-bold text-[#800020] mb-4 uppercase brand-font tracking-widest">
               Shopping Bag
             </h1>
-            <div className="w-24 h-1 bg-[#D4AF37] mx-auto mb-4"></div>
             <p className="text-[#3D2817]/60 text-lg">
               Your selected pieces are ready for checkout.
             </p>
           </div>
+        </div>
+      </section>
+      <main className="flex-grow py-8 lg:py-10">
+        <div className="w-full px-4 lg:px-12">
 
           {cart.length === 0 ? (
-            <div className="text-center py-20 bg-white rounded-lg shadow-sm border border-[#D4AF37]/10">
+            <div className="cart-empty text-center py-20 bg-white rounded-lg shadow-sm border border-[#D4AF37]/10">
               <EmptyStateIcon variant="cart" className="mx-auto mb-2" />
               <h3 className="brand-font text-2xl text-[#800020] mb-4">Your bag is currently empty</h3>
               <p className="text-gray-500 mb-8">Explore our heritage collection to add items.</p>

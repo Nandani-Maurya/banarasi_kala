@@ -15,7 +15,7 @@
   height: 84px;
   display: grid;
   place-items: center;
-  background: linear-gradient(145deg, #ff4c7a 0%, #eb315f 100%);
+  background: linear-gradient(145deg, #7b2f19 0%, #3d150d 100%);
   border-radius: 8px 8px 10px 10px;
   box-shadow: 0 18px 30px rgba(128, 0, 32, 0.16);
   transform: rotate(-4deg);
@@ -75,7 +75,11 @@
 }
 
 .bk-empty-illustration-wishlist .bk-empty-bag {
-  background: linear-gradient(145deg, #fa4f7d 0%, #bc1745 100%);
+  background: linear-gradient(145deg, #7b2f19 0%, #3d150d 100%);
+}
+
+.bk-empty-illustration-cart .bk-empty-bag {
+  background: linear-gradient(145deg, #7b2f19 0%, #3d150d 100%);
 }
 
 .bk-empty-illustration-contact .bk-empty-bag {

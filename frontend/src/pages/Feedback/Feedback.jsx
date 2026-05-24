@@ -1,6 +1,6 @@
 import { useState } from "react";
 import "./Feedback.css";
-import { Star, Send, MessageSquare, Quote } from "lucide-react";
+import { MessageSquare, Send, ShieldCheck, Sparkles, Star } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { API_ENDPOINTS } from "../../config/api";
 
@@ -45,106 +45,101 @@ const Feedback = () => {
   };
 
   return (
-    <div className="feedback-page bg-[#F5F1E8] min-h-screen">
-      <div className="feedback-hero py-20 bg-gradient-to-b from-[#800020] to-[#3D2817] text-white relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <img 
-            src="https://www.transparenttextures.com/patterns/carbon-fibre.png" 
-            alt="pattern" 
-            className="w-full h-full object-cover"
-          />
-        </div>
-        <div className="max-w-7xl mx-auto px-4 text-center relative z-10">
-          <h1 className="text-4xl md:text-6xl font-bold brand-font mb-4 text-[#D4AF37] animate-fade-in-up">
-            Customer Feedback
-          </h1>
-          <p className="text-white/70 max-w-2xl mx-auto text-lg">
-            Your opinion matters to us. Help us improve your experience at Banarasi Kala.
+    <main className="feedback-page">
+      <section className="feedback-shell">
+        <div className="feedback-info-panel">
+          <div className="feedback-kicker">Customer Feedback</div>
+          <h1>Share Your Experience</h1>
+          <p className="feedback-intro">
+            Your opinion helps us improve every Banarasi Kala order, from
+            product quality to delivery care.
           </p>
+
+          <span className="feedback-divider" aria-hidden="true" />
+
+          <div className="feedback-info-list">
+            <article>
+              <span><Sparkles size={20} /></span>
+              <div>
+                <h2>Quality Check</h2>
+                <p>Tell us what felt premium and what can be refined.</p>
+              </div>
+            </article>
+            <article>
+              <span><MessageSquare size={20} /></span>
+              <div>
+                <h2>Your Voice</h2>
+                <p>Reviews are read by our team before publishing.</p>
+              </div>
+            </article>
+            <article>
+              <span><ShieldCheck size={20} /></span>
+              <div>
+                <h2>Trusted Review</h2>
+                <p>Logged in as {user?.name || "Customer"}.</p>
+              </div>
+            </article>
+          </div>
         </div>
-      </div>
 
-      <div className="max-w-4xl mx-auto px-4 py-20">
-        <div className="bg-white p-8 md:p-16 rounded-[3rem] shadow-2xl border border-white relative">
-          <div className="absolute -top-8 -left-8 w-20 h-20 bg-[#D4AF37] rounded-full flex items-center justify-center shadow-xl rotate-[-15deg]">
-            <Quote className="w-10 h-10 text-[#800020]" />
-          </div>
+        <div className="feedback-form-panel">
+          <div className="feedback-kicker">Send Us a Review</div>
 
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold brand-font text-[#800020] mb-4">Share Your Experience</h2>
-            <p className="text-gray-500 uppercase text-[10px] tracking-[0.2em] font-black">Logged in as {user?.name || "Customer"}</p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-10">
-            {/* Star Rating */}
-            <div className="text-center space-y-4">
-              <label className="text-xs font-bold text-gray-400 uppercase tracking-widest">Rate your experience</label>
-              <div className="flex justify-center gap-4">
+          <form onSubmit={handleSubmit} className="feedback-form">
+            <div className="feedback-rating">
+              <label>Rate your experience</label>
+              <div className="feedback-stars">
                 {[1, 2, 3, 4, 5].map((star) => (
                   <button
                     key={star}
                     type="button"
-                    className="transition-all duration-300 transform hover:scale-125 focus:outline-none"
+                    className={(hover || rating) >= star ? "is-active" : ""}
                     onMouseEnter={() => setHover(star)}
                     onMouseLeave={() => setHover(0)}
                     onClick={() => setRating(star)}
+                    aria-label={`${star} star rating`}
                   >
-                    <Star 
-                      className={`w-12 h-12 ${
-                        (hover || rating) >= star 
-                          ? "star-active" 
-                          : "text-gray-200"
-                      } transition-colors`}
-                    />
+                    <Star />
                   </button>
                 ))}
               </div>
-              <p className="text-[#800020] font-bold brand-font text-lg">
+              <p>
                 {rating === 5 ? "Exceptional!" : rating === 4 ? "Very Good" : rating === 3 ? "Good" : rating === 2 ? "Fair" : "Needs Improvement"}
               </p>
             </div>
 
-            {/* Comment Section */}
-            <div className="space-y-3">
-              <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-2 flex items-center gap-2">
-                <MessageSquare className="w-3 h-3" /> Your Review
-              </label>
-              <textarea 
+            <label className="feedback-review-field">
+              <span><MessageSquare size={14} /> Your Review</span>
+              <textarea
                 required
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 placeholder="Tell us what you loved about our sarees or how we can improve..."
-                className="w-full px-8 py-6 bg-gray-50 border border-gray-100 rounded-[2rem] focus:outline-none focus:border-[#D4AF37] focus:bg-white transition-all shadow-inner resize-none min-h-[180px] text-gray-700 leading-relaxed"
-              ></textarea>
-            </div>
+              />
+            </label>
 
             {message.text && (
-              <div className={`p-6 rounded-2xl text-sm font-bold text-center animate-scale-in ${
-                message.type === "success" ? "bg-green-50 text-green-700 border border-green-100" : "bg-red-50 text-red-700 border border-red-100"
-              }`}>
+              <div className={`feedback-message ${message.type}`}>
                 {message.text}
               </div>
             )}
 
-            <button 
+            <button
               type="submit"
               disabled={submitting}
-              className={`w-full py-6 rounded-[2rem] font-black uppercase tracking-[0.3em] shadow-xl transition-all flex items-center justify-center gap-4 ${
-                submitting 
-                ? "bg-gray-400 cursor-not-allowed" 
-                : "bg-gradient-to-r from-[#800020] to-[#3D2817] text-white hover:shadow-[#800020]/30 hover:scale-[1.02] active:scale-95"
-              }`}
+              className="feedback-submit"
             >
-              {submitting ? "Submitting..." : "Post Review"} <Send className="w-5 h-5" />
+              <span>{submitting ? "Submitting..." : "Post Review"}</span>
+              <Send size={17} />
             </button>
           </form>
-        </div>
 
-        <div className="mt-16 text-center text-gray-400 text-xs font-medium italic">
-          * Your review will be published on the website after a quick quality check by our team.
+          <div className="feedback-note">
+            Your review will be published after a quick quality check by our team.
+          </div>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 };
 

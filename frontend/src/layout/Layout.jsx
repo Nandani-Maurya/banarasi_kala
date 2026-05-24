@@ -119,8 +119,10 @@ const Layout = () => {
   const { user, loading } = useAuth();
   const [isRouteRefreshing, setIsRouteRefreshing] = useState(false);
   const footerlessAuthPages = ["/cart", "/wishlist", "/contact", "/feedback", "/profile"];
+  const footerlessPages = ["/cart", "/wishlist", "/my-orders", "/profile"];
   const hideFooter =
     location.pathname === "/login" ||
+    footerlessPages.includes(location.pathname) ||
     (!user && footerlessAuthPages.includes(location.pathname));
   const isHomePage = location.pathname === "/";
   const hideWhatsapp = location.pathname === "/contact";

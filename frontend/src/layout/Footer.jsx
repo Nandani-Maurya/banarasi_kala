@@ -166,7 +166,6 @@ const Footer = () => {
               <Send size={20} />
             </button>
           </form>
-          <div className="bk-footer-ornament" aria-hidden="true" />
         </div>
       </div>
 
