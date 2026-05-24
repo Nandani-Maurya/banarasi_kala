@@ -195,6 +195,12 @@ const Auth = () => {
   };
 
   useEffect(() => {
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }, [activeTab]);
+
+  useEffect(() => {
     if (!error) return;
     window.requestAnimationFrame(() => {
       alertRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });

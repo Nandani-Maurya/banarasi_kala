@@ -12,7 +12,7 @@ const PreLoader = () => {
         <img src={verticalLogo} alt="Banarasi Kala" />
         <div className="preloader-copy">
           <strong>Banarasi Kala</strong>
-          <span>Handwoven elegance, arriving softly</span>
+          <span>Handwoven elegance, arriving sortly</span>
         </div>
         <span className="preloader-thread" aria-hidden="true" />
       </div>

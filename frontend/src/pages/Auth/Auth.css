@@ -1,8 +1,9 @@
 .auth-page {
   min-height: calc(100vh - 129px);
   display: grid;
-  place-items: center;
-  padding: 28px 16px;
+  align-items: start;
+  justify-items: center;
+  padding: 46px 16px 28px;
   background:
     linear-gradient(rgba(255, 246, 232, 0.62), rgba(255, 246, 232, 0.62)),
     var(--auth-bg, var(--bk-section-bg)),
@@ -617,7 +618,7 @@
   .auth-page {
     min-height: calc(100vh - 171px);
     align-items: start;
-    padding: 14px 12px 18px;
+    padding: 26px 12px 18px;
   }
 
   .auth-panel {
