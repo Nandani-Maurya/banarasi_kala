@@ -13,8 +13,8 @@ class AuthController {
 
   async login(req, res) {
     try {
-      const { identifier, email, password } = req.body;
-      const result = await AuthService.login(identifier || email, password);
+      const { identifier, email, password, email_otp_token } = req.body;
+      const result = await AuthService.loginWithOtp(identifier || email, password, email_otp_token);
       res.json(result);
     } catch (error) {
       console.error("[AuthController:login]", error.message, error.code || "");
@@ -46,8 +46,8 @@ class AuthController {
 
   async forgotPassword(req, res) {
     try {
-      const { phone } = req.body;
-      const result = await AuthService.startPasswordReset(phone);
+      const { email } = req.body;
+      const result = await AuthService.startPasswordReset(email);
       res.json(result);
     } catch (error) {
       console.error("[AuthController:forgotPassword]", error.message, error.code || "");
@@ -68,11 +68,31 @@ class AuthController {
 
   async resetPassword(req, res) {
     try {
-      const { phone, msg91_access_token, newPassword } = req.body;
-      const result = await AuthService.resetPasswordWithMsg91(phone, msg91_access_token, newPassword);
+      const { email, email_otp_token, newPassword } = req.body;
+      const result = await AuthService.resetPasswordWithEmailOtp(email, email_otp_token, newPassword);
       res.json(result);
     } catch (error) {
       console.error("[AuthController:resetPassword]", error.message, error.code || "");
+      res.status(400).json({ message: error.message });
+    }
+  }
+
+  async sendEmailOtp(req, res) {
+    try {
+      const { email, purpose, name } = req.body;
+      const result = await AuthService.sendEmailOtp(email, purpose, name);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ message: error.message });
+    }
+  }
+
+  async verifyEmailOtp(req, res) {
+    try {
+      const { token, otp, purpose } = req.body;
+      const result = await AuthService.verifyEmailOtp(token, otp, purpose);
+      res.json(result);
+    } catch (error) {
       res.status(400).json({ message: error.message });
     }
   }

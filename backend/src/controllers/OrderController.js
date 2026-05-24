@@ -488,6 +488,7 @@ class OrderController {
       }
 
       await t.commit();
+      EmailService.sendOrderStatusUpdate(order, normalized);
       return res.status(200).json({ message: 'Order updated', order });
     } catch (error) {
       await t.rollback();

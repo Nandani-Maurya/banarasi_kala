@@ -6,6 +6,7 @@ const { Op } = require("sequelize");
 const WalletService = require("./WalletService");
 const { config } = require("../config/env");
 const Msg91Service = require("./Msg91Service");
+const EmailService = require("./EmailService");
 
 const generateReferralCode = () =>
   `VNS${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
@@ -16,10 +17,37 @@ const possiblePhoneValues = (phone) => {
   const normalized = normalizePhone(phone);
   return [...new Set([normalized, `0${normalized}`, `91${normalized}`, `+91${normalized}`].filter(Boolean))];
 };
+const otpStore = new Map();
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_PURPOSES = new Set(["signup", "login", "forgot_password"]);
 
 class AuthService {
+  createOtpSession({ email, purpose, name }) {
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) throw new Error("Email is required.");
+    if (!OTP_PURPOSES.has(purpose)) throw new Error("Invalid OTP purpose.");
+    const otp = EmailService.generateOtp();
+    const token = jwt.sign({ email: normalizedEmail, purpose, nonce: Date.now() }, process.env.JWT_SECRET, { expiresIn: "15m" });
+    otpStore.set(token, { email: normalizedEmail, purpose, otp, expiresAt: Date.now() + OTP_TTL_MS, verified: false });
+    EmailService.sendOTP(normalizedEmail, otp, name || "Customer");
+    return { token, email: normalizedEmail, expiresInSeconds: 600 };
+  }
+
+  verifyOtpSession({ token, otp, purpose }) {
+    const record = otpStore.get(token);
+    if (!record) throw new Error("OTP session expired. Please request OTP again.");
+    if (record.purpose !== purpose) throw new Error("Invalid OTP session purpose.");
+    if (record.expiresAt < Date.now()) {
+      otpStore.delete(token);
+      throw new Error("OTP expired. Please request OTP again.");
+    }
+    if (String(record.otp) !== String(otp || "")) throw new Error("Invalid OTP.");
+    record.verified = true;
+    otpStore.set(token, record);
+    return record;
+  }
   async register(userData) {
-    const { name, phone, email, password, referral_code, msg91_access_token } = userData;
+    const { name, phone, email, password, referral_code, email_otp_token } = userData;
     const cleanName = String(name || "").trim();
     const cleanEmail = normalizeEmail(email);
     const cleanPhone = normalizePhone(phone);
@@ -29,7 +57,10 @@ class AuthService {
     if (!cleanPhone || cleanPhone.length !== 10) throw new Error("Please enter a valid 10 digit mobile number.");
     if (!password || String(password).length < 6) throw new Error("Password must be at least 6 characters.");
 
-    await Msg91Service.verifyAccessToken({ accessToken: msg91_access_token, phone: cleanPhone });
+    const otpRecord = otpStore.get(email_otp_token);
+    if (!otpRecord || !otpRecord.verified || otpRecord.purpose !== "signup" || otpRecord.email !== cleanEmail) {
+      throw new Error("Email OTP verification is required for signup.");
+    }
 
     const existingPhone = await Customer.findOne({ where: { phone: { [Op.in]: possiblePhoneValues(cleanPhone) } } });
     if (existingPhone) {
@@ -92,6 +123,7 @@ class AuthService {
         });
       }
     }
+    otpStore.delete(email_otp_token);
 
     return this.generateTokens(customer);
   }
@@ -189,15 +221,13 @@ class AuthService {
     };
   }
 
-  async startPasswordReset(phone) {
-    const cleanPhone = normalizePhone(phone);
-    if (!cleanPhone || cleanPhone.length !== 10) throw new Error("Please enter a valid 10 digit mobile number.");
-    const user = await Customer.findOne({ where: { phone: { [Op.in]: possiblePhoneValues(cleanPhone) } } });
-    if (!user) throw new Error("No account found with this phone number.");
+  async startPasswordReset(email) {
+    const cleanEmail = normalizeEmail(email);
+    const user = await Customer.findOne({ where: { email: cleanEmail } });
+    if (!user) throw new Error("No account found with this email.");
     return {
-      message: "Account found. Please verify phone OTP to reset password.",
-      phone: cleanPhone,
-      maskedPhone: `******${cleanPhone.slice(-4)}`,
+      message: "Account found. Please verify email OTP to reset password.",
+      email: cleanEmail,
     };
   }
 
@@ -220,6 +250,42 @@ class AuthService {
     user.password = await bcrypt.hash(newPassword, salt);
     await user.save();
 
+    return { message: "Password reset successfully" };
+  }
+
+  async sendEmailOtp(email, purpose, name) {
+    return this.createOtpSession({ email, purpose, name });
+  }
+
+  async verifyEmailOtp(token, otp, purpose) {
+    const record = this.verifyOtpSession({ token, otp, purpose });
+    return { message: "OTP verified successfully.", email: record.email };
+  }
+
+  async loginWithOtp(identifier, password, emailOtpToken) {
+    const user = await this.login(identifier, password);
+    const email = normalizeEmail(user.customer?.email || user.user?.email);
+    const otpRecord = otpStore.get(emailOtpToken);
+    if (!otpRecord || !otpRecord.verified || otpRecord.purpose !== "login" || otpRecord.email !== email) {
+      throw new Error("Email OTP verification is required for login.");
+    }
+    otpStore.delete(emailOtpToken);
+    return user;
+  }
+
+  async resetPasswordWithEmailOtp(email, emailOtpToken, newPassword) {
+    const cleanEmail = normalizeEmail(email);
+    const user = await Customer.findOne({ where: { email: cleanEmail } });
+    if (!user) throw new Error("No account found with this email.");
+    if (!newPassword || String(newPassword).length < 6) throw new Error("Password must be at least 6 characters.");
+    const otpRecord = otpStore.get(emailOtpToken);
+    if (!otpRecord || !otpRecord.verified || otpRecord.purpose !== "forgot_password" || otpRecord.email !== cleanEmail) {
+      throw new Error("Email OTP verification is required for password reset.");
+    }
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+    otpStore.delete(emailOtpToken);
     return { message: "Password reset successfully" };
   }
 

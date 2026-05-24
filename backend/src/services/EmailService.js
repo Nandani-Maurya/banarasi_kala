@@ -12,6 +12,10 @@ const transporter = nodemailer.createTransport({
 });
 
 class EmailService {
+  generateOtp() {
+    return String(Math.floor(100000 + Math.random() * 900000));
+  }
+
   async sendOrderConfirmation(order, items) {
     const itemList = items.map(item => `
       <tr>
@@ -105,6 +109,21 @@ class EmailService {
         throw new Error("Email authentication failed. Please check your App Password.");
       }
       throw new Error(`Failed to send OTP email: ${error.message}`);
+    }
+  }
+
+  async sendOrderStatusUpdate(order, status) {
+    if (!order?.customer_email) return;
+    const mailOptions = {
+      from: `"Banaras Heritage" <${process.env.EMAIL_USER}>`,
+      to: order.customer_email,
+      subject: `Order #${order.id} Update: ${status}`,
+      html: `<p>Hi ${order.customer_name || "Customer"}, your order #${order.id} status is now <b>${status}</b>.</p>`,
+    };
+    try {
+      await transporter.sendMail(mailOptions);
+    } catch (error) {
+      console.error("Order status email failed:", error.message);
     }
   }
 }
