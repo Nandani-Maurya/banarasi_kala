@@ -9,6 +9,7 @@ import { API_ENDPOINTS } from "../../config/api";
 import api from "../../utils/api";
 import { getProductCoverImage, getProductImages } from "../../utils/productMedia";
 import { getProductStockInfo } from "../../utils/stockStatus";
+import { LocationPickerModal } from "../Profile/Profile";
 import "./ProductDetail.css";
 
 const PRODUCT_RATING = "4.8";
@@ -30,6 +31,9 @@ const EMPTY_BUY_NOW_ADDRESS = {
   pincode: "",
   landmark: "",
   delivery_instructions: "",
+  map_address: "",
+  map_lat: "",
+  map_lng: "",
   is_default: true,
 };
 
@@ -114,6 +118,8 @@ const ProductDetail = () => {
   const [buyNowAddressForm, setBuyNowAddressForm] = useState(getEmptyBuyNowAddress(user));
   const [editingBuyNowAddressId, setEditingBuyNowAddressId] = useState(null);
   const [showBuyNowAddressForm, setShowBuyNowAddressForm] = useState(false);
+  const [buyNowAddressModalOpen, setBuyNowAddressModalOpen] = useState(false);
+  const [buyNowMapOpen, setBuyNowMapOpen] = useState(false);
   const [isFirstOrder, setIsFirstOrder] = useState(false);
   const [buyNowShipping, setBuyNowShipping] = useState(null);
   const [buyNowShippingLoading, setBuyNowShippingLoading] = useState(false);
@@ -459,6 +465,24 @@ const ProductDetail = () => {
     setBuyNowAddressForm(getEmptyBuyNowAddress(user));
   };
 
+  const openBuyNowAddressModal = (address = null) => {
+    if (address) {
+      setEditingBuyNowAddressId(address.id);
+      setBuyNowAddressForm(cleanAddress(address));
+    } else {
+      resetBuyNowForm();
+    }
+    setShowBuyNowAddressForm(true);
+    setBuyNowAddressModalOpen(true);
+  };
+
+  const closeBuyNowAddressModal = () => {
+    setBuyNowAddressModalOpen(false);
+    setShowBuyNowAddressForm(false);
+    setBuyNowMapOpen(false);
+    resetBuyNowForm();
+  };
+
   const loadBuyNowData = async () => {
     setBuyNowLoading(true);
     try {
@@ -472,7 +496,7 @@ const ProductDetail = () => {
       const defaultAddress = addresses.find((address) => address.is_default) || addresses[0];
       setBuyNowAddresses(addresses);
       setSelectedBuyNowAddressId(defaultAddress?.id ? String(defaultAddress.id) : "");
-      setShowBuyNowAddressForm(!defaultAddress);
+      setShowBuyNowAddressForm(false);
       setBuyNowAddressForm(defaultAddress ? cleanAddress(defaultAddress) : getEmptyBuyNowAddress(user));
       setIsFirstOrder(!Array.isArray(orderRes) || orderRes.length === 0);
       setWalletBalance(Number(walletRes?.data?.wallet_balance || 0));
@@ -481,7 +505,7 @@ const ProductDetail = () => {
       showNotification(error?.response?.data?.message || "Unable to load saved addresses.", "warning");
       setBuyNowAddresses([]);
       setSelectedBuyNowAddressId("");
-      setShowBuyNowAddressForm(true);
+      setShowBuyNowAddressForm(false);
       setIsFirstOrder(false);
       setWalletBalance(0);
       setAvailableCoupons([]);
@@ -517,6 +541,8 @@ const ProductDetail = () => {
     setBuyNowStep("details");
     setBuyNowShipping(null);
     setShowBuyNowAddressForm(false);
+    setBuyNowAddressModalOpen(false);
+    setBuyNowMapOpen(false);
     setAppliedBuyNowCoupon(null);
     setCouponCode("");
     setUseWallet(false);
@@ -585,9 +611,23 @@ const ProductDetail = () => {
   };
 
   const editBuyNowAddress = (address) => {
-    setEditingBuyNowAddressId(address.id);
-    setBuyNowAddressForm(cleanAddress(address));
-    setShowBuyNowAddressForm(true);
+    openBuyNowAddressModal(address);
+  };
+
+  const confirmBuyNowLocation = (location) => {
+    setBuyNowAddressForm((current) => ({
+      ...current,
+      country: location.country || current.country || "India",
+      house_building: location.house_building || current.house_building,
+      area_street: location.area_street || current.area_street,
+      city: location.city || current.city,
+      state: location.state || current.state,
+      pincode: location.pincode || current.pincode,
+      map_address: location.displayName || current.map_address,
+      map_lat: location.center?.[1] || current.map_lat,
+      map_lng: location.center?.[0] || current.map_lng,
+    }));
+    setBuyNowMapOpen(false);
   };
 
   const saveBuyNowAddress = async () => {
@@ -615,6 +655,7 @@ const ProductDetail = () => {
       setBuyNowAddressForm(saved);
       setEditingBuyNowAddressId(null);
       setShowBuyNowAddressForm(false);
+      setBuyNowAddressModalOpen(false);
       showNotification("Address saved.", "success");
     } catch (error) {
       showNotification(error?.response?.data?.message || "Unable to save address.", "warning");
@@ -1276,19 +1317,24 @@ const ProductDetail = () => {
               <section className="buy-now-section">
                 <div className="buy-now-section-title">
                   <h3>Delivery address</h3>
-                  {buyNowAddresses.length > 0 && (
-                    <button type="button" onClick={() => {
-                      resetBuyNowForm();
-                      setShowBuyNowAddressForm(true);
-                    }}>
-                      <Icon icon="lucide:plus" />
-                      Add new
-                    </button>
-                  )}
+                  <button type="button" onClick={() => openBuyNowAddressModal()}>
+                    <Icon icon="lucide:plus" />
+                    Add new
+                  </button>
                 </div>
 
                 {buyNowLoading && !buyNowAddresses.length ? (
                   <p className="buy-now-muted">Loading saved addresses...</p>
+                ) : buyNowAddresses.length === 0 ? (
+                  <div className="buy-now-no-address">
+                    <Icon icon="lucide:map-pin-off" />
+                    <strong>No saved address</strong>
+                    <p>Add a delivery address to continue checkout.</p>
+                    <button type="button" onClick={() => openBuyNowAddressModal()}>
+                      <Icon icon="lucide:plus" />
+                      Add new address
+                    </button>
+                  </div>
                 ) : (
                   <div className="buy-now-address-list">
                     {buyNowAddresses.map((address) => (
@@ -1312,74 +1358,6 @@ const ProductDetail = () => {
                         </button>
                       </label>
                     ))}
-                  </div>
-                )}
-
-                {(showBuyNowAddressForm || buyNowAddresses.length === 0) && (
-                  <div className="buy-now-address-form">
-                    <div className="buy-now-form-row">
-                      <label>
-                        <span>Label</span>
-                        <select name="label" value={buyNowAddressForm.label} onChange={handleBuyNowAddressChange}>
-                          <option>Home</option>
-                          <option>Work</option>
-                          <option>Other</option>
-                        </select>
-                      </label>
-                      <label>
-                        <span>Receiver name</span>
-                        <input name="name" value={buyNowAddressForm.name} onChange={handleBuyNowAddressChange} />
-                      </label>
-                    </div>
-                    <label>
-                      <span>Flat, House no., Building *</span>
-                      <input name="house_building" value={buyNowAddressForm.house_building} onChange={handleBuyNowAddressChange} />
-                    </label>
-                    <label>
-                      <span>Area, Street, Sector</span>
-                      <input name="area_street" value={buyNowAddressForm.area_street} onChange={handleBuyNowAddressChange} />
-                    </label>
-                    <div className="buy-now-form-row">
-                      <label>
-                        <span>City *</span>
-                        <input name="city" value={buyNowAddressForm.city} onChange={handleBuyNowAddressChange} />
-                      </label>
-                      <label>
-                        <span>State *</span>
-                        <input name="state" value={buyNowAddressForm.state} onChange={handleBuyNowAddressChange} />
-                      </label>
-                    </div>
-                    <div className="buy-now-form-row">
-                      <label>
-                        <span>Pincode *</span>
-                        <input name="pincode" inputMode="numeric" value={buyNowAddressForm.pincode} onChange={handleBuyNowAddressChange} />
-                      </label>
-                      <label>
-                        <span>Phone *</span>
-                        <input name="phone" inputMode="tel" value={buyNowAddressForm.phone} onChange={handleBuyNowAddressChange} />
-                      </label>
-                    </div>
-                    <label>
-                      <span>Landmark</span>
-                      <input name="landmark" value={buyNowAddressForm.landmark} onChange={handleBuyNowAddressChange} />
-                    </label>
-                    <label className="buy-now-checkbox">
-                      <input type="checkbox" name="is_default" checked={buyNowAddressForm.is_default} onChange={handleBuyNowAddressChange} />
-                      <span>Set as default address</span>
-                    </label>
-                    <div className="buy-now-form-actions">
-                      {editingBuyNowAddressId && (
-                        <button type="button" onClick={() => {
-                          resetBuyNowForm();
-                          setShowBuyNowAddressForm(false);
-                        }}>
-                          Cancel
-                        </button>
-                      )}
-                      <button type="button" onClick={saveBuyNowAddress} disabled={buyNowLoading}>
-                        {buyNowLoading ? "Saving..." : "Save address"}
-                      </button>
-                    </div>
                   </div>
                 )}
               </section>
@@ -1569,8 +1547,120 @@ const ProductDetail = () => {
               )}
             </div>
           </div>
+          {buyNowAddressModalOpen && (
+            <div className="buy-now-address-modal" role="dialog" aria-modal="true" aria-label={editingBuyNowAddressId ? "Edit address" : "Add new address"}>
+              <div className="buy-now-address-modal-card">
+                <button type="button" className="buy-now-address-modal-close" onClick={closeBuyNowAddressModal} aria-label="Close address form">
+                  <Icon icon="lucide:x" />
+                </button>
+                <div className="buy-now-section-title buy-now-address-modal-title">
+                  <h3>{editingBuyNowAddressId ? "Edit address" : "Add new address"}</h3>
+                  <span>Required fields are marked with *.</span>
+                </div>
+
+                <div className="buy-now-location-card">
+                  <div>
+                    <span>Map address</span>
+                    {buyNowAddressForm.map_address ? (
+                      <>
+                        <strong>{buyNowAddressForm.map_address}</strong>
+                        <p>Saved separately from the address you type below.</p>
+                      </>
+                    ) : (
+                      <p>No map location selected.</p>
+                    )}
+                  </div>
+                  <div className="buy-now-location-actions">
+                    <button type="button" onClick={() => setBuyNowMapOpen(true)}>
+                      <Icon icon="lucide:map-pinned" />
+                      {buyNowAddressForm.map_address ? "Change map location" : "Add map location"}
+                    </button>
+                    {buyNowAddressForm.map_address ? (
+                      <button
+                        type="button"
+                        className="is-danger"
+                        onClick={() => setBuyNowAddressForm((current) => ({ ...current, map_address: "", map_lat: "", map_lng: "" }))}
+                      >
+                        <Icon icon="lucide:x" />
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                {showBuyNowAddressForm && (
+                  <div className="buy-now-address-form">
+                    <div className="buy-now-form-row">
+                      <label>
+                        <span>Label</span>
+                        <select name="label" value={buyNowAddressForm.label} onChange={handleBuyNowAddressChange}>
+                          <option>Home</option>
+                          <option>Work</option>
+                          <option>Other</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>Receiver name</span>
+                        <input name="name" value={buyNowAddressForm.name} onChange={handleBuyNowAddressChange} />
+                      </label>
+                    </div>
+                    <label>
+                      <span>Flat, House no., Building *</span>
+                      <input name="house_building" value={buyNowAddressForm.house_building} onChange={handleBuyNowAddressChange} />
+                    </label>
+                    <label>
+                      <span>Area, Street, Sector</span>
+                      <input name="area_street" value={buyNowAddressForm.area_street} onChange={handleBuyNowAddressChange} />
+                    </label>
+                    <div className="buy-now-form-row">
+                      <label>
+                        <span>City *</span>
+                        <input name="city" value={buyNowAddressForm.city} onChange={handleBuyNowAddressChange} />
+                      </label>
+                      <label>
+                        <span>State *</span>
+                        <input name="state" value={buyNowAddressForm.state} onChange={handleBuyNowAddressChange} />
+                      </label>
+                    </div>
+                    <div className="buy-now-form-row">
+                      <label>
+                        <span>Pincode *</span>
+                        <input name="pincode" inputMode="numeric" value={buyNowAddressForm.pincode} onChange={handleBuyNowAddressChange} />
+                      </label>
+                      <label>
+                        <span>Phone *</span>
+                        <input name="phone" inputMode="tel" value={buyNowAddressForm.phone} onChange={handleBuyNowAddressChange} />
+                      </label>
+                    </div>
+                    <label>
+                      <span>Landmark</span>
+                      <input name="landmark" value={buyNowAddressForm.landmark} onChange={handleBuyNowAddressChange} />
+                    </label>
+                    <label className="buy-now-checkbox">
+                      <input type="checkbox" name="is_default" checked={buyNowAddressForm.is_default} onChange={handleBuyNowAddressChange} />
+                      <span>Set as default address</span>
+                    </label>
+                    <div className="buy-now-form-actions">
+                      <button type="button" onClick={closeBuyNowAddressModal} disabled={buyNowLoading}>
+                        Cancel
+                      </button>
+                      <button type="button" onClick={saveBuyNowAddress} disabled={buyNowLoading}>
+                        {buyNowLoading ? "Saving..." : "Save address"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
+      <LocationPickerModal
+        open={buyNowMapOpen}
+        initialQuery={[buyNowAddressForm.house_building, buyNowAddressForm.city, buyNowAddressForm.state].filter(Boolean).join(", ")}
+        onClose={() => setBuyNowMapOpen(false)}
+        onConfirm={confirmBuyNowLocation}
+      />
     </div>
   );
 };

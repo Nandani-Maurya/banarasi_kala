@@ -130,7 +130,7 @@ const mapFeatureToAddress = (feature) => {
   };
 };
 
-function LocationPickerModal({ open, initialQuery, onClose, onConfirm }) {
+export function LocationPickerModal({ open, initialQuery, onClose, onConfirm }) {
   const mapNodeRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
