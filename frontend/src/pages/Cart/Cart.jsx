@@ -132,7 +132,7 @@ const Cart = () => {
                     </div>
                     <div className="flex justify-between text-[#3D2817]/70">
                       <span>Shipping</span>
-                      <span className="text-green-700 font-bold uppercase tracking-widest text-[10px]">FREE DELIVERY</span>
+                      <span className="text-[#3D2817]/60 font-bold uppercase tracking-widest text-[10px]">CALCULATED AT CHECKOUT</span>
                     </div>
 
                     {appliedCoupon && (
@@ -161,7 +161,7 @@ const Cart = () => {
                         </div>
                         <div className="flex items-center space-x-2 text-[#B8860B]">
                           <Icon icon="lucide:globe" className="text-xs" />
-                          <span className="text-[10px] font-black uppercase tracking-[0.2em]">Complimentary Worldwide Shipping</span>
+                          <span className="text-[10px] font-black uppercase tracking-[0.2em]">Final shipping fee shown at checkout</span>
                         </div>
                       </div>
                     </div>
@@ -239,4 +239,3 @@ const Cart = () => {
 };
 
 export default Cart;
-

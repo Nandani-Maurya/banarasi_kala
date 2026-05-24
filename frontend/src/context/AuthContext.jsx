@@ -1,6 +1,7 @@
 import { createContext, useState, useContext, useEffect } from 'react';
 import axios from 'axios';
 import { API_ENDPOINTS } from '../config/api';
+import { getApiErrorMessage } from '../utils/error';
 
 const AuthContext = createContext();
 
@@ -56,12 +57,16 @@ export const AuthProvider = ({ children }) => {
       
       return customer;
     } catch (error) {
-      console.log(error)
       const data = error.response?.data;
-      const err = new Error(data?.message || "Login failed");
+      const err = new Error(getApiErrorMessage(error, "Login failed"));
       err.code = data?.code;
       err.phone = data?.phone;
       err.status = error.response?.status;
+      console.error("[AuthContext:login]", {
+        status: err.status,
+        code: err.code,
+        message: err.message,
+      });
       throw err;
     }
   };
@@ -77,10 +82,15 @@ export const AuthProvider = ({ children }) => {
       return customer;
     } catch (error) {
       const data = error.response?.data;
-      const err = new Error(data?.message || "Signup failed");
+      const err = new Error(getApiErrorMessage(error, "Signup failed"));
       err.code = data?.code;
       err.status = error.response?.status;
       err.details = data;
+      console.error("[AuthContext:signup]", {
+        status: err.status,
+        code: err.code,
+        message: err.message,
+      });
       throw err;
     }
   };

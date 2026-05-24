@@ -205,6 +205,9 @@ const sanitizeProductPayload = (data = {}) => {
     weight: toFloatOrNull(data.weight),
     length: toFloatOrNull(data.length),
     width: toFloatOrNull(data.width),
+    // NOTE: DB in some environments may not yet have `height` column.
+    // Keep value in payload only when fully migrated.
+    // height: toFloatOrNull(data.height),
     stock_quantity: totalStock,
     low_stock_threshold: toIntOrZero(data.low_stock_threshold),
     material_id: toIntOrNull(data.material_id),

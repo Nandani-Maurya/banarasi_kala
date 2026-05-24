@@ -18,6 +18,7 @@ export const API_ENDPOINTS = {
   myOrders: (email) => `${API_BASE_URL}/api/orders/my/${encodeURIComponent(email)}`,
   trackOrder: (orderId) => `${API_BASE_URL}/api/orders/track/${orderId}`,
   shiprocket: `${API_BASE_URL}/api/shiprocket`,
+  createReturn: `${API_BASE_URL}/api/shiprocket/create-return`,
 
   razorpay: {
     createOrder: `${API_BASE_URL}/api/razorpay/create-order`,

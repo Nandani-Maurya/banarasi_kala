@@ -1,34 +1,23 @@
 const WishlistService = require("../services/WishlistService");
+const { ok, asyncHandler } = require("../utils/http");
 
 class WishlistController {
-  async getWishlist(req, res) {
-    try {
-      const items = await WishlistService.getWishlist(req.customer.id);
-      res.json(items);
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  }
+  getWishlist = asyncHandler(async (req, res) => {
+    const items = await WishlistService.getWishlist(req.customer.id);
+    return ok(res, items, "Wishlist fetched");
+  });
 
-  async toggleWishlist(req, res) {
-    try {
-      const { productId } = req.body;
-      const result = await WishlistService.toggleWishlist(req.customer.id, productId);
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  }
+  toggleWishlist = asyncHandler(async (req, res) => {
+    const { productId } = req.body;
+    const result = await WishlistService.toggleWishlist(req.customer.id, productId);
+    return ok(res, result, "Wishlist updated");
+  });
 
-  async removeFromWishlist(req, res) {
-    try {
-      const { productId } = req.params;
-      await WishlistService.removeFromWishlist(req.customer.id, productId);
-      res.json({ message: "Item removed from wishlist" });
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  }
+  removeFromWishlist = asyncHandler(async (req, res) => {
+    const { productId } = req.params;
+    await WishlistService.removeFromWishlist(req.customer.id, productId);
+    return ok(res, null, "Item removed from wishlist");
+  });
 }
 
 module.exports = new WishlistController();

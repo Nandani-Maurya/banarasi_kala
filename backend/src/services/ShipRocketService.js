@@ -44,6 +44,46 @@ class ShipRocketService {
   }
 
   // ─── ORDER ────────────────────────────────────────────────────────────────────
+  _computePackageMetrics(items, productMap) {
+    let totalWeight = 0;
+    let maxItemLengthCm = 0;
+    let maxItemBreadthCm = 0;
+    let sumItemHeightCm = 0;
+
+    items.forEach((item) => {
+      const quantity = Number(item.quantity) || 1;
+      const product = productMap[item.product_id];
+
+      let itemWeightKg = 0.5;
+      if (product && Number(product.weight) > 0) {
+        const rawWeight = Number(product.weight);
+        itemWeightKg = rawWeight > 5 ? rawWeight / 1000 : rawWeight;
+      }
+      totalWeight += itemWeightKg * quantity;
+
+      const rawLength = Number(product?.length);
+      const rawWidth = Number(product?.width);
+      const rawHeight = Number(product?.height);
+      const lengthCm = Number.isFinite(rawLength) && rawLength > 0
+        ? (rawLength <= 10 ? rawLength * 100 : rawLength)
+        : 30;
+      const widthCm = Number.isFinite(rawWidth) && rawWidth > 0
+        ? (rawWidth <= 10 ? rawWidth * 100 : rawWidth)
+        : 20;
+      const heightCm = Number.isFinite(rawHeight) && rawHeight > 0 ? rawHeight : 5;
+
+      maxItemLengthCm = Math.max(maxItemLengthCm, lengthCm);
+      maxItemBreadthCm = Math.max(maxItemBreadthCm, widthCm);
+      sumItemHeightCm += heightCm * quantity;
+    });
+
+    return {
+      pkgLength: Math.max(10, Math.round(maxItemLengthCm || 30)),
+      pkgBreadth: Math.max(10, Math.round(maxItemBreadthCm || 20)),
+      pkgHeight: Math.max(5, Math.round(sumItemHeightCm || 5)),
+      pkgWeight: Math.max(0.1, Number(totalWeight.toFixed(3))),
+    };
+  }
 
   /**
    * Create a shipment order on ShipRocket.
@@ -52,6 +92,15 @@ class ShipRocketService {
    */
   async createOrder(orderData) {
     const { order, items } = orderData;
+
+    // Fetch product details for true dimensions & weights
+    const productIds = items.map(item => item.product_id).filter(Boolean);
+    const Product = require('../models/Product');
+    const dbProducts = await Product.findAll({ where: { id: productIds } });
+    const productMap = {};
+    dbProducts.forEach(p => {
+      productMap[p.id] = p;
+    });
 
     // ShipRocket expects all weight in kg; default each item to 0.5 kg if unknown
     const orderItems = items.map((item, idx) => ({
@@ -64,10 +113,12 @@ class ShipRocketService {
       hsn: '',
     }));
 
-    const totalWeight = items.reduce((sum) => sum + 0.5, 0); // 0.5 kg per item
+    const { pkgLength, pkgBreadth, pkgHeight, pkgWeight } = this._computePackageMetrics(items, productMap);
+
     const now = new Date();
     const orderDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
+    const isCod = order.payment_method === 'COD';
     const payload = {
       order_id: `VNS-${order.id}`,
       order_date: orderDate,
@@ -90,21 +141,100 @@ class ShipRocketService {
       // Items
       order_items: orderItems,
 
-      payment_method: 'Prepaid',
+      payment_method: isCod ? 'COD' : 'Prepaid',
+      cod_amount: isCod ? Number(order.total_amount) : 0,
       shipping_charges: 0,
       giftwrap_charges: 0,
       transaction_charges: 0,
       total_discount: Number(order.discount_amount) || 0,
       sub_total: Number(order.total_amount),
-      length: 15,  // cm
-      breadth: 15,
-      height: 5,
-      weight: totalWeight,
+      length: pkgLength,  // cm
+      breadth: pkgBreadth,
+      height: pkgHeight,
+      weight: pkgWeight,
       is_insurance: 0,
     };
 
     const headers = await this._headers();
     const response = await axios.post(`${BASE_URL}/orders/create/adhoc`, payload, { headers });
+    return response.data;
+  }
+
+  /**
+   * Create a return shipment order on ShipRocket.
+   * @param {object} returnData
+   * @returns ShipRocket return order details
+   */
+  async createReturnOrder(returnData) {
+    const { order, items, reason } = returnData;
+
+    // Fetch product details for true dimensions & weights
+    const productIds = items.map(item => item.product_id).filter(Boolean);
+    const Product = require('../models/Product');
+    const dbProducts = await Product.findAll({ where: { id: productIds } });
+    const productMap = {};
+    dbProducts.forEach(p => {
+      productMap[p.id] = p;
+    });
+
+    const orderItems = items.map((item, idx) => ({
+      name: item.name || item.product_name || `Product ${idx + 1}`,
+      sku: item.product_id ? `SKU-${item.product_id}` : `SKU-${idx}`,
+      units: item.quantity,
+      selling_price: item.price,
+      discount: 0,
+      tax: 0,
+      hsn: '',
+    }));
+
+    const { pkgLength, pkgBreadth, pkgHeight, pkgWeight } = this._computePackageMetrics(items, productMap);
+
+    const now = new Date();
+    const orderDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const payload = {
+      order_id: `RET-VNS-${order.id}`,
+      order_date: orderDate,
+      pickup_location: 'Home', // Warehouse/Home where customer return gets delivered
+
+      // Returns are picked up from the customer
+      pickup_customer_name: order.customer_name,
+      pickup_last_name: '',
+      pickup_address: order.address,
+      pickup_address_2: '',
+      pickup_city: order.city,
+      pickup_pincode: String(order.pincode),
+      pickup_state: order.state || 'Uttar Pradesh',
+      pickup_country: 'India',
+      pickup_email: order.customer_email,
+      pickup_phone: String(order.phone),
+
+      // Delivered back to your warehouse address
+      shipping_customer_name: 'Banaras Heritage',
+      shipping_last_name: '',
+      shipping_address: 'D-36/248, August Kunda, August Kunda Road',
+      shipping_address_2: 'Dashashwamedh',
+      shipping_city: 'Varanasi',
+      shipping_pincode: '221001',
+      shipping_state: 'Uttar Pradesh',
+      shipping_country: 'India',
+      shipping_email: '2000nanmaurya@gmail.com',
+      shipping_phone: '9876543210',
+
+      order_items: orderItems,
+      payment_method: 'Prepaid',
+      channel_id: '',
+      comment: reason || 'Customer requested return',
+      total_discount: 0,
+      sub_total: Number(order.total_amount),
+      length: pkgLength,
+      breadth: pkgBreadth,
+      height: pkgHeight,
+      weight: pkgWeight,
+    };
+
+    const headers = await this._headers();
+    const response = await axios.post(`${BASE_URL}/orders/create/return`, payload, { headers });
     return response.data;
   }
 
@@ -114,11 +244,13 @@ class ShipRocketService {
    * Recommend best courier for a shipment.
    * @param {string|number} shipmentId
    * @param {string} pincode  - destination pincode
+   * @param {number} weight - actual weight in kg
+   * @param {boolean} isCod - cash on delivery flag
    */
-  async getServiceableCouries(shipmentId, pincode) {
+  async getServiceableCouries(shipmentId, pincode, weight = 0.5, isCod = false) {
     const headers = await this._headers();
     const response = await axios.get(
-      `${BASE_URL}/courier/serviceability/?pickup_postcode=221001&delivery_postcode=${pincode}&weight=0.5&cod=0`,
+      `${BASE_URL}/courier/serviceability/?pickup_postcode=221001&delivery_postcode=${pincode}&weight=${weight}&cod=${isCod ? 1 : 0}`,
       { headers }
     );
     return response.data;

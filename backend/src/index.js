@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const { config } = require("./config/env");
+const requestLogger = require("./middleware/requestLogger");
+const errorHandler = require("./middleware/errorHandler");
 
 const VarietyRoutes = require("./routes/VarietyRoutes");
 const ColorRoutes = require("./routes/ColorRoutes");
@@ -45,6 +47,7 @@ app.use(
   })
 );
 app.use(express.json({ limit: "10mb" }));
+app.use(requestLogger);
 
 app.get("/", (req, res) => {
   res.json({
@@ -97,13 +100,6 @@ app.use((req, res) => {
   res.status(404).json({ message: "API route not found" });
 });
 
-app.use((error, req, res, next) => {
-  console.error("Unhandled API error:", error);
-  res.status(error.status || 500).json({
-    message: config.isProduction
-      ? "Internal server error"
-      : error.message,
-  });
-});
+app.use(errorHandler);
 
 module.exports = app;

@@ -2,6 +2,7 @@ import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { useNotification } from "../../context/NotificationContext";
 import API_ENDPOINTS from "../../config/api";
 import EmptyStateIcon from "../../components/EmptyStateIcon";
 import "./MyOrders.css";
@@ -47,11 +48,12 @@ const TrackingTimeline = ({ activities = [] }) => {
   );
 };
 
-const OrderCard = ({ order }) => {
+const OrderCard = ({ order, onReturnRequested, showNotification }) => {
   const [expanded, setExpanded] = useState(false);
   const [tracking, setTracking] = useState(null);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState(null);
+  const [returnLoading, setReturnLoading] = useState(false);
 
   const statusConfig = getStatus(order.status);
   const items = order.OrderItems || [];
@@ -87,6 +89,28 @@ const OrderCard = ({ order }) => {
   const etd = tracking?.tracking?.tracking_data?.etd;
   const courierName = tracking?.tracking?.tracking_data?.shipment_track?.[0]?.courier_name;
   const awbCode = tracking?.tracking?.tracking_data?.shipment_track?.[0]?.awb_code;
+  const canRequestReturn = String(order.status).toLowerCase() === "delivered";
+
+  const handleReturnRequest = async () => {
+    const reason = window.prompt("Return reason likhiye (optional):", "Size issue");
+    if (reason === null) return;
+    setReturnLoading(true);
+    try {
+      const response = await fetch(API_ENDPOINTS.createReturn, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id, reason: reason.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || "Return request failed");
+      showNotification("Return request submitted successfully.", "success");
+      onReturnRequested?.();
+    } catch (error) {
+      showNotification(error.message || "Unable to create return request", "error");
+    } finally {
+      setReturnLoading(false);
+    }
+  };
 
   return (
     <article className="order-card">
@@ -149,31 +173,24 @@ const OrderCard = ({ order }) => {
             </div>
           );
         })}
-
-        {!items.length && (
-          <div className="order-products-empty">
-            <Icon icon="lucide:package-open"></Icon>
-            <span>Product details are not available for this order.</span>
-          </div>
-        )}
       </div>
 
       <div className="order-footer">
         <div className="order-total">
           <span className="total-label">Total Paid</span>
           <span className="total-amount">{formatPrice(order.total_amount)}</span>
-          {Number(order.discount_amount) > 0 && (
-            <span className="discount-saved">
-              <Icon icon="lucide:tag"></Icon>
-              Saved {formatPrice(order.discount_amount)}
-            </span>
-          )}
         </div>
 
         <button className={`track-btn ${expanded ? "active" : ""}`} onClick={handleExpand} type="button">
           <Icon icon={expanded ? "lucide:chevron-up" : "lucide:map-pin"}></Icon>
           {expanded ? "Hide Tracking" : "Track Order"}
         </button>
+        {canRequestReturn && (
+          <button className="track-btn" onClick={handleReturnRequest} type="button" disabled={returnLoading}>
+            <Icon icon="lucide:rotate-ccw"></Icon>
+            {returnLoading ? "Submitting..." : "Request Return"}
+          </button>
+        )}
       </div>
 
       <div className="order-address">
@@ -202,20 +219,8 @@ const OrderCard = ({ order }) => {
             </div>
           )}
 
-          {trackLoading && (
-            <div className="track-loading">
-              <div className="track-spinner"></div>
-              <span>Fetching live tracking...</span>
-            </div>
-          )}
-
-          {trackError && (
-            <div className="track-error">
-              <Icon icon="lucide:alert-circle"></Icon>
-              {trackError}
-            </div>
-          )}
-
+          {trackLoading && <div className="track-loading"><span>Fetching live tracking...</span></div>}
+          {trackError && <div className="track-error"><Icon icon="lucide:alert-circle"></Icon>{trackError}</div>}
           {!trackLoading && !trackError && <TrackingTimeline activities={activities} />}
         </div>
       )}
@@ -225,99 +230,48 @@ const OrderCard = ({ order }) => {
 
 export default function MyOrders() {
   const { user } = useAuth();
+  const { showNotification } = useNotification();
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const fetchOrders = useCallback(async () => {
+    if (!user?.email) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(API_ENDPOINTS.myOrders(user.email));
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.message || "Failed to fetch orders");
+      const data = Array.isArray(payload) ? payload : (payload?.data || []);
+      setOrders(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     if (!user?.email) {
       navigate("/login?refresh=my-orders");
       return;
     }
-
-    let isMounted = true;
-
-    (async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const response = await fetch(API_ENDPOINTS.myOrders(user.email));
-        if (!response.ok) throw new Error("Failed to fetch orders");
-        const data = await response.json();
-        if (isMounted) setOrders(Array.isArray(data) ? data : []);
-      } catch (err) {
-        if (isMounted) setError(err.message);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    })();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [user, navigate]);
+    fetchOrders();
+  }, [user, navigate, fetchOrders]);
 
   return (
     <div className="my-orders-page">
-      <section className="orders-hero">
-        <div className="orders-hero-content">
-          <span className="orders-hero-icon">
-            <Icon icon="lucide:package-search"></Icon>
-          </span>
-          <div>
-            <p className="orders-eyebrow">Banarasi Kala</p>
-            <h1>My Orders</h1>
-            <span>Every saree you ordered, tracked with color, price and delivery updates.</span>
-          </div>
-        </div>
-      </section>
-
+      <section className="orders-hero"><div className="orders-hero-content"><span className="orders-hero-icon"><Icon icon="lucide:package-search"></Icon></span><div><p className="orders-eyebrow">Banarasi Kala</p><h1>My Orders</h1><span>Every saree you ordered, tracked with color, price and delivery updates.</span></div></div></section>
       <main className="orders-container">
-        {loading && (
-          <div className="orders-loading">
-            {[1, 2, 3].map((item) => (
-              <div key={item} className="order-skeleton">
-                <div className="skel skel-header"></div>
-                <div className="skel skel-product"></div>
-                <div className="skel skel-product short"></div>
-                <div className="skel skel-footer"></div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {error && (
-          <div className="orders-error">
-            <Icon icon="lucide:wifi-off"></Icon>
-            <h3>Could not load orders</h3>
-            <p>{error}</p>
-            <button onClick={() => window.location.reload()} type="button">Try Again</button>
-          </div>
-        )}
-
-        {!loading && !error && orders.length === 0 && (
-          <div className="orders-empty">
-            <EmptyStateIcon variant="orders" />
-            <h3>No Orders Yet</h3>
-            <p>Your orders will appear here once you place your first order.</p>
-            <Link to="/collection" className="shop-now-btn">
-              <Icon icon="lucide:sparkles"></Icon>
-              Explore Collection
-            </Link>
-          </div>
-        )}
-
+        {loading && <div className="orders-loading">{[1,2,3].map((item) => <div key={item} className="order-skeleton"><div className="skel skel-header"></div><div className="skel skel-product"></div><div className="skel skel-product short"></div><div className="skel skel-footer"></div></div>)}</div>}
+        {error && <div className="orders-error"><Icon icon="lucide:wifi-off"></Icon><h3>Could not load orders</h3><p>{error}</p><button onClick={() => window.location.reload()} type="button">Try Again</button></div>}
+        {!loading && !error && orders.length === 0 && <div className="orders-empty"><EmptyStateIcon variant="orders" /><h3>No Orders Yet</h3><p>Your orders will appear here once you place your first order.</p><Link to="/collection" className="shop-now-btn"><Icon icon="lucide:sparkles"></Icon>Explore Collection</Link></div>}
         {!loading && !error && orders.length > 0 && (
           <div className="orders-list">
-            <div className="orders-count">
-              <Icon icon="lucide:layers"></Icon>
-              {orders.length} {orders.length === 1 ? "Order" : "Orders"}
-            </div>
-            {orders.map((order) => (
-              <OrderCard key={order.id} order={order} />
-            ))}
+            <div className="orders-count"><Icon icon="lucide:layers"></Icon>{orders.length} {orders.length === 1 ? "Order" : "Orders"}</div>
+            {orders.map((order) => <OrderCard key={order.id} order={order} onReturnRequested={fetchOrders} showNotification={showNotification} />)}
           </div>
         )}
       </main>

@@ -85,6 +85,10 @@ const Product = sequelize.define(
       type: DataTypes.DECIMAL(4, 2),
       allowNull: true,
     },
+    height: {
+      type: DataTypes.DECIMAL(4, 2),
+      allowNull: true,
+    },
 
     // Media. Each entry: { color_id, url, is_cover, display_order }
     images: {

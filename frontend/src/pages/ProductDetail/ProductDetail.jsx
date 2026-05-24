@@ -35,6 +35,9 @@ const ProductDetail = () => {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [relatedHoverId, setRelatedHoverId] = useState(null);
   const [relatedSlides, setRelatedSlides] = useState({});
+  const [deliveryPincode, setDeliveryPincode] = useState("");
+  const [deliveryCheckLoading, setDeliveryCheckLoading] = useState(false);
+  const [deliveryQuote, setDeliveryQuote] = useState(null);
 
   const frameRef = useRef(null);
   const perspectiveRef = useRef(null);
@@ -281,6 +284,46 @@ const ProductDetail = () => {
       }
     } catch {
       showNotification("Share cancelled", "info");
+    }
+  };
+
+  const checkDelivery = async () => {
+    const clean = deliveryPincode.trim();
+    if (!/^\d{6}$/.test(clean)) {
+      showNotification("Enter valid 6 digit pincode", "warning");
+      return;
+    }
+    try {
+      setDeliveryCheckLoading(true);
+      setDeliveryQuote(null);
+      const rawWeight = Number(product?.weight);
+      const weightKg = Number.isFinite(rawWeight) && rawWeight > 0 ? (rawWeight > 5 ? rawWeight / 1000 : rawWeight) : 0.5;
+      const response = await fetch(
+        `${API_ENDPOINTS.shiprocket}/serviceability?pincode=${encodeURIComponent(clean)}&weight=${Math.max(0.1, Number(weightKg.toFixed(3)))}&is_cod=${Array.isArray(product?.payment_options) && product.payment_options.includes("cod") ? 1 : 0}`
+      );
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || "Unable to check delivery");
+
+      const couriers = data?.data?.available_courier_companies || [];
+      const options = couriers
+        .map((c) => ({
+          rate: Number(c?.rate ?? c?.freight_charge ?? c?.courier_charge),
+          etd: c?.etd || c?.estimated_delivery_days || null,
+          courier: c?.courier_name || "Courier",
+        }))
+        .filter((c) => Number.isFinite(c.rate) && c.rate >= 0);
+
+      if (!options.length) {
+        setDeliveryQuote({ unavailable: true });
+        return;
+      }
+      options.sort((a, b) => a.rate - b.rate);
+      setDeliveryQuote(options[0]);
+    } catch (error) {
+      showNotification(error.message || "Unable to check delivery", "warning");
+      setDeliveryQuote({ unavailable: true });
+    } finally {
+      setDeliveryCheckLoading(false);
     }
   };
 
@@ -548,14 +591,40 @@ const ProductDetail = () => {
                   id: "shipping",
                   title: "Shipping & Returns",
                   content: (
-                    <div className="product-spec-grid">
-                      {shippingRows.map(([label, value]) => (
-                        <div className="product-spec-row" key={label}>
-                          <span>{label}</span>
-                          <strong>{value}</strong>
+                    <>
+                      <div className="product-spec-grid">
+                        {shippingRows.map(([label, value]) => (
+                          <div className="product-spec-row" key={label}>
+                            <span>{label}</span>
+                            <strong>{value}</strong>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="product-delivery-check">
+                        <div className="product-delivery-input-row">
+                          <input
+                            type="text"
+                            maxLength={6}
+                            inputMode="numeric"
+                            placeholder="Enter pincode"
+                            value={deliveryPincode}
+                            onChange={(e) => setDeliveryPincode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                          />
+                          <button type="button" onClick={checkDelivery} disabled={deliveryCheckLoading}>
+                            {deliveryCheckLoading ? "Checking..." : "Check"}
+                          </button>
                         </div>
-                      ))}
-                    </div>
+                        {deliveryQuote?.unavailable ? (
+                          <p className="product-delivery-note">Delivery details unavailable for this pincode.</p>
+                        ) : deliveryQuote ? (
+                          <div className="product-delivery-note">
+                            <p>Delivery Fee: <strong>₹{Number(deliveryQuote.rate).toLocaleString("en-IN")}</strong></p>
+                            <p>Estimated Delivery: <strong>{deliveryQuote.etd || "Will be confirmed at checkout"}</strong></p>
+                            <p>Courier: <strong>{deliveryQuote.courier}</strong></p>
+                          </div>
+                        ) : null}
+                      </div>
+                    </>
                   ),
                 },
               ].map((item) => (

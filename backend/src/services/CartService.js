@@ -1,6 +1,23 @@
 const Cart = require("../models/Cart");
 const Product = require("../models/Product");
 
+const CART_PRODUCT_ATTRIBUTES = [
+  "id",
+  "name",
+  "slug",
+  "selling_price",
+  "mrp_price",
+  "discount_percent",
+  "images",
+  "stock_quantity",
+  "color_stocks",
+  "payment_options",
+  "service_options",
+  "weight",
+  "length",
+  "width",
+];
+
 class CartService {
   async getCart(customerId) {
     return await Cart.findAll({
@@ -8,13 +25,14 @@ class CartService {
       include: [
         {
           model: Product,
+          attributes: CART_PRODUCT_ATTRIBUTES,
         },
       ],
     });
   }
 
   async addToCart(customerId, productId, quantity = 1, colorId = null) {
-    const product = await Product.findByPk(productId);
+    const product = await Product.findByPk(productId, { attributes: ["id", "stock_quantity", "color_stocks"] });
     if (!product) throw new Error("Product not found");
 
     const colorStock = product.color_stocks?.[colorId] ?? product.stock_quantity;
@@ -44,7 +62,7 @@ class CartService {
   }
 
   async updateQuantity(customerId, productId, quantity, colorId = null) {
-    const product = await Product.findByPk(productId);
+    const product = await Product.findByPk(productId, { attributes: ["id", "stock_quantity", "color_stocks"] });
     const colorStock = product.color_stocks?.[colorId] ?? product.stock_quantity;
 
     if (quantity > colorStock) {

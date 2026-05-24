@@ -1,53 +1,34 @@
 const CartService = require("../services/CartService");
+const { ok, asyncHandler } = require("../utils/http");
 
 class CartController {
-  async getCart(req, res) {
-    try {
-      const items = await CartService.getCart(req.customer.id);
-      res.json(items);
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  }
+  getCart = asyncHandler(async (req, res) => {
+    const items = await CartService.getCart(req.customer.id);
+    return ok(res, items, "Cart fetched");
+  });
 
-  async addToCart(req, res) {
-    try {
-      const { productId, quantity, colorId } = req.body;
-      const item = await CartService.addToCart(req.customer.id, productId, quantity, colorId);
-      res.status(201).json(item);
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  }
+  addToCart = asyncHandler(async (req, res) => {
+    const { productId, quantity, colorId } = req.body;
+    const item = await CartService.addToCart(req.customer.id, productId, quantity, colorId);
+    return ok(res, item, "Item added to cart", 201);
+  });
 
-  async updateQuantity(req, res) {
-    try {
-      const { productId, quantity, colorId } = req.body;
-      const item = await CartService.updateQuantity(req.customer.id, productId, quantity, colorId);
-      res.json(item);
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  }
+  updateQuantity = asyncHandler(async (req, res) => {
+    const { productId, quantity, colorId } = req.body;
+    const item = await CartService.updateQuantity(req.customer.id, productId, quantity, colorId);
+    return ok(res, item, "Cart quantity updated");
+  });
 
-  async removeFromCart(req, res) {
-    try {
-      const { productId } = req.params;
-      await CartService.removeFromCart(req.customer.id, productId);
-      res.json({ message: "Item removed from cart" });
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  }
+  removeFromCart = asyncHandler(async (req, res) => {
+    const { productId } = req.params;
+    await CartService.removeFromCart(req.customer.id, productId);
+    return ok(res, null, "Item removed from cart");
+  });
 
-  async clearCart(req, res) {
-    try {
-      await CartService.clearCart(req.customer.id);
-      res.json({ message: "Cart cleared" });
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  }
+  clearCart = asyncHandler(async (req, res) => {
+    await CartService.clearCart(req.customer.id);
+    return ok(res, null, "Cart cleared");
+  });
 }
 
 module.exports = new CartController();

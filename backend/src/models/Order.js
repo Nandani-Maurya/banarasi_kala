@@ -60,6 +60,14 @@ const Order = sequelize.define('Order', {
     type: DataTypes.STRING,
     defaultValue: 'Uttar Pradesh'
   },
+  payment_method: {
+    type: DataTypes.STRING,
+    defaultValue: 'Prepaid'
+  },
+  payment_status: {
+    type: DataTypes.STRING,
+    defaultValue: 'Paid'
+  },
   shiprocket_order_id: {
     type: DataTypes.STRING,
     allowNull: true

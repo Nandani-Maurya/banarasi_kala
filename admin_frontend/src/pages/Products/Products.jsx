@@ -9,7 +9,7 @@ const INITIAL_FORM_STATE = {
   selling_price: "", mrp_price: "", cost_price: "", discount_percent: "",
   images: [], cover_color_id: "", stock_quantity: 0, low_stock_threshold: 5,
   color_stocks: {},
-  weight: "", length: "6.5", width: "1.1",
+  weight: "", length: "6.5", width: "1.1", height: "5",
   material_id: "", variety_id: "", occasion_id: "",
   special_collection: false, is_new_arrival: false, status: "active",
   blouse_piece: true,

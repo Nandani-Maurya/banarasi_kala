@@ -4,6 +4,7 @@ import api from '../utils/api';
 import { API_ENDPOINTS } from '../config/api';
 import { useNotification } from './NotificationContext';
 import { getProductCoverImage, getProductImages } from '../utils/productMedia';
+import { unwrapApiData } from '../utils/error';
 
 const CartContext = createContext();
 
@@ -32,7 +33,9 @@ export const CartProvider = ({ children }) => {
         setLoading(true);
         try {
           const res = await api.get(API_ENDPOINTS.cart);
-          const formattedCart = res.data.map(item => {
+          const payload = unwrapApiData(res.data);
+          const rawItems = Array.isArray(payload) ? payload : [];
+          const formattedCart = rawItems.map(item => {
             const product = item.Product;
             if (!product) return null;
             const price = product.selling_price || product.mrp_price || 0;
@@ -69,7 +72,9 @@ export const CartProvider = ({ children }) => {
     try {
       await api.post(API_ENDPOINTS.cart, { productId: product.id, quantity, colorId });
       const res = await api.get(API_ENDPOINTS.cart);
-      const formattedCart = res.data.map(item => {
+      const payload = unwrapApiData(res.data);
+      const rawItems = Array.isArray(payload) ? payload : [];
+      const formattedCart = rawItems.map(item => {
         const p = item.Product;
         if (!p) return null;
         const allImages = getProductImages(p);
@@ -106,7 +111,9 @@ export const CartProvider = ({ children }) => {
     try {
       await api.put(`${API_ENDPOINTS.cart}/quantity`, { productId, quantity, colorId });
       const res = await api.get(API_ENDPOINTS.cart);
-      const formattedCart = res.data.map(item => {
+      const payload = unwrapApiData(res.data);
+      const rawItems = Array.isArray(payload) ? payload : [];
+      const formattedCart = rawItems.map(item => {
         const p = item.Product;
         if (!p) return null;
         const allImages = getProductImages(p);

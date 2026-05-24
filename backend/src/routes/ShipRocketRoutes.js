@@ -67,4 +67,11 @@ router.get('/track/order/:orderId', ShipRocketController.trackByOrderId);
  */
 router.get('/serviceability', ShipRocketController.checkServiceability);
 
+/**
+ * POST /api/shiprocket/create-return
+ * Body: { orderId: number }
+ * Initiate return shipment on ShipRocket.
+ */
+router.post('/create-return', ShipRocketController.createReturn);
+
 module.exports = router;

@@ -53,8 +53,30 @@ class OrderController {
     try {
       const { 
         customer_name, customer_email, address, city, state, pincode, phone, 
-        total_amount, items, coupon_code 
+        total_amount, items, coupon_code, payment_method = 'Prepaid', payment_status = 'Paid'
       } = req.body;
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ message: 'Order items are required' });
+      }
+
+      const productIds = items.map((item) => item.id).filter(Boolean);
+      const products = await Product.findAll({ where: { id: productIds }, transaction: t });
+      const productMap = Object.fromEntries(products.map((p) => [p.id, p]));
+      const missingProductId = productIds.find((id) => !productMap[id]);
+      if (missingProductId) {
+        return res.status(400).json({ message: `Invalid product in cart: ${missingProductId}` });
+      }
+
+      if (String(payment_method).toUpperCase() === 'COD') {
+        const prepaidOnly = items.find((item) => {
+          const product = productMap[item.id];
+          const options = Array.isArray(product?.payment_options) ? product.payment_options : [];
+          return !options.includes('cod');
+        });
+        if (prepaidOnly) {
+          return res.status(400).json({ message: `COD is not allowed for product ${prepaidOnly.id}` });
+        }
+      }
 
       const customer = customer_email
         ? await Customer.findOne({ where: { email: customer_email }, transaction: t })
@@ -94,7 +116,9 @@ class OrderController {
         phone,
         total_amount: final_total,
         coupon_code,
-        discount_amount
+        discount_amount,
+        payment_method,
+        payment_status: payment_method === 'COD' ? 'Pending' : payment_status
       }, { transaction: t });
 
       const orderItems = items.map(item => ({
@@ -127,6 +151,13 @@ class OrderController {
             order: { ...order.toJSON(), state: state || 'Uttar Pradesh' },
             items: srItems,
           });
+
+          const updatePayload = {};
+          if (srResult?.order_id) updatePayload.shiprocket_order_id = String(srResult.order_id);
+          if (srResult?.awb_code) updatePayload.shiprocket_awb = String(srResult.awb_code);
+          if (Object.keys(updatePayload).length > 0) {
+            await Order.update(updatePayload, { where: { id: order.id } });
+          }
 
           console.log(`[ShipRocket] ✅ Order #${order.id} pushed → SR Order: ${srResult.order_id}, Shipment: ${srResult.shipment_id}`);
         } catch (srErr) {

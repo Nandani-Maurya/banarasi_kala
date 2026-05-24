@@ -192,15 +192,70 @@ class ShipRocketController {
   // ── Check serviceability for a pincode ───────────────────────────────────────
   async checkServiceability(req, res) {
     try {
-      const { pincode, shipment_id } = req.query;
+      const { pincode, shipment_id, weight = 0.5, is_cod = false } = req.query;
       if (!pincode) return res.status(400).json({ message: 'pincode is required' });
 
-      const data = await ShipRocketService.getServiceableCouries(shipment_id, pincode);
+      const codFlag = is_cod === 'true' || is_cod === true || is_cod === 1 || is_cod === '1';
+      const data = await ShipRocketService.getServiceableCouries(
+        shipment_id, 
+        pincode, 
+        parseFloat(weight) || 0.5, 
+        codFlag
+      );
       return res.status(200).json(data);
     } catch (error) {
       console.error('[ShipRocket] serviceability error:', error?.response?.data || error.message);
       return res.status(500).json({
         message: 'Failed to check serviceability',
+        detail: error?.response?.data || error.message,
+      });
+    }
+  }
+
+  // ── Create return shipment on ShipRocket ─────────────────────────────────────
+  async createReturn(req, res) {
+    try {
+      const { orderId, reason } = req.body;
+      if (!orderId) return res.status(400).json({ message: 'orderId is required' });
+
+      // Fetch order + items from DB
+      const order = await Order.findByPk(orderId, { include: [OrderItem] });
+      if (!order) return res.status(404).json({ message: 'Order not found' });
+      if (String(order.status).toLowerCase() !== 'delivered') {
+        return res.status(400).json({ message: 'Return is allowed only after delivery' });
+      }
+      if (!order.delivered_at) {
+        return res.status(400).json({ message: 'Return window cannot be evaluated for this order' });
+      }
+      const returnWindowDays = 7;
+      const returnLastDate = new Date(order.delivered_at);
+      returnLastDate.setDate(returnLastDate.getDate() + returnWindowDays);
+      if (new Date() > returnLastDate) {
+        return res.status(400).json({ message: 'Return window expired' });
+      }
+
+      const items = order.OrderItems.map(oi => ({
+        product_id: oi.product_id,
+        quantity: oi.quantity,
+        price: oi.price,
+        name: oi.product_name || `Product #${oi.product_id}`,
+      }));
+
+      const data = await ShipRocketService.createReturnOrder({ order, items, reason });
+
+      // Update local order status
+      await order.update({ status: `Return Initiated${reason ? `: ${String(reason).slice(0, 120)}` : ''}` });
+
+      return res.status(200).json({
+        message: 'Return order created on ShipRocket successfully',
+        shiprocket_return_order_id: data.order_id,
+        shipment_id: data.shipment_id,
+        detail: data
+      });
+    } catch (error) {
+      console.error('[ShipRocket] createReturn error:', error?.response?.data || error.message);
+      return res.status(500).json({
+        message: 'Failed to create return order on ShipRocket',
         detail: error?.response?.data || error.message,
       });
     }
