@@ -10,7 +10,9 @@ const CART_PRODUCT_ATTRIBUTES = [
   "discount_percent",
   "images",
   "stock_quantity",
+  "low_stock_threshold",
   "color_stocks",
+  "status",
   "payment_options",
   "service_options",
   "weight",
@@ -32,10 +34,12 @@ class CartService {
   }
 
   async addToCart(customerId, productId, quantity = 1, colorId = null) {
-    const product = await Product.findByPk(productId, { attributes: ["id", "stock_quantity", "color_stocks"] });
+    const product = await Product.findByPk(productId, { attributes: ["id", "stock_quantity", "color_stocks", "status"] });
     if (!product) throw new Error("Product not found");
+    if (product.status !== "active") throw new Error("This product is currently unavailable.");
 
-    const colorStock = product.color_stocks?.[colorId] ?? product.stock_quantity;
+    const colorStock = Number(product.color_stocks?.[colorId] ?? product.stock_quantity ?? 0);
+    if (colorStock <= 0) throw new Error("This product is out of stock.");
     
     let cartItem = await Cart.findOne({
       where: { customerId, productId, colorId },
@@ -62,8 +66,11 @@ class CartService {
   }
 
   async updateQuantity(customerId, productId, quantity, colorId = null) {
-    const product = await Product.findByPk(productId, { attributes: ["id", "stock_quantity", "color_stocks"] });
-    const colorStock = product.color_stocks?.[colorId] ?? product.stock_quantity;
+    const product = await Product.findByPk(productId, { attributes: ["id", "stock_quantity", "color_stocks", "status"] });
+    if (!product) throw new Error("Product not found");
+    if (product.status !== "active") throw new Error("This product is currently unavailable.");
+    const colorStock = Number(product.color_stocks?.[colorId] ?? product.stock_quantity ?? 0);
+    if (colorStock <= 0) throw new Error("This product is out of stock.");
 
     if (quantity > colorStock) {
       throw new Error(`Insufficient stock. Only ${colorStock} items available.`);

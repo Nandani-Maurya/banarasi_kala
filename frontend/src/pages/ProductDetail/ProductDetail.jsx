@@ -6,11 +6,77 @@ import { useCart } from "../../context/CartContext";
 import { useNotification } from "../../context/NotificationContext";
 import { useWishlist } from "../../context/WishlistContext";
 import { API_ENDPOINTS } from "../../config/api";
+import api from "../../utils/api";
 import { getProductCoverImage, getProductImages } from "../../utils/productMedia";
+import { getProductStockInfo } from "../../utils/stockStatus";
 import "./ProductDetail.css";
 
 const PRODUCT_RATING = "4.8";
 const PRODUCT_REVIEW_COUNT = "124";
+const ORDER_PROCESSING_DAYS = Number(import.meta.env.VITE_ORDER_PROCESSING_DAYS || 4);
+const PACKAGING_WEIGHT_KG = Number(import.meta.env.VITE_PACKAGING_WEIGHT_KG || 0.2);
+const PREFERRED_COURIER_NAME = String(import.meta.env.VITE_PREFERRED_COURIER_NAME || "Xpressbees Surface").toLowerCase();
+const COD_MAX_AMOUNT = Number(import.meta.env.VITE_COD_MAX_AMOUNT || 10000);
+const EMPTY_BUY_NOW_ADDRESS = {
+  label: "Home",
+  name: "",
+  phone: "",
+  alternate_phone: "",
+  country: "India",
+  house_building: "",
+  area_street: "",
+  city: "",
+  state: "",
+  pincode: "",
+  landmark: "",
+  delivery_instructions: "",
+  is_default: true,
+};
+
+const formatDeliveryDate = (date) =>
+  date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
+const addDays = (date, days) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + Number(days || 0));
+  return next;
+};
+
+const getShiprocketEtaDate = (eta) => {
+  if (!eta) return null;
+  const numericDays = String(eta).match(/\d+/)?.[0];
+  const parsedDate = new Date(eta);
+  if (!Number.isNaN(parsedDate.getTime())) return parsedDate;
+  if (numericDays) return addDays(new Date(), Number(numericDays));
+  return null;
+};
+
+const getFinalDeliveryDate = (eta) => {
+  const shiprocketDate = getShiprocketEtaDate(eta);
+  return addDays(shiprocketDate || new Date(), ORDER_PROCESSING_DAYS);
+};
+
+const getEmptyBuyNowAddress = (user) => ({
+  ...EMPTY_BUY_NOW_ADDRESS,
+  name: user?.name || "",
+  phone: user?.phone || "",
+});
+
+const cleanAddress = (address = {}) => ({
+  ...EMPTY_BUY_NOW_ADDRESS,
+  ...address,
+  phone: String(address.phone || "").replace(/[^\d+]/g, ""),
+  pincode: String(address.pincode || "").replace(/\D/g, "").slice(0, 6),
+});
+
+const getAddressLine = (address = {}) =>
+  [address.house_building, address.area_street, address.landmark, address.city, address.state, address.pincode]
+    .filter(Boolean)
+    .join(", ");
 
 const ProductDetail = () => {
   const { slug } = useParams();
@@ -38,6 +104,25 @@ const ProductDetail = () => {
   const [deliveryPincode, setDeliveryPincode] = useState("");
   const [deliveryCheckLoading, setDeliveryCheckLoading] = useState(false);
   const [deliveryQuote, setDeliveryQuote] = useState(null);
+  const [buyNowOpen, setBuyNowOpen] = useState(false);
+  const [buyNowStep, setBuyNowStep] = useState("details");
+  const [buyNowLoading, setBuyNowLoading] = useState(false);
+  const [buyNowPlacing, setBuyNowPlacing] = useState(false);
+  const [buyNowPayment, setBuyNowPayment] = useState("prepaid");
+  const [buyNowAddresses, setBuyNowAddresses] = useState([]);
+  const [selectedBuyNowAddressId, setSelectedBuyNowAddressId] = useState("");
+  const [buyNowAddressForm, setBuyNowAddressForm] = useState(getEmptyBuyNowAddress(user));
+  const [editingBuyNowAddressId, setEditingBuyNowAddressId] = useState(null);
+  const [showBuyNowAddressForm, setShowBuyNowAddressForm] = useState(false);
+  const [isFirstOrder, setIsFirstOrder] = useState(false);
+  const [buyNowShipping, setBuyNowShipping] = useState(null);
+  const [buyNowShippingLoading, setBuyNowShippingLoading] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [useWallet, setUseWallet] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [appliedBuyNowCoupon, setAppliedBuyNowCoupon] = useState(null);
+  const [availableCoupons, setAvailableCoupons] = useState([]);
 
   const frameRef = useRef(null);
   const perspectiveRef = useRef(null);
@@ -156,13 +241,32 @@ const ProductDetail = () => {
   }, [allColors]);
 
   const selectedColor = distinctColors.find((color) => String(color.id) === String(selectedColorId));
-  const selectedStockStatus = selectedColor?.stock_status || "in_stock";
-  const isSelectedOutOfStock = selectedStockStatus === "out_of_stock";
-  const isSelectedLowStock = selectedStockStatus === "low_stock";
+  const productStockInfo = getProductStockInfo(product);
+  const isProductOutOfStock = productStockInfo.isOutOfStock;
+  const selectedStockInfo = getProductStockInfo({
+    ...product,
+    stock_quantity: isProductOutOfStock ? product?.stock_quantity : selectedColor?.stock_quantity ?? product?.stock_quantity,
+  });
+  const isSelectedOutOfStock = isProductOutOfStock || selectedStockInfo.isOutOfStock;
+  const isSelectedLowStock = selectedStockInfo.isLowStock;
   const isChangingColor = Boolean(loadingColorId);
-  const canAddToBag = !isSelectedOutOfStock && !isChangingColor;
+  const showThumbSkeletons = isChangingColor && visibleImages.length === 0;
+  const canAddToBag = !isSelectedOutOfStock && !isChangingColor && quantity <= selectedStockInfo.quantity;
+  const availableQuantity = isSelectedOutOfStock ? 0 : Math.max(0, Math.floor(Number(selectedStockInfo.quantity || 0)));
+  const quantityOptions = availableQuantity > 0 ? Array.from({ length: availableQuantity }, (_, index) => index + 1) : [0];
   const formatMoney = (value) => `Rs. ${Number(value || 0).toLocaleString("en-IN")}`;
   const productName = product?.name || "";
+  const buyNowSubtotal = Number(product?.selling_price || 0) * Math.max(1, Number(quantity || 1));
+  const selectedBuyNowAddress = buyNowAddresses.find((address) => String(address.id) === String(selectedBuyNowAddressId));
+  const canUsePrepaid = true;
+  const canUseCod = buyNowSubtotal <= COD_MAX_AMOUNT;
+  const buyNowShippingRate = Number(buyNowShipping?.rate || 0);
+  const buyNowShippingDiscount = isFirstOrder ? buyNowShippingRate : 0;
+  const buyNowFinalShipping = Math.max(0, buyNowShippingRate - buyNowShippingDiscount);
+  const buyNowGrossTotal = buyNowSubtotal + buyNowFinalShipping;
+  const buyNowCouponDiscount = Math.min(Number(appliedBuyNowCoupon?.discount || 0), buyNowGrossTotal);
+  const walletUsableAmount = useWallet ? Math.min(Number(walletBalance || 0), Math.max(0, buyNowGrossTotal - buyNowCouponDiscount)) : 0;
+  const buyNowTotal = Math.max(0, buyNowGrossTotal - buyNowCouponDiscount - walletUsableAmount);
   const formatNumber = (value) => {
     const num = Number(value);
     return Number.isFinite(num) ? num.toLocaleString("en-IN", { maximumFractionDigits: 2 }) : "";
@@ -186,7 +290,9 @@ const ProductDetail = () => {
       setColorImagesById((current) => ({ ...current, [String(colorId)]: images }));
       setAllColors((current) =>
         current.map((color) =>
-          String(color.id) === String(colorId) ? { ...color, stock_status: data.stock_status } : color,
+          String(color.id) === String(colorId)
+            ? { ...color, stock_quantity: data.stock_quantity, stock_status: data.stock_status }
+            : color,
         ),
       );
       setMainImage(images[0]?.url || "");
@@ -246,8 +352,91 @@ const ProductDetail = () => {
     return () => window.clearInterval(timer);
   }, [products, relatedHoverId]);
 
-  const incrementQty = () => setQuantity((prev) => prev + 1);
+  const incrementQty = () => {
+    if (isSelectedOutOfStock) return;
+    if (quantity >= selectedStockInfo.quantity) {
+      showNotification(`Abhi is product ki sirf ${selectedStockInfo.quantity} quantity add kar sakte ho.`, "warning");
+      return;
+    }
+    setQuantity((prev) => prev + 1);
+  };
   const decrementQty = () => setQuantity((prev) => (prev > 1 ? prev - 1 : 1));
+
+  useEffect(() => {
+    if (!isSelectedOutOfStock && selectedStockInfo.quantity > 0 && quantity > selectedStockInfo.quantity) {
+      setQuantity(selectedStockInfo.quantity);
+    }
+  }, [isSelectedOutOfStock, quantity, selectedStockInfo.quantity]);
+
+  useEffect(() => {
+    if (!buyNowOpen || !selectedBuyNowAddress?.pincode || isSelectedOutOfStock) {
+      setBuyNowShipping(null);
+      setBuyNowShippingLoading(false);
+      return undefined;
+    }
+
+    const cleanPincode = String(selectedBuyNowAddress.pincode || "").trim();
+    if (!/^\d{6}$/.test(cleanPincode)) {
+      setBuyNowShipping(null);
+      setBuyNowShippingLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        setBuyNowShippingLoading(true);
+        const rawWeight = Number(product?.weight);
+        const productWeightKg = Number.isFinite(rawWeight) && rawWeight > 0 ? (rawWeight > 5 ? rawWeight / 1000 : rawWeight) : 0.5;
+        const totalWeightKg = productWeightKg * Math.max(1, Number(quantity || 1)) + PACKAGING_WEIGHT_KG;
+        const response = await fetch(
+          `${API_ENDPOINTS.shiprocket}/serviceability?pincode=${encodeURIComponent(cleanPincode)}&weight=${Math.max(0.1, Number(totalWeightKg.toFixed(3)))}&is_cod=${buyNowPayment === "cod" ? 1 : 0}`,
+        );
+        const data = await response.json();
+        if (!response.ok) throw new Error(data?.message || "Unable to check delivery");
+
+        const options = (data?.data?.available_courier_companies || [])
+          .map((courier) => ({
+            rate: Number(courier?.rate ?? courier?.freight_charge ?? courier?.courier_charge),
+            etd: courier?.etd || courier?.estimated_delivery_days || null,
+            courier: courier?.courier_name || "Courier",
+          }))
+          .filter((courier) => Number.isFinite(courier.rate) && courier.rate >= 0)
+          .sort((left, right) => left.rate - right.rate);
+
+        const preferred = options.find((option) => option.courier.toLowerCase().includes("xpressbees") && option.courier.toLowerCase().includes("surface"));
+        const configured = options.find((option) => option.courier.toLowerCase().includes(PREFERRED_COURIER_NAME));
+        const selected = preferred || configured || options[0];
+
+        if (!cancelled) {
+          setBuyNowShipping(selected ? {
+            ...selected,
+            deliveryDate: formatDeliveryDate(getFinalDeliveryDate(selected.etd)),
+          } : { unavailable: true });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setBuyNowShipping({ unavailable: true, message: error.message || "Delivery unavailable" });
+        }
+      } finally {
+        if (!cancelled) setBuyNowShippingLoading(false);
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [buyNowOpen, selectedBuyNowAddress?.pincode, buyNowPayment, quantity, product?.weight, isSelectedOutOfStock]);
+
+  useEffect(() => {
+    if (!buyNowOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [buyNowOpen]);
 
   const handleAddToCart = async () => {
     if (!user) {
@@ -256,13 +445,304 @@ const ProductDetail = () => {
       return;
     }
 
-    if (isSelectedOutOfStock) {
-      showNotification("This color is out of stock.", "warning");
+    if (isSelectedOutOfStock || quantity > selectedStockInfo.quantity) {
+      showNotification(selectedStockInfo.colorMessage || "This product is out of stock.", "warning");
       return;
     }
 
     const result = await addToCart(product, quantity, selectedColorId);
     showNotification(result.success ? "Added to Bag!" : result.message, result.success ? "success" : "warning");
+  };
+
+  const resetBuyNowForm = () => {
+    setEditingBuyNowAddressId(null);
+    setBuyNowAddressForm(getEmptyBuyNowAddress(user));
+  };
+
+  const loadBuyNowData = async () => {
+    setBuyNowLoading(true);
+    try {
+      const [addressRes, orderRes, walletRes, couponRes] = await Promise.all([
+        api.get("/api/addresses"),
+        user?.email ? fetch(API_ENDPOINTS.myOrders(user.email)).then((res) => (res.ok ? res.json() : [])) : Promise.resolve([]),
+        api.get("/api/wallet").catch(() => ({ data: { wallet_balance: 0 } })),
+        fetch(API_ENDPOINTS.coupons).then((res) => (res.ok ? res.json() : [])).catch(() => []),
+      ]);
+      const addresses = Array.isArray(addressRes.data) ? addressRes.data.map(cleanAddress) : [];
+      const defaultAddress = addresses.find((address) => address.is_default) || addresses[0];
+      setBuyNowAddresses(addresses);
+      setSelectedBuyNowAddressId(defaultAddress?.id ? String(defaultAddress.id) : "");
+      setShowBuyNowAddressForm(!defaultAddress);
+      setBuyNowAddressForm(defaultAddress ? cleanAddress(defaultAddress) : getEmptyBuyNowAddress(user));
+      setIsFirstOrder(!Array.isArray(orderRes) || orderRes.length === 0);
+      setWalletBalance(Number(walletRes?.data?.wallet_balance || 0));
+      setAvailableCoupons(Array.isArray(couponRes) ? couponRes.filter((coupon) => coupon?.is_active !== false) : []);
+    } catch (error) {
+      showNotification(error?.response?.data?.message || "Unable to load saved addresses.", "warning");
+      setBuyNowAddresses([]);
+      setSelectedBuyNowAddressId("");
+      setShowBuyNowAddressForm(true);
+      setIsFirstOrder(false);
+      setWalletBalance(0);
+      setAvailableCoupons([]);
+    } finally {
+      setBuyNowLoading(false);
+    }
+  };
+
+  const openBuyNowModal = async () => {
+    if (!user) {
+      showNotification("Please login first", "info");
+      navigate("/cart");
+      return;
+    }
+
+    if (isSelectedOutOfStock || quantity > selectedStockInfo.quantity) {
+      showNotification(selectedStockInfo.colorMessage || "This product is out of stock.", "warning");
+      return;
+    }
+
+    setBuyNowPayment(canUseCod ? "cod" : "prepaid");
+    setBuyNowStep("details");
+    setAppliedBuyNowCoupon(null);
+    setCouponCode("");
+    setUseWallet(false);
+    setBuyNowOpen(true);
+    await loadBuyNowData();
+  };
+
+  const closeBuyNowModal = () => {
+    if (buyNowPlacing) return;
+    setBuyNowOpen(false);
+    setBuyNowStep("details");
+    setBuyNowShipping(null);
+    setShowBuyNowAddressForm(false);
+    setAppliedBuyNowCoupon(null);
+    setCouponCode("");
+    setUseWallet(false);
+    resetBuyNowForm();
+  };
+
+  const applyBuyNowCoupon = async (nextCode = couponCode) => {
+    const code = String(nextCode || "").trim().toUpperCase();
+    if (!code) {
+      showNotification("Please enter coupon code.", "warning");
+      return;
+    }
+
+    try {
+      setCouponLoading(true);
+      const response = await fetch(`${API_ENDPOINTS.coupons}/validate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, amount: buyNowGrossTotal, email: user?.email }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Invalid coupon code.");
+      setAppliedBuyNowCoupon(data);
+      setCouponCode(code);
+      showNotification(`Coupon ${code} applied.`, "success");
+    } catch (error) {
+      setAppliedBuyNowCoupon(null);
+      showNotification(error.message || "Unable to apply coupon.", "warning");
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const removeBuyNowCoupon = () => {
+    setAppliedBuyNowCoupon(null);
+    setCouponCode("");
+    showNotification("Coupon removed.", "info");
+  };
+
+  const proceedToFinalPayment = () => {
+    if (!selectedBuyNowAddress) {
+      showNotification("Please select or save a delivery address.", "warning");
+      return;
+    }
+    if (!/^\d{6}$/.test(String(selectedBuyNowAddress.pincode || ""))) {
+      showNotification("Please add a valid delivery pincode.", "warning");
+      return;
+    }
+    if (!buyNowShipping || buyNowShipping.unavailable) {
+      showNotification("Delivery is unavailable for this address right now.", "warning");
+      return;
+    }
+    if (buyNowPayment === "cod" && !canUseCod) {
+      showNotification(`COD is available only up to ${formatMoney(COD_MAX_AMOUNT)}.`, "warning");
+      return;
+    }
+    setBuyNowStep("payment");
+  };
+
+  const handleBuyNowAddressChange = (event) => {
+    const { name, value, type, checked } = event.target;
+    setBuyNowAddressForm((current) => ({
+      ...current,
+      [name]: type === "checkbox" ? checked : name === "pincode" ? value.replace(/\D/g, "").slice(0, 6) : value,
+    }));
+  };
+
+  const editBuyNowAddress = (address) => {
+    setEditingBuyNowAddressId(address.id);
+    setBuyNowAddressForm(cleanAddress(address));
+    setShowBuyNowAddressForm(true);
+  };
+
+  const saveBuyNowAddress = async () => {
+    const form = cleanAddress(buyNowAddressForm);
+    if (!form.house_building || !form.city || !form.state || !/^\d{6}$/.test(form.pincode) || !form.phone) {
+      showNotification("Please fill complete delivery address.", "warning");
+      return;
+    }
+
+    try {
+      setBuyNowLoading(true);
+      const payload = {
+        ...form,
+        name: form.name || user?.name || "",
+        phone: form.phone || user?.phone || "",
+      };
+      const response = editingBuyNowAddressId
+        ? await api.put(`/api/addresses/${editingBuyNowAddressId}`, payload)
+        : await api.post("/api/addresses", payload);
+      const saved = cleanAddress(response.data);
+      const addressRes = await api.get("/api/addresses");
+      const addresses = Array.isArray(addressRes.data) ? addressRes.data.map(cleanAddress) : [saved];
+      setBuyNowAddresses(addresses);
+      setSelectedBuyNowAddressId(String(saved.id));
+      setBuyNowAddressForm(saved);
+      setEditingBuyNowAddressId(null);
+      setShowBuyNowAddressForm(false);
+      showNotification("Address saved.", "success");
+    } catch (error) {
+      showNotification(error?.response?.data?.message || "Unable to save address.", "warning");
+    } finally {
+      setBuyNowLoading(false);
+    }
+  };
+
+  const buildBuyNowOrder = () => ({
+    customer_name: selectedBuyNowAddress?.name || user?.name || "Customer",
+    customer_email: user?.email,
+    address: getAddressLine(selectedBuyNowAddress),
+    city: selectedBuyNowAddress?.city,
+    state: selectedBuyNowAddress?.state || "Uttar Pradesh",
+    pincode: selectedBuyNowAddress?.pincode,
+    phone: selectedBuyNowAddress?.phone || user?.phone,
+    subtotal_amount: buyNowSubtotal,
+    shipping_charge: buyNowShippingRate,
+    shipping_discount: buyNowShippingDiscount,
+    total_amount: buyNowGrossTotal,
+    coupon_code: appliedBuyNowCoupon?.code || null,
+    wallet_amount: walletUsableAmount,
+    payment_method: buyNowPayment === "cod" ? "COD" : "Prepaid",
+    payment_status: buyNowPayment === "cod" ? "Pending" : "Paid",
+    items: [{
+      id: product.id,
+      name: product.name,
+      quantity,
+      price: Number(product.selling_price || 0),
+      colorId: selectedColorId,
+    }],
+  });
+
+  const createBuyNowOrder = async (orderData) => {
+    const response = await fetch(API_ENDPOINTS.orders, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(orderData),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || "Unable to place order.");
+    return data;
+  };
+
+  const placeBuyNowOrder = async () => {
+    if (!selectedBuyNowAddress) {
+      showNotification("Please select or save a delivery address.", "warning");
+      return;
+    }
+    if (!/^\d{6}$/.test(String(selectedBuyNowAddress.pincode || ""))) {
+      showNotification("Please add a valid delivery pincode.", "warning");
+      return;
+    }
+    if (!buyNowShipping || buyNowShipping.unavailable) {
+      showNotification("Delivery is unavailable for this address right now.", "warning");
+      return;
+    }
+    if (buyNowPayment === "cod" && !canUseCod) {
+      showNotification(`COD is available only up to ${formatMoney(COD_MAX_AMOUNT)}.`, "warning");
+      return;
+    }
+    if (buyNowPayment === "prepaid" && !canUsePrepaid) {
+      showNotification("Prepaid payment is not available for this product.", "warning");
+      return;
+    }
+
+    const orderData = buildBuyNowOrder();
+    setBuyNowPlacing(true);
+    try {
+      if (buyNowPayment === "cod" || buyNowTotal <= 0) {
+        await createBuyNowOrder(orderData);
+        showNotification("Order placed successfully.", "success");
+        navigate("/order-confirmation");
+        return;
+      }
+
+      if (!window.Razorpay) {
+        throw new Error("Payment gateway is still loading. Please try again.");
+      }
+
+      const orderResponse = await fetch(API_ENDPOINTS.razorpay.createOrder, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: buyNowTotal }),
+      });
+      const razorpayOrder = await orderResponse.json();
+      if (!orderResponse.ok) throw new Error(razorpayOrder.message || "Unable to start payment.");
+
+      const razorpay = new window.Razorpay({
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+        amount: razorpayOrder.amount,
+        currency: "INR",
+        name: "Banarasi Kala",
+        description: `${product.name} purchase`,
+        order_id: razorpayOrder.id,
+        prefill: {
+          name: orderData.customer_name,
+          email: orderData.customer_email,
+          contact: orderData.phone,
+        },
+        theme: { color: "#800020" },
+        handler: async (response) => {
+          try {
+            const verifyRes = await fetch(API_ENDPOINTS.razorpay.verifyPayment, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(response),
+            });
+            const verifyData = await verifyRes.json();
+            if (!verifyRes.ok || !verifyData.success) throw new Error(verifyData.message || "Payment verification failed.");
+            await createBuyNowOrder(orderData);
+            showNotification("Order placed successfully.", "success");
+            navigate("/order-confirmation");
+          } catch (error) {
+            showNotification(error.message || "Unable to place paid order.", "error");
+          } finally {
+            setBuyNowPlacing(false);
+          }
+        },
+        modal: {
+          ondismiss: () => setBuyNowPlacing(false),
+        },
+      });
+      razorpay.open();
+    } catch (error) {
+      showNotification(error.message || "Unable to place order.", "error");
+      setBuyNowPlacing(false);
+    }
   };
 
   const handleWishlist = async () => {
@@ -288,6 +768,10 @@ const ProductDetail = () => {
   };
 
   const checkDelivery = async () => {
+    if (isSelectedOutOfStock) {
+      showNotification("Delivery charges are available when this color is in stock.", "warning");
+      return;
+    }
     const clean = deliveryPincode.trim();
     if (!/^\d{6}$/.test(clean)) {
       showNotification("Enter valid 6 digit pincode", "warning");
@@ -297,9 +781,10 @@ const ProductDetail = () => {
       setDeliveryCheckLoading(true);
       setDeliveryQuote(null);
       const rawWeight = Number(product?.weight);
-      const weightKg = Number.isFinite(rawWeight) && rawWeight > 0 ? (rawWeight > 5 ? rawWeight / 1000 : rawWeight) : 0.5;
+      const productWeightKg = Number.isFinite(rawWeight) && rawWeight > 0 ? (rawWeight > 5 ? rawWeight / 1000 : rawWeight) : 0.5;
+      const totalWeightKg = productWeightKg * Math.max(1, Number(quantity || 1)) + PACKAGING_WEIGHT_KG;
       const response = await fetch(
-        `${API_ENDPOINTS.shiprocket}/serviceability?pincode=${encodeURIComponent(clean)}&weight=${Math.max(0.1, Number(weightKg.toFixed(3)))}&is_cod=${Array.isArray(product?.payment_options) && product.payment_options.includes("cod") ? 1 : 0}`
+        `${API_ENDPOINTS.shiprocket}/serviceability?pincode=${encodeURIComponent(clean)}&weight=${Math.max(0.1, Number(totalWeightKg.toFixed(3)))}&is_cod=${canUseCod ? 1 : 0}`
       );
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || "Unable to check delivery");
@@ -318,7 +803,13 @@ const ProductDetail = () => {
         return;
       }
       options.sort((a, b) => a.rate - b.rate);
-      setDeliveryQuote(options[0]);
+      const preferredOptions = options.filter((option) => option.courier.toLowerCase().includes("xpressbees") && option.courier.toLowerCase().includes("surface"));
+      const configuredOptions = options.filter((option) => option.courier.toLowerCase().includes(PREFERRED_COURIER_NAME));
+      const selectedOption = (preferredOptions[0] || configuredOptions[0] || options[0]);
+      setDeliveryQuote({
+        option: selectedOption,
+        deliveryDate: formatDeliveryDate(getFinalDeliveryDate(selectedOption.etd)),
+      });
     } catch (error) {
       showNotification(error.message || "Unable to check delivery", "warning");
       setDeliveryQuote({ unavailable: true });
@@ -344,19 +835,12 @@ const ProductDetail = () => {
 
   const shippingRows = product
     ? [
-        Array.isArray(product.payment_options) && product.payment_options.includes("prepaid")
-          ? ["Prepaid", "Online payment available"]
-          : null,
-        Array.isArray(product.payment_options) && product.payment_options.includes("cod")
-          ? ["COD", "Cash on Delivery available on selected pin codes"]
-          : null,
-        Array.isArray(product.service_options) && product.service_options.includes("return")
-          ? ["Return", "Return available as per policy"]
-          : null,
-        Array.isArray(product.service_options) && product.service_options.includes("exchange")
-          ? ["Exchange", "Exchange available as per policy"]
-          : null,
-        ["Taxes & Shipping", "Incl. of all taxes & free shipping across Pan India"],
+        ["Prepaid", "Online payment available."],
+        ["COD", `Cash on Delivery is available when product value is ${formatMoney(COD_MAX_AMOUNT)} or below.`],
+        ["Shipping", "Free shipping on first order. After that, delivery charge is calculated by pincode before payment."],
+        ["Return", "Easy return is available. If delivery charge was paid, it is not refundable. On first-order free shipping, the paid product amount is refundable."],
+        ["Exchange", "Easy exchange is available once. After one exchange, return or another exchange is not available for that item."],
+        ["Taxes", "Price is inclusive of all taxes."],
       ].filter(Boolean)
     : [];
 
@@ -370,6 +854,15 @@ const ProductDetail = () => {
               <span className="product-skeleton-thumb" />
               <span className="product-skeleton-thumb" />
               <span className="product-skeleton-image" />
+              <div className="product-skeleton-mobile-thumbs" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+              </div>
+              <span className="product-skeleton-mobile-colors" />
             </div>
             <div className="product-skeleton-info">
               <span className="product-skeleton-line short" />
@@ -406,9 +899,14 @@ const ProductDetail = () => {
           <Link to="/">Home</Link>
           <Icon icon="lucide:chevron-right" />
           <Link to="/collection">Collections</Link>
-          <Icon icon="lucide:chevron-right" />
-          <span>{productName}</span>
-        </nav>
+            <Icon icon="lucide:chevron-right" />
+            <span>{productName}</span>
+          </nav>
+
+          <div className="product-mobile-summary">
+            <h1>{productName}</h1>
+            <p>{product.short_description || [product.Variety?.name, product.Material?.name].filter(Boolean).join(" / ")}</p>
+          </div>
 
         <div className="product-detail-grid">
           <section className="product-gallery">
@@ -461,24 +959,63 @@ const ProductDetail = () => {
               </div>
             </div>
 
-            <div className="product-thumbs">
-              {visibleImages.map((image, index) => (
-                <button
-                  key={`${image.url}-${index}`}
-                  type="button"
-                  onClick={() => {
-                    setActiveImageIndex(index);
-                    setMainImage(image.url);
-                  }}
-                  onFocus={() => setActiveImageIndex(index)}
-                  onMouseEnter={() => setActiveImageIndex(index)}
-                  className={`product-thumb ${mainImage === image.url ? "active" : ""}`}
-                  aria-label={`View image ${index + 1}`}
-                >
-                  <img src={image.url} alt="" />
-                </button>
-              ))}
+            <div className={`product-thumbs ${showThumbSkeletons ? "loading" : ""}`}>
+              {showThumbSkeletons
+                ? Array.from({ length: 6 }).map((_, index) => (
+                    <span key={`thumb-skeleton-${index}`} className="product-thumb-skeleton" aria-hidden="true" />
+                  ))
+                : visibleImages.map((image, index) => (
+                    <button
+                      key={`${image.url}-${index}`}
+                      type="button"
+                      onClick={() => {
+                        setActiveImageIndex(index);
+                        setMainImage(image.url);
+                      }}
+                      onFocus={() => setActiveImageIndex(index)}
+                      onMouseEnter={() => setActiveImageIndex(index)}
+                      className={`product-thumb ${mainImage === image.url ? "active" : ""}`}
+                      aria-label={`View image ${index + 1}`}
+                    >
+                      <img src={image.url} alt="" />
+                    </button>
+                  ))}
             </div>
+
+            {distinctColors.length > 0 && (
+              <div className="product-mobile-color-card">
+                <p>
+                  Selected color <span>{selectedColor?.name || "Choose color"}</span>
+                </p>
+                <div className="product-mobile-color-list">
+                  {distinctColors.map((color) => {
+                    const colorStock = getProductStockInfo({ ...product, stock_quantity: color.stock_quantity });
+                    const isOut = colorStock.isOutOfStock;
+                    const isLow = colorStock.isLowStock;
+                    const isActive = String(selectedColorId) === String(color.id);
+                    return (
+                      <button
+                        key={color.id}
+                        type="button"
+                        onClick={() => handleColorChange(color.id)}
+                        className={`product-mobile-color-btn ${isActive ? "active" : ""} ${isOut ? "out" : ""} ${isLow ? "low" : ""}`}
+                        aria-label={`Select ${color.name}`}
+                        aria-pressed={isActive}
+                        title={color.name}
+                      >
+                        <span style={{ backgroundColor: color.hex_code || "#ccc" }} />
+                        <strong>{color.name}</strong>
+                      </button>
+                    );
+                  })}
+                </div>
+                {(isSelectedLowStock || isSelectedOutOfStock) && (
+                  <small className={`product-mobile-stock-note ${isSelectedOutOfStock ? "out" : ""}`}>
+                    {selectedStockInfo.colorMessage}
+                  </small>
+                )}
+              </div>
+            )}
           </section>
 
           <section className="product-info-panel">
@@ -512,8 +1049,38 @@ const ProductDetail = () => {
                   </>
                 )}
               </div>
-              <p>Incl. of all taxes & free shipping across Pan India</p>
+              <p>Incl. of all taxes </p>
             </div>
+
+            {!isSelectedOutOfStock && (
+              <div className="product-delivery-check product-delivery-check-top">
+                <p className="product-delivery-helper">Enter pincode to see estimated delivery date.</p>
+                <div className="product-delivery-input-row">
+                  <input
+                    type="text"
+                    maxLength={6}
+                    inputMode="numeric"
+                    placeholder="Enter pincode"
+                    value={deliveryPincode}
+                    onChange={(e) => setDeliveryPincode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") checkDelivery();
+                    }}
+                  />
+                  <button type="button" onClick={checkDelivery} disabled={deliveryCheckLoading}>
+                    {deliveryCheckLoading ? "Checking..." : "Check"}
+                  </button>
+                </div>
+                {deliveryQuote?.unavailable ? (
+                  <p className="product-delivery-note">Delivery details unavailable for this pincode.</p>
+                ) : deliveryQuote?.deliveryDate ? (
+                  <div className="product-delivery-date">
+                    <span>Estimated delivery</span>
+                    <strong>{deliveryQuote.deliveryDate}</strong>
+                  </div>
+                ) : null}
+              </div>
+            )}
 
             {distinctColors.length > 0 && (
               <div className="product-color-section">
@@ -522,8 +1089,9 @@ const ProductDetail = () => {
                 </p>
                 <div className="product-color-list">
                   {distinctColors.map((color) => {
-                    const isOut = color.stock_status === "out_of_stock";
-                    const isLow = color.stock_status === "low_stock";
+                    const colorStock = getProductStockInfo({ ...product, stock_quantity: color.stock_quantity });
+                    const isOut = colorStock.isOutOfStock;
+                    const isLow = colorStock.isLowStock;
                     return (
                       <button
                         key={color.id}
@@ -535,34 +1103,43 @@ const ProductDetail = () => {
                       >
                         <span style={{ backgroundColor: color.hex_code || "#ccc" }} />
                         <strong>{color.name}</strong>
-                        {isLow && <small>Few stocks</small>}
+                        {isLow && <small>Few left</small>}
                         {isOut && <small>Out</small>}
                       </button>
                     );
                   })}
                 </div>
-                {isSelectedLowStock && (
-                  <div className="product-stock-note low">Few stocks available for this color</div>
-                )}
-                {isSelectedOutOfStock && (
-                  <div className="product-stock-note out">This color is out of stock</div>
+                {(isSelectedLowStock || isSelectedOutOfStock) && (
+                  <div className={`product-stock-note ${isSelectedOutOfStock ? "out" : "low"}`}>
+                    {selectedStockInfo.colorMessage}
+                  </div>
                 )}
               </div>
             )}
 
             <div className="product-action-panel">
               <div className="product-qty">
-                <button type="button" onClick={decrementQty} disabled={isSelectedOutOfStock} aria-label="Decrease quantity">
-                  <Icon icon="lucide:minus" />
-                </button>
-                <input type="number" value={quantity} readOnly aria-label="Quantity" />
-                <button type="button" onClick={incrementQty} disabled={isSelectedOutOfStock} aria-label="Increase quantity">
-                  <Icon icon="lucide:plus" />
-                </button>
+                <label htmlFor="product-quantity">Quantity</label>
+                <select
+                  id="product-quantity"
+                  value={isSelectedOutOfStock ? 0 : quantity}
+                  onChange={(event) => setQuantity(Number(event.target.value))}
+                  disabled={isSelectedOutOfStock}
+                >
+                  {quantityOptions.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
               </div>
               <button type="button" onClick={handleAddToCart} className="product-add-btn" disabled={!canAddToBag}>
                 <Icon icon="lucide:shopping-bag" />
                 {isSelectedOutOfStock ? "Out of Stock" : isChangingColor ? "Loading..." : "Add to Bag"}
+              </button>
+              <button type="button" onClick={openBuyNowModal} className="product-buy-btn" disabled={!canAddToBag}>
+                <Icon icon="lucide:zap" />
+                Buy Now
               </button>
             </div>
 
@@ -599,30 +1176,6 @@ const ProductDetail = () => {
                             <strong>{value}</strong>
                           </div>
                         ))}
-                      </div>
-                      <div className="product-delivery-check">
-                        <div className="product-delivery-input-row">
-                          <input
-                            type="text"
-                            maxLength={6}
-                            inputMode="numeric"
-                            placeholder="Enter pincode"
-                            value={deliveryPincode}
-                            onChange={(e) => setDeliveryPincode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                          />
-                          <button type="button" onClick={checkDelivery} disabled={deliveryCheckLoading}>
-                            {deliveryCheckLoading ? "Checking..." : "Check"}
-                          </button>
-                        </div>
-                        {deliveryQuote?.unavailable ? (
-                          <p className="product-delivery-note">Delivery details unavailable for this pincode.</p>
-                        ) : deliveryQuote ? (
-                          <div className="product-delivery-note">
-                            <p>Delivery Fee: <strong>₹{Number(deliveryQuote.rate).toLocaleString("en-IN")}</strong></p>
-                            <p>Estimated Delivery: <strong>{deliveryQuote.etd || "Will be confirmed at checkout"}</strong></p>
-                            <p>Courier: <strong>{deliveryQuote.courier}</strong></p>
-                          </div>
-                        ) : null}
                       </div>
                     </>
                   ),
@@ -703,6 +1256,321 @@ const ProductDetail = () => {
           </section>
         )}
       </main>
+
+      {buyNowOpen && (
+        <div className="buy-now-modal" role="dialog" aria-modal="true" aria-label="Buy now checkout">
+          <div className={`buy-now-card ${buyNowStep === "payment" ? "is-payment" : "is-details"}`}>
+            <div className="buy-now-header">
+              <div>
+                <span>Buy Now</span>
+                <h2>Complete your order</h2>
+              </div>
+              <button type="button" onClick={closeBuyNowModal} aria-label="Close buy now" disabled={buyNowPlacing}>
+                <Icon icon="lucide:x" />
+              </button>
+            </div>
+
+            <div className="buy-now-content">
+              {buyNowStep === "details" ? (
+                <>
+              <section className="buy-now-section">
+                <div className="buy-now-section-title">
+                  <h3>Delivery address</h3>
+                  {buyNowAddresses.length > 0 && (
+                    <button type="button" onClick={() => {
+                      resetBuyNowForm();
+                      setShowBuyNowAddressForm(true);
+                    }}>
+                      <Icon icon="lucide:plus" />
+                      Add new
+                    </button>
+                  )}
+                </div>
+
+                {buyNowLoading && !buyNowAddresses.length ? (
+                  <p className="buy-now-muted">Loading saved addresses...</p>
+                ) : (
+                  <div className="buy-now-address-list">
+                    {buyNowAddresses.map((address) => (
+                      <label key={address.id} className={`buy-now-address ${String(selectedBuyNowAddressId) === String(address.id) ? "active" : ""}`}>
+                        <input
+                          type="radio"
+                          name="buy_now_address"
+                          checked={String(selectedBuyNowAddressId) === String(address.id)}
+                          onChange={() => setSelectedBuyNowAddressId(String(address.id))}
+                        />
+                        <span>
+                          <strong>{address.label || "Address"} {address.is_default ? <em>Default</em> : null}</strong>
+                          <small>{getAddressLine(address)}</small>
+                          <small>{address.name || user?.name} • {address.phone || user?.phone}</small>
+                        </span>
+                        <button type="button" onClick={(event) => {
+                          event.preventDefault();
+                          editBuyNowAddress(address);
+                        }}>
+                          Edit
+                        </button>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                {(showBuyNowAddressForm || buyNowAddresses.length === 0) && (
+                  <div className="buy-now-address-form">
+                    <div className="buy-now-form-row">
+                      <label>
+                        <span>Label</span>
+                        <select name="label" value={buyNowAddressForm.label} onChange={handleBuyNowAddressChange}>
+                          <option>Home</option>
+                          <option>Work</option>
+                          <option>Other</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>Receiver name</span>
+                        <input name="name" value={buyNowAddressForm.name} onChange={handleBuyNowAddressChange} />
+                      </label>
+                    </div>
+                    <label>
+                      <span>Flat, House no., Building *</span>
+                      <input name="house_building" value={buyNowAddressForm.house_building} onChange={handleBuyNowAddressChange} />
+                    </label>
+                    <label>
+                      <span>Area, Street, Sector</span>
+                      <input name="area_street" value={buyNowAddressForm.area_street} onChange={handleBuyNowAddressChange} />
+                    </label>
+                    <div className="buy-now-form-row">
+                      <label>
+                        <span>City *</span>
+                        <input name="city" value={buyNowAddressForm.city} onChange={handleBuyNowAddressChange} />
+                      </label>
+                      <label>
+                        <span>State *</span>
+                        <input name="state" value={buyNowAddressForm.state} onChange={handleBuyNowAddressChange} />
+                      </label>
+                    </div>
+                    <div className="buy-now-form-row">
+                      <label>
+                        <span>Pincode *</span>
+                        <input name="pincode" inputMode="numeric" value={buyNowAddressForm.pincode} onChange={handleBuyNowAddressChange} />
+                      </label>
+                      <label>
+                        <span>Phone *</span>
+                        <input name="phone" inputMode="tel" value={buyNowAddressForm.phone} onChange={handleBuyNowAddressChange} />
+                      </label>
+                    </div>
+                    <label>
+                      <span>Landmark</span>
+                      <input name="landmark" value={buyNowAddressForm.landmark} onChange={handleBuyNowAddressChange} />
+                    </label>
+                    <label className="buy-now-checkbox">
+                      <input type="checkbox" name="is_default" checked={buyNowAddressForm.is_default} onChange={handleBuyNowAddressChange} />
+                      <span>Set as default address</span>
+                    </label>
+                    <div className="buy-now-form-actions">
+                      {editingBuyNowAddressId && (
+                        <button type="button" onClick={() => {
+                          resetBuyNowForm();
+                          setShowBuyNowAddressForm(false);
+                        }}>
+                          Cancel
+                        </button>
+                      )}
+                      <button type="button" onClick={saveBuyNowAddress} disabled={buyNowLoading}>
+                        {buyNowLoading ? "Saving..." : "Save address"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              <section className="buy-now-section">
+                <div className="buy-now-section-title">
+                  <h3>Payment</h3>
+                </div>
+                <div className="buy-now-payment-grid">
+                  <button
+                    type="button"
+                    className={buyNowPayment === "prepaid" ? "active" : ""}
+                    onClick={() => setBuyNowPayment("prepaid")}
+                    disabled={!canUsePrepaid}
+                  >
+                    <Icon icon="lucide:credit-card" />
+                    <span>Prepaid Razorpay</span>
+                    <small>Online payment available</small>
+                  </button>
+                  <button
+                    type="button"
+                    className={buyNowPayment === "cod" ? "active" : ""}
+                    onClick={() => setBuyNowPayment("cod")}
+                    disabled={!canUseCod}
+                  >
+                    <Icon icon="lucide:banknote" />
+                    <span>Cash on Delivery</span>
+                    <small>{canUseCod ? `Available below ${formatMoney(COD_MAX_AMOUNT)}` : `Not available above ${formatMoney(COD_MAX_AMOUNT)}`}</small>
+                  </button>
+                </div>
+              </section>
+
+              <button
+                type="button"
+                className="buy-now-proceed"
+                onClick={proceedToFinalPayment}
+                disabled={buyNowLoading || buyNowShippingLoading || !selectedBuyNowAddress || !buyNowShipping || buyNowShipping?.unavailable}
+              >
+                {buyNowShippingLoading ? "Checking delivery..." : "Proceed"}
+              </button>
+                </>
+              ) : (
+                <>
+              <section className="buy-now-section">
+                <div className="buy-now-section-title">
+                  <h3>Review details</h3>
+                  <button type="button" onClick={() => setBuyNowStep("details")}>
+                    <Icon icon="lucide:arrow-left" />
+                    Back
+                  </button>
+                </div>
+                <div className="buy-now-review-card">
+                  <span>Deliver to</span>
+                  <strong>{selectedBuyNowAddress?.name || user?.name}</strong>
+                  <p>{getAddressLine(selectedBuyNowAddress)}</p>
+                  <small>{selectedBuyNowAddress?.phone || user?.phone}</small>
+                </div>
+                <div className="buy-now-review-card">
+                  <span>Payment method</span>
+                  <strong>{buyNowPayment === "cod" ? "Cash on Delivery" : "Prepaid Razorpay"}</strong>
+                  <p>{buyNowPayment === "cod" ? "Pay when your order is delivered." : "Pay securely online."}</p>
+                </div>
+              </section>
+
+              <section className="buy-now-section">
+                <div className="buy-now-section-title">
+                  <h3>Coupons & wallet</h3>
+                </div>
+                {availableCoupons.length > 0 && (
+                  <div className="buy-now-coupon-list">
+                    {availableCoupons.slice(0, 6).map((coupon) => (
+                      <button
+                        type="button"
+                        key={coupon.id || coupon.code}
+                        className={appliedBuyNowCoupon?.code === coupon.code ? "active" : ""}
+                        onClick={() => applyBuyNowCoupon(coupon.code)}
+                        disabled={couponLoading || Boolean(appliedBuyNowCoupon)}
+                      >
+                        <strong>{coupon.code}</strong>
+                        <span>
+                          {coupon.discount_type === "percentage"
+                            ? `${coupon.discount_percent || 0}% off`
+                            : `${formatMoney(coupon.discount_amount)} off`}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="buy-now-coupon">
+                  <input
+                    type="text"
+                    placeholder="Coupon code"
+                    value={couponCode}
+                    onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                    disabled={Boolean(appliedBuyNowCoupon)}
+                  />
+                  {appliedBuyNowCoupon ? (
+                    <button type="button" onClick={removeBuyNowCoupon}>Remove</button>
+                  ) : (
+                    <button type="button" onClick={applyBuyNowCoupon} disabled={couponLoading || buyNowGrossTotal <= 0}>
+                      {couponLoading ? "Applying..." : "Apply"}
+                    </button>
+                  )}
+                </div>
+                <label className={`buy-now-wallet ${walletBalance <= 0 ? "disabled" : ""}`}>
+                  <input
+                    type="checkbox"
+                    checked={useWallet}
+                    onChange={(event) => setUseWallet(event.target.checked)}
+                    disabled={walletBalance <= 0}
+                  />
+                  <span>
+                    <strong>Use wallet balance</strong>
+                    <small>{walletBalance > 0 ? `${formatMoney(walletBalance)} available` : "No wallet balance available"}</small>
+                  </span>
+                </label>
+              </section>
+
+              <section className="buy-now-section buy-now-final-section">
+                <div className="buy-now-item">
+                  {mainImage && <img src={mainImage} alt="" />}
+                  <div>
+                    <strong>{productName}</strong>
+                    <span>{selectedColor?.name ? `${selectedColor.name} • ` : ""}Qty {quantity}</span>
+                  </div>
+                  <b>{formatMoney(buyNowSubtotal)}</b>
+                </div>
+
+                <div className="buy-now-totals">
+                  <p>
+                    <span>Product total</span>
+                    <strong>{formatMoney(buyNowSubtotal)}</strong>
+                  </p>
+                  <p>
+                    <span>Delivery charge</span>
+                    <strong>
+                      {buyNowShippingLoading ? "Checking..." : buyNowShipping?.unavailable ? "Unavailable" : formatMoney(buyNowShippingRate)}
+                    </strong>
+                  </p>
+                  {isFirstOrder && buyNowShippingRate > 0 && (
+                    <p className="buy-now-free">
+                      <span>Free shipping on first order</span>
+                      <strong>-{formatMoney(buyNowShippingDiscount)}</strong>
+                    </p>
+                  )}
+                  {buyNowCouponDiscount > 0 && (
+                    <p className="buy-now-free">
+                      <span>Coupon discount</span>
+                      <strong>-{formatMoney(buyNowCouponDiscount)}</strong>
+                    </p>
+                  )}
+                  {walletUsableAmount > 0 && (
+                    <p className="buy-now-free">
+                      <span>Wallet used</span>
+                      <strong>-{formatMoney(walletUsableAmount)}</strong>
+                    </p>
+                  )}
+                  {buyNowShipping?.deliveryDate && (
+                    <p>
+                      <span>Estimated delivery</span>
+                      <strong>{buyNowShipping.deliveryDate}</strong>
+                    </p>
+                  )}
+                  <p className="buy-now-total">
+                    <span>Final amount</span>
+                    <strong>{formatMoney(buyNowTotal)}</strong>
+                  </p>
+                </div>
+
+                {isFirstOrder && (
+                  <div className="buy-now-offer">
+                    <Icon icon="lucide:sparkles" />
+                    <span>First order benefit applied: shipping charge is deducted at checkout.</span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  className="buy-now-place"
+                  onClick={placeBuyNowOrder}
+                  disabled={buyNowLoading || buyNowShippingLoading || buyNowPlacing || !selectedBuyNowAddress || !buyNowShipping || buyNowShipping?.unavailable}
+                >
+                  {buyNowPlacing ? "Processing..." : buyNowPayment === "cod" ? "Place COD Order" : "Pay & Place Order"}
+                </button>
+              </section>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

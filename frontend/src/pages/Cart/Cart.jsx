@@ -3,9 +3,11 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
+import { useNotification } from "../../context/NotificationContext";
 import api from "../../utils/api";
 import { API_ENDPOINTS } from "../../config/api";
 import EmptyStateIcon from "../../components/EmptyStateIcon";
+import { getProductStockInfo } from "../../utils/stockStatus";
 import "./Cart.css";
 
 const Cart = () => {
@@ -20,6 +22,7 @@ const Cart = () => {
     removeCoupon 
   } = useCart();
   const { addToWishlist } = useWishlist();
+  const { showNotification } = useNotification();
 
   const [availableCoupons, setAvailableCoupons] = useState([]);
   const [showCouponDrawer, setShowCouponDrawer] = useState(false);
@@ -42,6 +45,18 @@ const Cart = () => {
   const handleApplyCoupon = (coupon) => {
     const success = applyCoupon(coupon);
     if (success) setShowCouponDrawer(false);
+  };
+
+  const handleCartQuantityChange = async (item, nextQuantity) => {
+    if (nextQuantity < 1) return;
+    const stockInfo = getProductStockInfo(item, item.colorId);
+    if (nextQuantity > stockInfo.quantity) {
+      showNotification(`Abhi is product ki sirf ${stockInfo.quantity} quantity add kar sakte ho.`, "warning");
+      return;
+    }
+
+    const result = await updateQuantity(item.id, nextQuantity, item.colorId);
+    if (result && !result.success) showNotification(result.message, "warning");
   };
 
   return (
@@ -80,7 +95,11 @@ const Cart = () => {
                 {cart.map((item, index) => {
                   const productName = item.name;
 
-                  return (
+                return (
+                  (() => {
+                    const stockInfo = getProductStockInfo(item, item.colorId);
+                    const isBlocked = stockInfo.isOutOfStock;
+                    return (
                   <div key={`${item.id}-${item.colorId}`} className={`bg-white rounded-lg p-6 shadow-sm border border-[#D4AF37]/10 flex flex-col sm:flex-row items-center gap-6 item-row transition-all animate-slide-up cart-row-delay-${index % 8}`}>
                     <div className="w-32 h-40 flex-shrink-0 rounded overflow-hidden shadow-md">
                       <img src={item.image_url} alt={productName} className="w-full h-full object-cover" />
@@ -92,6 +111,11 @@ const Cart = () => {
                         {item.colorId && <span className="ml-1 text-[#D4AF37]">Color Code: {item.colorId} •</span>} 
                         SKU: VNS-{item.id}
                       </p>
+                      {(stockInfo.isOutOfStock || stockInfo.isLowStock) && (
+                        <p className={`cart-stock-note ${stockInfo.isOutOfStock ? "out" : "low"}`}>
+                          {stockInfo.colorMessage || stockInfo.badge}
+                        </p>
+                      )}
                       <div className="flex items-center justify-center sm:justify-start space-x-4 text-sm font-medium">
                         <button onClick={() => addToWishlist(item)} className="text-gray-400 hover:text-[#800020] transition-colors">Save to Wishlist</button>
                         <span className="text-gray-300">|</span>
@@ -101,13 +125,21 @@ const Cart = () => {
                     <div className="flex flex-col items-center sm:items-end gap-4">
                       <span className="text-xl font-bold text-[#3D2817]">Rs. {Number(item.price).toLocaleString("en-IN")}</span>
                       <div className="flex items-center border border-[#D4AF37]/30 rounded-sm bg-white overflow-hidden">
-                        <button onClick={() => updateQuantity(item.id, item.quantity - 1, item.colorId)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-[#800020] transition-colors"><Icon icon="lucide:minus" /></button>
+                        <button onClick={() => handleCartQuantityChange(item, item.quantity - 1)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-[#800020] transition-colors"><Icon icon="lucide:minus" /></button>
                         <input type="number" value={item.quantity} readOnly className="w-10 text-center text-sm font-bold bg-transparent outline-none border-none" />
-                        <button onClick={() => updateQuantity(item.id, item.quantity + 1, item.colorId)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-[#800020] transition-colors"><Icon icon="lucide:plus" /></button>
+                        <button
+                          onClick={() => handleCartQuantityChange(item, item.quantity + 1)}
+                          disabled={isBlocked}
+                          className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-[#800020] transition-colors disabled:opacity-40"
+                        >
+                          <Icon icon="lucide:plus" />
+                        </button>
                       </div>
                     </div>
                   </div>
-                  );
+                    );
+                  })()
+                );
                 })}
                 <div className="pt-8 flex flex-col sm:flex-row gap-6 border-t border-[#D4AF37]/20">
                   <div className="flex items-center space-x-3 opacity-60">

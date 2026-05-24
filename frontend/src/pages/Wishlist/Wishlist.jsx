@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "@iconify/react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../../context/CartContext";
 import { useNotification } from "../../context/NotificationContext";
 import { useWishlist } from "../../context/WishlistContext";
@@ -8,12 +8,14 @@ import { API_ENDPOINTS } from "../../config/api";
 import api from "../../utils/api";
 import { getColorStock, getProductImages } from "../../utils/productMedia";
 import EmptyStateIcon from "../../components/EmptyStateIcon";
+import { getProductStockInfo } from "../../utils/stockStatus";
 import "./Wishlist.css";
 
 const Wishlist = () => {
   const { wishlist, removeFromWishlist, loading } = useWishlist();
   const { addToCart } = useCart();
   const { showNotification } = useNotification();
+  const navigate = useNavigate();
   const [colors, setColors] = useState([]);
   const [colorModalProduct, setColorModalProduct] = useState(null);
   const [selectedColorId, setSelectedColorId] = useState(null);
@@ -59,6 +61,12 @@ const Wishlist = () => {
   };
 
   const openColorModal = (product) => {
+    const productStock = getProductStockInfo(product);
+    if (productStock.isOutOfStock) {
+      showNotification("This saree is currently out of stock", "warning");
+      return;
+    }
+
     const colorOptions = getAvailableColors(product);
     const inStockColors = colorOptions.filter((color) => color.stock > 0);
     if (!inStockColors.length) {
@@ -90,6 +98,25 @@ const Wishlist = () => {
       showNotification("Added to bag!");
       setColorModalProduct(null);
       setSelectedColorId(null);
+    } else {
+      showNotification(result?.message || "Failed to add to bag", "error");
+    }
+  };
+
+  const handleBuyNow = async () => {
+    if (!colorModalProduct || !selectedColorId) {
+      showNotification("Please choose a color first", "warning");
+      return;
+    }
+
+    setAddingToBag(true);
+    const result = await addToCart(colorModalProduct, 1, selectedColorId);
+    setAddingToBag(false);
+
+    if (result?.success) {
+      setColorModalProduct(null);
+      setSelectedColorId(null);
+      navigate("/checkout");
     } else {
       showNotification(result?.message || "Failed to add to bag", "error");
     }
@@ -142,10 +169,9 @@ const Wishlist = () => {
             const mrp = Number(item.mrp_price || item.mrp || 0);
             const hasDiscount = mrp > price && price > 0;
             const discountPercent = Number(item.discount_percent || Math.round(((mrp - price) / mrp) * 100) || 0);
-            const stockQuantity = Number(item.stock_quantity ?? 0);
-            const lowStockThreshold = Number(item.low_stock_threshold || 5);
-            const isOutOfStock = item.status !== "active" || stockQuantity <= 0;
-            const isLowStock = !isOutOfStock && stockQuantity <= lowStockThreshold;
+            const stockInfo = getProductStockInfo(item);
+            const isOutOfStock = stockInfo.isOutOfStock;
+            const isLowStock = stockInfo.isLowStock;
 
             return (
               <article key={item.id} className={`wishlist-card ${isOutOfStock ? "out-of-stock" : ""}`}>
@@ -155,7 +181,7 @@ const Wishlist = () => {
                     <span className="wishlist-discount-badge">{discountPercent}% off</span>
                   )}
                   {isOutOfStock && <span className="wishlist-stock-badge">Out of stock</span>}
-                  {isLowStock && <span className="wishlist-stock-badge low">Few stocks available</span>}
+                  {isLowStock && <span className="wishlist-stock-badge low">{stockInfo.badge}</span>}
                 </Link>
                 <button
                   type="button"
@@ -243,11 +269,11 @@ const Wishlist = () => {
                 >
                   <span style={{ backgroundColor: color.hex_code || "#d8b46a" }} />
                   <strong>{color.name}</strong>
-                  <small className={color.stock <= 0 ? "stock-out" : color.stock <= Number(colorModalProduct.low_stock_threshold || 5) ? "stock-low" : ""}>
+                  <small className={color.stock <= 0 ? "stock-out" : color.stock < Number(colorModalProduct.low_stock_threshold || 5) ? "stock-low" : ""}>
                     {color.stock <= 0
                       ? "This color is out of stock"
-                      : color.stock <= Number(colorModalProduct.low_stock_threshold || 5)
-                        ? "Few stocks available"
+                      : color.stock < Number(colorModalProduct.low_stock_threshold || 5)
+                        ? `Only ${color.stock} left`
                         : "Available"}
                   </small>
                 </button>
@@ -262,6 +288,15 @@ const Wishlist = () => {
             >
               <Icon icon="lucide:shopping-bag" />
               {addingToBag ? "Adding..." : "Add to Bag"}
+            </button>
+            <button
+              type="button"
+              className="wishlist-modal-add wishlist-modal-buy"
+              onClick={handleBuyNow}
+              disabled={addingToBag}
+            >
+              <Icon icon="lucide:zap" />
+              Buy Now
             </button>
           </section>
         </div>

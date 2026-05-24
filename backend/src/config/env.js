@@ -37,6 +37,7 @@ const config = {
   referralOrderDelayDays: Number(process.env.REFERRAL_ORDER_DELAY_DAYS || 7),
   referralMilestoneCount: Number(process.env.REFERRAL_MILESTONE_COUNT || 3),
   referralMilestoneBonus: Number(process.env.REFERRAL_MILESTONE_BONUS || 1000),
+  codMaxAmount: Number(process.env.COD_MAX_AMOUNT || 10000),
   msg91AuthKey: normalize(process.env.MSG91_AUTHKEY),
   requireMsg91Otp: appMode === "prod" || parseBoolean(process.env.REQUIRE_MSG91_OTP, false),
 };

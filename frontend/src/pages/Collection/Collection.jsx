@@ -6,6 +6,7 @@ import { useWishlist } from "../../context/WishlistContext";
 import { useNotification } from "../../context/NotificationContext";
 import { API_ENDPOINTS } from "../../config/api";
 import { getProductCoverImage, getProductImages } from "../../utils/productMedia";
+import { getProductStockInfo } from "../../utils/stockStatus";
 import "./Collection.css";
 
 const PAGE_SIZE = 20;
@@ -444,14 +445,9 @@ const Collection = () => {
                 const sliderImages = productImages.length > 0 ? productImages : [{ url: cover }];
                 const activeSlide = activeSlides[product.id] || 0;
                 const imageReady = Boolean(loadedImages[product.id]);
-                const hasStockQuantity =
-                  product.stock_quantity !== undefined &&
-                  product.stock_quantity !== null &&
-                  product.stock_quantity !== "";
-                const stockQuantity = hasStockQuantity ? Number(product.stock_quantity) : null;
-                const lowStockThreshold = Number(product.low_stock_threshold || 5);
-                const isOutOfStock = hasStockQuantity && stockQuantity <= 0;
-                const isLowStock = hasStockQuantity && stockQuantity > 0 && stockQuantity < lowStockThreshold;
+                const stockInfo = getProductStockInfo(product);
+                const isOutOfStock = stockInfo.isOutOfStock;
+                const isLowStock = stockInfo.isLowStock;
 
                 return (
                 <div
@@ -478,7 +474,7 @@ const Collection = () => {
                   >
                     {!imageReady && <span className="card-image-shimmer" aria-hidden="true" />}
                     {isOutOfStock && <span className="collection-stock-badge">Out of stock</span>}
-                    {isLowStock && <span className="collection-stock-badge low">Very few stocks available</span>}
+                    {isLowStock && <span className="collection-stock-badge low">{stockInfo.badge}</span>}
                     <div
                       className={`card-img-track ${imageReady ? "is-loaded" : ""}`}
                       style={{ transform: `translateX(-${activeSlide * 100}%)` }}

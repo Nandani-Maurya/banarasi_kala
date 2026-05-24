@@ -3,7 +3,9 @@ const OrderItem = require('../models/OrderItem');
 const Product = require('../models/Product');
 const Color = require('../models/Color');
 const Customer = require('../models/Customer');
+const WalletTransaction = require('../models/WalletTransaction');
 const { sequelize } = require('../config/db');
+const { DataTypes } = require('sequelize');
 const EmailService = require('../services/EmailService');
 const ShipRocketService = require('../services/ShipRocketService');
 const WalletService = require('../services/WalletService');
@@ -47,34 +49,72 @@ const serializeOrder = (order) => {
   return json;
 };
 
+let orderAccountingColumnsReady = false;
+let orderColumnCache = null;
+
+const ensureOrderAccountingColumns = async () => {
+  const queryInterface = sequelize.getQueryInterface();
+  const table = { tableName: 'orders', schema: 'vns_saree' };
+  if (orderAccountingColumnsReady && orderColumnCache) return orderColumnCache;
+  let columns = await queryInterface.describeTable(table);
+  const wanted = {
+    subtotal_amount: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
+    shipping_charge: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
+    shipping_discount: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
+    wallet_amount: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
+    payable_amount: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
+    payment_method: { type: DataTypes.STRING, allowNull: true, defaultValue: 'Prepaid' },
+    payment_status: { type: DataTypes.STRING, allowNull: true, defaultValue: 'Paid' },
+    shiprocket_order_id: { type: DataTypes.STRING, allowNull: true },
+    shiprocket_awb: { type: DataTypes.STRING, allowNull: true },
+    cancelled_at: { type: DataTypes.DATE, allowNull: true },
+    refund_status: { type: DataTypes.STRING, allowNull: true },
+    refund_note: { type: DataTypes.TEXT, allowNull: true },
+  };
+
+  let changed = false;
+  for (const [column, definition] of Object.entries(wanted)) {
+    if (!columns[column]) {
+      await queryInterface.addColumn(table, column, definition);
+      changed = true;
+    }
+  }
+  if (changed) columns = await queryInterface.describeTable(table);
+  orderColumnCache = columns;
+  orderAccountingColumnsReady = true;
+  return columns;
+};
+
+const keepExistingColumns = (payload, columns) =>
+  Object.fromEntries(Object.entries(payload).filter(([key]) => columns[key]));
+
 class OrderController {
   async createOrder(req, res) {
     const t = await sequelize.transaction();
     try {
       const { 
         customer_name, customer_email, address, city, state, pincode, phone, 
-        total_amount, items, coupon_code, payment_method = 'Prepaid', payment_status = 'Paid'
+        subtotal_amount, shipping_charge = 0, shipping_discount = 0,
+        total_amount, items, coupon_code, wallet_amount = 0, payment_method = 'Prepaid', payment_status = 'Paid'
       } = req.body;
       if (!Array.isArray(items) || items.length === 0) {
+        await t.rollback();
         return res.status(400).json({ message: 'Order items are required' });
       }
 
       const productIds = items.map((item) => item.id).filter(Boolean);
-      const products = await Product.findAll({ where: { id: productIds }, transaction: t });
+      const products = await Product.findAll({ where: { id: productIds }, attributes: ['id'], transaction: t });
       const productMap = Object.fromEntries(products.map((p) => [p.id, p]));
       const missingProductId = productIds.find((id) => !productMap[id]);
       if (missingProductId) {
+        await t.rollback();
         return res.status(400).json({ message: `Invalid product in cart: ${missingProductId}` });
       }
 
       if (String(payment_method).toUpperCase() === 'COD') {
-        const prepaidOnly = items.find((item) => {
-          const product = productMap[item.id];
-          const options = Array.isArray(product?.payment_options) ? product.payment_options : [];
-          return !options.includes('cod');
-        });
-        if (prepaidOnly) {
-          return res.status(400).json({ message: `COD is not allowed for product ${prepaidOnly.id}` });
+        if (Number(total_amount || 0) > config.codMaxAmount) {
+          await t.rollback();
+          return res.status(400).json({ message: `COD is available only up to Rs. ${config.codMaxAmount}.` });
         }
       }
 
@@ -83,7 +123,10 @@ class OrderController {
         : null;
 
       let discount_amount = 0;
-      let final_total = total_amount;
+      const itemSubtotal = Number(subtotal_amount || items.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 1)), 0));
+      const actualShippingCharge = Math.max(0, Number(shipping_charge || 0));
+      const actualShippingDiscount = Math.max(0, Math.min(actualShippingCharge, Number(shipping_discount || 0)));
+      let final_total = Number(total_amount || 0);
 
       if (coupon_code) {
         const Coupon = require('../models/Coupon');
@@ -91,21 +134,37 @@ class OrderController {
         if (coupon) {
           // Double check validity (simple check here)
           if (coupon.discount_type === 'percentage') {
-            discount_amount = (total_amount * coupon.discount_percent) / 100;
+            discount_amount = (final_total * coupon.discount_percent) / 100;
             if (coupon.max_discount_amount) {
               discount_amount = Math.min(discount_amount, coupon.max_discount_amount);
             }
           } else {
             discount_amount = coupon.discount_amount;
           }
-          final_total = total_amount - discount_amount;
+          final_total = Math.max(0, final_total - discount_amount);
           
           // Increment usage
           await coupon.increment('usage_count', { by: 1, transaction: t });
         }
       }
 
-      const order = await Order.create({
+      let walletDebit = 0;
+      if (Number(wallet_amount || 0) > 0) {
+        if (!customer) {
+          await t.rollback();
+          return res.status(400).json({ message: 'Wallet can be used only by logged in customers.' });
+        }
+
+        const lockedCustomer = await Customer.findByPk(customer.id, { transaction: t, lock: t.LOCK.UPDATE });
+        const walletBalance = Number(lockedCustomer?.wallet_balance || 0);
+        walletDebit = Math.min(Number(wallet_amount || 0), walletBalance, final_total);
+        if (walletDebit > 0) {
+          final_total = Math.max(0, final_total - walletDebit);
+        }
+      }
+
+      const orderColumns = await ensureOrderAccountingColumns();
+      const orderPayload = keepExistingColumns({
         customer_id: customer?.id || null,
         customer_name,
         customer_email,
@@ -114,12 +173,22 @@ class OrderController {
         state: state || 'Uttar Pradesh',
         pincode,
         phone,
+        subtotal_amount: itemSubtotal,
+        shipping_charge: actualShippingCharge,
+        shipping_discount: actualShippingDiscount,
         total_amount: final_total,
         coupon_code,
         discount_amount,
+        wallet_amount: walletDebit,
+        payable_amount: final_total,
         payment_method,
         payment_status: payment_method === 'COD' ? 'Pending' : payment_status
-      }, { transaction: t });
+      }, orderColumns);
+
+      const order = await Order.create(orderPayload, {
+        fields: Object.keys(orderPayload),
+        transaction: t,
+      });
 
       const orderItems = items.map(item => ({
         order_id: order.id,
@@ -131,6 +200,23 @@ class OrderController {
       }));
 
       await OrderItem.bulkCreate(orderItems, { transaction: t });
+
+      if (walletDebit > 0 && customer) {
+        await WalletTransaction.create({
+          customer_id: customer.id,
+          amount: -walletDebit,
+          type: "ORDER_PAYMENT",
+          status: "completed",
+          available_at: null,
+          dedupe_key: `order_wallet:${order.id}`,
+          meta: { order_id: order.id },
+        }, { transaction: t });
+
+        await Customer.decrement(
+          { wallet_balance: walletDebit },
+          { where: { id: customer.id }, transaction: t },
+        );
+      }
 
       await t.commit();
 
@@ -155,8 +241,10 @@ class OrderController {
           const updatePayload = {};
           if (srResult?.order_id) updatePayload.shiprocket_order_id = String(srResult.order_id);
           if (srResult?.awb_code) updatePayload.shiprocket_awb = String(srResult.awb_code);
-          if (Object.keys(updatePayload).length > 0) {
-            await Order.update(updatePayload, { where: { id: order.id } });
+          const currentColumns = await ensureOrderAccountingColumns();
+          const safeUpdatePayload = keepExistingColumns(updatePayload, currentColumns);
+          if (Object.keys(safeUpdatePayload).length > 0) {
+            await Order.update(safeUpdatePayload, { where: { id: order.id } });
           }
 
           console.log(`[ShipRocket] ✅ Order #${order.id} pushed → SR Order: ${srResult.order_id}, Shipment: ${srResult.shipment_id}`);
@@ -175,6 +263,7 @@ class OrderController {
 
   async getMyOrders(req, res) {
     try {
+      await ensureOrderAccountingColumns();
       const orders = await Order.findAll({
         include: [{
           model: OrderItem,
@@ -194,6 +283,7 @@ class OrderController {
   // ── Get all orders for a customer email ─────────────────────────────────────
   async getOrdersByEmail(req, res) {
     try {
+      await ensureOrderAccountingColumns();
       const { email } = req.params;
       const orders = await Order.findAll({
         where: { customer_email: email },
@@ -234,6 +324,86 @@ class OrderController {
     } catch (error) {
       console.error('[Track] Error:', error?.response?.data || error.message);
       res.status(500).json({ message: 'Tracking unavailable', detail: error.message });
+    }
+  }
+
+  async cancelOrder(req, res) {
+    const t = await sequelize.transaction();
+    try {
+      const { id } = req.params;
+      const requesterEmail = String(req.body?.email || '').trim().toLowerCase();
+      const order = await Order.findByPk(id, { transaction: t, lock: t.LOCK.UPDATE });
+
+      if (!order) {
+        await t.rollback();
+        return res.status(404).json({ message: 'Order not found' });
+      }
+
+      if (requesterEmail && String(order.customer_email || '').toLowerCase() !== requesterEmail) {
+        await t.rollback();
+        return res.status(403).json({ message: 'This order does not belong to this customer.' });
+      }
+
+      const currentStatus = String(order.status || '').toLowerCase();
+      if (['cancelled', 'delivered'].includes(currentStatus)) {
+        await t.rollback();
+        return res.status(400).json({ message: `Order is already ${order.status}.` });
+      }
+
+      const createdAt = new Date(order.createdAt);
+      const hoursSinceOrder = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
+      if (hoursSinceOrder > 24) {
+        await t.rollback();
+        return res.status(400).json({ message: 'Cancellation is available only within 24 hours of placing the order.' });
+      }
+
+      let shiprocketCancel = null;
+      if (order.shiprocket_order_id) {
+        try {
+          shiprocketCancel = await ShipRocketService.cancelOrders([order.shiprocket_order_id]);
+        } catch (error) {
+          console.error(`[ShipRocket] Cancel failed for order #${order.id}:`, error?.response?.data || error.message);
+          shiprocketCancel = { warning: 'ShipRocket cancellation could not be confirmed automatically.' };
+        }
+      }
+
+      const paymentMethod = String(order.payment_method || 'Prepaid');
+      const paidAmount = Number(order.payable_amount ?? order.total_amount ?? 0);
+      const refundNote = paymentMethod.toUpperCase() === 'COD'
+        ? 'COD order cancelled. No prepaid refund is needed.'
+        : `Refund of Rs. ${paidAmount.toLocaleString('en-IN')} will be processed in 1-2 days.`;
+
+      const columns = await ensureOrderAccountingColumns();
+      const updatePayload = keepExistingColumns({
+        status: 'Cancelled',
+        cancelled_at: new Date(),
+        refund_status: paymentMethod.toUpperCase() === 'COD' ? 'Not Required' : 'Refund Pending',
+        refund_note: refundNote,
+        payment_status: paymentMethod.toUpperCase() === 'COD' ? 'Cancelled' : 'Refund Pending',
+      }, columns);
+
+      await order.update(updatePayload, { transaction: t });
+      await t.commit();
+
+      const updatedOrder = await Order.findByPk(id, {
+        include: [{
+          model: OrderItem,
+          include: [
+            { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
+            { model: Color, attributes: ['id', 'name', 'hex_code'] },
+          ],
+        }],
+      });
+
+      return res.status(200).json({
+        message: 'Order cancelled successfully.',
+        refund_message: refundNote,
+        shiprocket: shiprocketCancel,
+        order: serializeOrder(updatedOrder),
+      });
+    } catch (error) {
+      await t.rollback();
+      return res.status(500).json({ message: error.message });
     }
   }
 

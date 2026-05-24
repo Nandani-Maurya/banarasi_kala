@@ -22,6 +22,7 @@ const HOME_PRODUCT_ATTRIBUTES = [
   "color_stocks",
   "stock_quantity",
   "low_stock_threshold",
+  "status",
 ];
 const COLLECTION_PRODUCT_ATTRIBUTES = [
   "id",
@@ -36,6 +37,7 @@ const COLLECTION_PRODUCT_ATTRIBUTES = [
   "color_stocks",
   "stock_quantity",
   "low_stock_threshold",
+  "status",
 ];
 
 const toIntOrNull = (value) => {
@@ -128,7 +130,7 @@ const getStockStatus = (quantity, threshold = 5) => {
   const stock = toIntOrZero(quantity);
   const low = toIntOrZero(threshold || 5);
   if (stock <= 0) return "out_of_stock";
-  if (stock <= low) return "low_stock";
+  if (stock < low) return "low_stock";
   return "in_stock";
 };
 
@@ -156,6 +158,8 @@ const toHomeProduct = (product) => {
     is_new_arrival: Boolean(coverProduct.is_new_arrival),
     stock_quantity: coverProduct.stock_quantity,
     low_stock_threshold: coverProduct.low_stock_threshold,
+    status: coverProduct.status,
+    stock_status: getStockStatus(coverProduct.stock_quantity, coverProduct.low_stock_threshold),
   };
 };
 
@@ -173,6 +177,8 @@ const toCollectionProduct = (product) => {
     is_new_arrival: Boolean(coverProduct.is_new_arrival),
     stock_quantity: coverProduct.stock_quantity,
     low_stock_threshold: coverProduct.low_stock_threshold,
+    status: coverProduct.status,
+    stock_status: getStockStatus(coverProduct.stock_quantity, coverProduct.low_stock_threshold),
   };
 };
 
@@ -362,7 +368,7 @@ class ProductService {
     if (stockStatus === "in_stock") queryOptions.where.stock_quantity = { [Op.gt]: 0 };
     else if (stockStatus === "out_of_stock") queryOptions.where.stock_quantity = { [Op.lte]: 0 };
     else if (stockStatus === "low_stock") {
-      queryOptions.where.stock_quantity = { [Op.and]: [{ [Op.gt]: 0 }, { [Op.lte]: 5 }] };
+      queryOptions.where.stock_quantity = { [Op.and]: [{ [Op.gt]: 0 }, { [Op.lt]: 5 }] };
     }
 
     const rows = (await Product.findAll(queryOptions)).map(normalizeProduct);
@@ -404,7 +410,7 @@ class ProductService {
         const stock = toIntOrZero(product.stock_quantity);
         const low = toIntOrZero(product.low_stock_threshold);
         if (stock <= 0) acc.outOfStock += 1;
-        else if (stock <= low) acc.lowStock += 1;
+        else if (stock < low) acc.lowStock += 1;
         else acc.inStock += 1;
         return acc;
       },
@@ -431,7 +437,7 @@ class ProductService {
         const stock = toIntOrZero(product.stock_quantity);
         const low = toIntOrZero(product.low_stock_threshold || 5);
         if (stock <= 0) acc.outOfStock += 1;
-        else if (stock <= low) acc.lowStock += 1;
+        else if (stock < low) acc.lowStock += 1;
         else acc.inStock += 1;
         return acc;
       },
@@ -466,6 +472,7 @@ class ProductService {
         "color_stocks",
         "stock_quantity",
         "low_stock_threshold",
+        "status",
         "weight",
         "length",
         "width",
@@ -504,18 +511,19 @@ class ProductService {
       const qty = product.color_stocks?.[String(plain.id)] ?? 0;
       return {
         ...plain,
+        stock_quantity: toIntOrZero(qty),
         stock_status: getStockStatus(qty, product.low_stock_threshold),
       };
     });
 
     delete product.color_stocks;
-    delete product.stock_quantity;
 
     return {
       ...product,
       images: selectedImages,
       selected_color_id: selectedColorId,
       colors: colorMeta,
+      stock_status: getStockStatus(product.stock_quantity, product.low_stock_threshold),
     };
   }
 
@@ -536,6 +544,7 @@ class ProductService {
     return {
       product_id: product.id,
       color_id: targetColorId,
+      stock_quantity: toIntOrZero(stock),
       stock_status: getStockStatus(stock, product.low_stock_threshold),
       images,
     };

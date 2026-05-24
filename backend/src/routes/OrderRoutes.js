@@ -12,6 +12,9 @@ router.get('/my/:email', OrderController.getOrdersByEmail);
 // Live tracking by order ID (fetches ShipRocket tracking data)
 router.get('/track/:orderId', OrderController.trackOrder);
 
+// Customer cancellation: allowed within 24 hours, also attempts ShipRocket cancel.
+router.post('/:id/cancel', OrderController.cancelOrder);
+
 // Admin/order lookup route.
 router.get('/', OrderController.getMyOrders);
 

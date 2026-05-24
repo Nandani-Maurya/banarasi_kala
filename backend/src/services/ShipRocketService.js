@@ -96,7 +96,10 @@ class ShipRocketService {
     // Fetch product details for true dimensions & weights
     const productIds = items.map(item => item.product_id).filter(Boolean);
     const Product = require('../models/Product');
-    const dbProducts = await Product.findAll({ where: { id: productIds } });
+    const dbProducts = await Product.findAll({
+      where: { id: productIds },
+      attributes: ["id", "weight", "length", "width"],
+    });
     const productMap = {};
     dbProducts.forEach(p => {
       productMap[p.id] = p;
@@ -171,7 +174,10 @@ class ShipRocketService {
     // Fetch product details for true dimensions & weights
     const productIds = items.map(item => item.product_id).filter(Boolean);
     const Product = require('../models/Product');
-    const dbProducts = await Product.findAll({ where: { id: productIds } });
+    const dbProducts = await Product.findAll({
+      where: { id: productIds },
+      attributes: ["id", "weight", "length", "width"],
+    });
     const productMap = {};
     dbProducts.forEach(p => {
       productMap[p.id] = p;

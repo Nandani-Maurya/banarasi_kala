@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { getProductCoverImage, getProductImages } from "../../../utils/productMedia";
+import { getProductStockInfo } from "../../../utils/stockStatus";
 import "./PopularSarees.css";
 
 const calcDiscount = (mrp, sell) => {
@@ -22,7 +23,6 @@ const PopularSarees = () => {
 
     const params = new URLSearchParams({
       status: "active",
-      stockStatus: "in_stock",
       storeFrontVisibility: "true",
       limit: "10",
       view: "home",
@@ -139,6 +139,7 @@ const PopularSarees = () => {
             const sliderImages = cardImages.length > 0 ? cardImages : [{ url: img }];
             const liked = wishlist[product.id];
             const activeIndex = activeSlides[product.id] || 0;
+            const stockInfo = getProductStockInfo(product);
             const motionClass =
               index % 3 === 0
                 ? "from-left"
@@ -161,6 +162,11 @@ const PopularSarees = () => {
                     className="bk-popular-card-link"
                   >
                     <div className="bk-popular-image-wrap">
+                      {(stockInfo.isOutOfStock || stockInfo.isLowStock) && (
+                        <span className={`bk-home-stock-badge ${stockInfo.isOutOfStock ? "out" : "low"}`}>
+                          {stockInfo.badge}
+                        </span>
+                      )}
                       <div
                         className="bk-popular-image-track"
                         style={{

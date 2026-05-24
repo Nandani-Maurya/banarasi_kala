@@ -468,6 +468,13 @@
   cursor: wait;
 }
 
+.wishlist-modal-buy {
+  margin-top: 10px;
+  color: #800020;
+  background: #ffe8ad;
+  border: 1px solid rgba(128, 0, 32, 0.18);
+}
+
 .wishlist-card-skeleton {
   pointer-events: none;
 }

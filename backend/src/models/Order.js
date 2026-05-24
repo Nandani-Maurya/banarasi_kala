@@ -35,6 +35,21 @@ const Order = sequelize.define('Order', {
     type: DataTypes.STRING,
     allowNull: false
   },
+  subtotal_amount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    defaultValue: 0
+  },
+  shipping_charge: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    defaultValue: 0
+  },
+  shipping_discount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    defaultValue: 0
+  },
   total_amount: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false
@@ -44,6 +59,16 @@ const Order = sequelize.define('Order', {
     allowNull: true
   },
   discount_amount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    defaultValue: 0
+  },
+  wallet_amount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    defaultValue: 0
+  },
+  payable_amount: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
     defaultValue: 0
@@ -74,6 +99,18 @@ const Order = sequelize.define('Order', {
   },
   shiprocket_awb: {
     type: DataTypes.STRING,
+    allowNull: true
+  },
+  cancelled_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  refund_status: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  refund_note: {
+    type: DataTypes.TEXT,
     allowNull: true
   }
 }, {

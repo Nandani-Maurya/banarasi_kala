@@ -305,6 +305,28 @@
   font-weight: 950;
 }
 
+.bk-home-stock-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 4;
+  max-width: calc(100% - 20px);
+  padding: 6px 10px;
+  color: #fff8ed;
+  background: rgba(128, 0, 32, 0.92);
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.bk-home-stock-badge.low {
+  color: #7c2d12;
+  background: rgba(255, 237, 213, 0.94);
+  border: 1px solid rgba(194, 65, 12, 0.18);
+}
+
 .bk-arrival-mrp {
   color: rgba(78, 45, 27, 0.48);
   font-family: "Poppins", sans-serif;

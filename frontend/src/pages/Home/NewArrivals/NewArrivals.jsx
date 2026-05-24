@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { getProductCoverImage, getProductImages } from "../../../utils/productMedia";
+import { getProductStockInfo } from "../../../utils/stockStatus";
 import "./NewArrivals.css";
 
 const calcDiscount = (mrp, sell) => {
@@ -41,7 +42,6 @@ const NewArrivals = () => {
     const controller = new AbortController();
     const params = new URLSearchParams({
       status: "active",
-      stockStatus: "in_stock",
       storeFrontVisibility: "true",
       newArrival: "true",
       limit: "10",
@@ -144,6 +144,7 @@ const NewArrivals = () => {
                 const cardImages = getProductImages(product);
                 const sliderImages = cardImages.length > 0 ? cardImages : [{ url: cover }];
                 const activeIndex = activeSlides[product.id] || 0;
+                const stockInfo = getProductStockInfo(product);
 
                 return (
                   <article
@@ -157,6 +158,11 @@ const NewArrivals = () => {
                   >
                     <Link to={`/product/${product.slug}`} className="bk-arrival-link">
                       <div className="bk-arrival-media">
+                        {(stockInfo.isOutOfStock || stockInfo.isLowStock) && (
+                          <span className={`bk-home-stock-badge ${stockInfo.isOutOfStock ? "out" : "low"}`}>
+                            {stockInfo.badge}
+                          </span>
+                        )}
                         <div
                           className="bk-arrival-track"
                           style={{

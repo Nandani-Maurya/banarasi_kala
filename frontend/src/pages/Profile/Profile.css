@@ -384,7 +384,8 @@
   border: 1px solid rgba(128, 0, 32, 0.14);
   border-radius: 6px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 400;
+  line-height: 1.35;
 }
 
 .profile-edit input:disabled {
@@ -416,7 +417,7 @@
   gap: 6px;
   color: rgba(45, 27, 14, 0.62);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .profile-address-list {
@@ -590,7 +591,7 @@
   margin-bottom: 5px;
   color: #8a4c22;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -598,7 +599,7 @@
   display: block;
   color: #3d2817;
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 500;
 }
 
 .profile-location-card p {
@@ -620,7 +621,7 @@
   border: 1px solid rgba(128, 0, 32, 0.12);
   border-radius: 6px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
 }
 
@@ -673,7 +674,7 @@
   border: 1px solid rgba(128, 0, 32, 0.14);
   border-radius: 6px;
   font-size: 13px;
-  font-weight: 550;
+  font-weight: 400;
   text-align: left;
   cursor: pointer;
 }
@@ -723,7 +724,7 @@
   border: 0;
   border-radius: 5px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 400;
   text-align: left;
   cursor: pointer;
 }
