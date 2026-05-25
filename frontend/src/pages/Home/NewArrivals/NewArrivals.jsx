@@ -67,14 +67,20 @@ const NewArrivals = () => {
     const imageCount = getProductImages(product || {}).length;
     if (imageCount <= 1) return undefined;
 
-    const timer = window.setInterval(() => {
+    const advanceSlide = () => {
       setActiveSlides((current) => ({
         ...current,
         [hoveredProductId]: ((current[hoveredProductId] || 0) + 1) % imageCount,
       }));
-    }, 1450);
+    };
 
-    return () => window.clearInterval(timer);
+    const startTimer = window.setTimeout(advanceSlide, 650);
+    const timer = window.setInterval(advanceSlide, 2200);
+
+    return () => {
+      window.clearTimeout(startTimer);
+      window.clearInterval(timer);
+    };
   }, [hoveredProductId, products]);
 
   const handleCardEnter = (productId) => {
@@ -84,6 +90,13 @@ const NewArrivals = () => {
   const handleCardLeave = (productId) => {
     setHoveredProductId((current) => (current === productId ? null : current));
     setActiveSlides((current) => ({ ...current, [productId]: 0 }));
+  };
+
+  const goToSlide = (event, productId, slideIndex) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setActiveSlides((current) => ({ ...current, [productId]: slideIndex }));
+    setHoveredProductId(productId);
   };
 
   return (
@@ -129,8 +142,8 @@ const NewArrivals = () => {
                   <article
                     key={product.id}
                     className="bk-arrival-card"
-                    onMouseEnter={() => handleCardEnter(product.id)}
-                    onMouseLeave={() => handleCardLeave(product.id)}
+                    onPointerEnter={() => handleCardEnter(product.id)}
+                    onPointerLeave={() => handleCardLeave(product.id)}
                     onFocus={() => handleCardEnter(product.id)}
                     onBlur={() => handleCardLeave(product.id)}
                     style={{ transitionDelay: `${Math.min(index * 70, 490)}ms` }}
@@ -159,9 +172,12 @@ const NewArrivals = () => {
                         {sliderImages.length > 1 && (
                           <div className="bk-arrival-dots" aria-hidden="true">
                             {sliderImages.map((image, dotIndex) => (
-                              <span
+                              <button
+                                type="button"
                                 key={`${image.url}-dot-${dotIndex}`}
                                 className={dotIndex === activeIndex ? "is-active" : ""}
+                                onClick={(event) => goToSlide(event, product.id, dotIndex)}
+                                tabIndex={-1}
                               />
                             ))}
                           </div>

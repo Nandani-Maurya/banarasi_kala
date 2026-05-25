@@ -332,7 +332,7 @@ const Header = () => {
         <div className="bk-topline-track">
           {[...Array(4)].map((_, index) => (
             <p key={index}>
-              <span>Free shipping on your first order!</span>
+              <span>Free Delivery on All Orders!</span>
               <span className="bk-topline-separator" aria-hidden="true" />
               <span>Grab Rs.100 in your wallet right after sign up</span>
             </p>

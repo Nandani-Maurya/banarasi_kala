@@ -216,14 +216,20 @@ const Collection = () => {
     const imageCount = getProductImages(product || {}).length;
     if (imageCount <= 1) return undefined;
 
-    const timer = window.setInterval(() => {
+    const advanceSlide = () => {
       setActiveSlides((current) => ({
         ...current,
         [hoveredProductId]: ((current[hoveredProductId] || 0) + 1) % imageCount,
       }));
-    }, 1450);
+    };
 
-    return () => window.clearInterval(timer);
+    const startTimer = window.setTimeout(advanceSlide, 650);
+    const timer = window.setInterval(advanceSlide, 2200);
+
+    return () => {
+      window.clearTimeout(startTimer);
+      window.clearInterval(timer);
+    };
   }, [hoveredProductId, products]);
 
   const handleCardEnter = (productId) => {
@@ -233,6 +239,13 @@ const Collection = () => {
   const handleCardLeave = (productId) => {
     setHoveredProductId((current) => (current === productId ? null : current));
     setActiveSlides((current) => ({ ...current, [productId]: 0 }));
+  };
+
+  const goToSlide = (event, productId, slideIndex) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setActiveSlides((current) => ({ ...current, [productId]: slideIndex }));
+    setHoveredProductId(productId);
   };
 
   const markImageLoaded = (productId) => {
@@ -417,7 +430,7 @@ const Collection = () => {
                 <option value="newest">Sort by: New Arrivals</option>
                 <option value="price_asc">Price: Low to High</option>
                 <option value="price_desc">Price: High to Low</option>
-                <option value="special">Special Collections</option>
+                <option value="special">Exclusive Picks</option>
               </select>
             </div>
           </div>
@@ -453,8 +466,8 @@ const Collection = () => {
                 <div
                   key={product.id}
                   className={`product-card reveal-card ${isOutOfStock ? "out-of-stock" : ""}`}
-                  onMouseEnter={() => handleCardEnter(product.id)}
-                  onMouseLeave={() => handleCardLeave(product.id)}
+                  onPointerEnter={() => handleCardEnter(product.id)}
+                  onPointerLeave={() => handleCardLeave(product.id)}
                 >
                   <button
                     type="button"
@@ -495,9 +508,12 @@ const Collection = () => {
                     {sliderImages.length > 1 && (
                       <div className="collection-card-dots" aria-hidden="true">
                         {sliderImages.map((image, imageIndex) => (
-                          <span
+                          <button
+                            type="button"
                             key={`${image.url}-${imageIndex}`}
                             className={imageIndex === activeSlide ? "active" : ""}
+                            onClick={(event) => goToSlide(event, product.id, imageIndex)}
+                            tabIndex={-1}
                           />
                         ))}
                       </div>

@@ -170,7 +170,17 @@ const BrowseCircles = () => {
                 </button>
               ))}
             </div>
-            <div className="bk-browse-mobile-wrap">
+            <div
+              ref={mobileScrollerRef}
+              className="bk-browse-mobile-wrap"
+              onPointerDown={handleMobilePointerDown}
+              onPointerMove={handleMobilePointerMove}
+              onPointerUp={handleMobilePointerEnd}
+              onPointerCancel={handleMobilePointerEnd}
+              onPointerLeave={handleMobilePointerEnd}
+              onMouseEnter={() => pauseMobileAutoScroll()}
+              onWheel={() => pauseMobileAutoScroll()}
+            >
               <div className="bk-browse-row bk-browse-mobile">
                 {marqueeItems.map((item, index) => (
                   <button

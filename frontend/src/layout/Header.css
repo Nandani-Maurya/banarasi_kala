@@ -580,9 +580,9 @@ body.menu-open {
   margin: 0;
   padding: 0 42px;
   color: #c99a38;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: Georgia, "Times New Roman", serif !important;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
   text-shadow:

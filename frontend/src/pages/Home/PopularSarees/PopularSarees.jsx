@@ -73,14 +73,20 @@ const PopularSarees = () => {
     const imageCount = getProductImages(product || {}).length;
     if (imageCount <= 1) return undefined;
 
-    const timer = window.setInterval(() => {
+    const advanceSlide = () => {
       setActiveSlides((current) => ({
         ...current,
         [hoveredProductId]: ((current[hoveredProductId] || 0) + 1) % imageCount,
       }));
-    }, 1450);
+    };
 
-    return () => window.clearInterval(timer);
+    const startTimer = window.setTimeout(advanceSlide, 650);
+    const timer = window.setInterval(advanceSlide, 2200);
+
+    return () => {
+      window.clearTimeout(startTimer);
+      window.clearInterval(timer);
+    };
   }, [hoveredProductId, products]);
 
   const handleCardEnter = (productId) => {
@@ -92,12 +98,19 @@ const PopularSarees = () => {
     setActiveSlides((current) => ({ ...current, [productId]: 0 }));
   };
 
+  const goToSlide = (event, productId, slideIndex) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setActiveSlides((current) => ({ ...current, [productId]: slideIndex }));
+    setHoveredProductId(productId);
+  };
+
   return (
     <section className="bk-popular-section" ref={sectionRef}>
       <div className="bk-popular-shell">
         <div className="bk-popular-header">
           <div className="bk-popular-title-wrap">
-            <h2>Special Collection</h2>
+            <h2>Exclusive Picks</h2>
           </div>
         </div>
 
@@ -122,7 +135,7 @@ const PopularSarees = () => {
       ) : products.length === 0 ? (
         <div className="bk-popular-empty" role="status">
           <div className="bk-popular-empty-icon" aria-hidden="true" />
-          <h3>Curating Special Collection</h3>
+          <h3>Curating Exclusive Picks</h3>
           <p>Featured pieces will appear here as soon as the collection is ready.</p>
           <Link to="/collection" className="bk-popular-empty-link">
             Explore Collection
@@ -151,8 +164,8 @@ const PopularSarees = () => {
                 <article
                   key={product.id}
                   className={`bk-popular-card ${motionClass}`}
-                  onMouseEnter={() => handleCardEnter(product.id)}
-                  onMouseLeave={() => handleCardLeave(product.id)}
+                  onPointerEnter={() => handleCardEnter(product.id)}
+                  onPointerLeave={() => handleCardLeave(product.id)}
                   onFocus={() => handleCardEnter(product.id)}
                   onBlur={() => handleCardLeave(product.id)}
                   style={{ transitionDelay: `${Math.min(index * 80, 420)}ms` }}
@@ -196,9 +209,12 @@ const PopularSarees = () => {
                       {sliderImages.length > 1 && (
                         <div className="bk-popular-dots" aria-hidden="true">
                           {sliderImages.map((image, dotIndex) => (
-                            <span
+                            <button
+                              type="button"
                               key={`${image.url}-dot-${dotIndex}`}
                               className={dotIndex === activeIndex ? "is-active" : ""}
+                              onClick={(event) => goToSlide(event, product.id, dotIndex)}
+                              tabIndex={-1}
                             />
                           ))}
                         </div>

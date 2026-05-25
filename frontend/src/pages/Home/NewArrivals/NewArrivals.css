@@ -194,7 +194,7 @@
   height: 100%;
   display: flex;
   transform: translateX(0);
-  transition: transform 1.05s cubic-bezier(0.32, 0.72, 0.22, 1);
+  transition: transform 0.95s cubic-bezier(0.32, 0.72, 0.22, 1);
   will-change: transform;
 }
 
@@ -257,15 +257,18 @@
   transform: translateX(-50%) translateY(0);
 }
 
-.bk-arrival-dots span {
+.bk-arrival-dots button {
   width: 6px;
   height: 6px;
+  padding: 0;
+  border: 0;
   border-radius: 999px;
   background: rgba(255, 241, 211, 0.52);
+  cursor: pointer;
   transition: width 0.3s ease, background 0.3s ease;
 }
 
-.bk-arrival-dots span.is-active {
+.bk-arrival-dots button.is-active {
   width: 16px;
   background: #ffe4a0;
 }
