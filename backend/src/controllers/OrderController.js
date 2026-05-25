@@ -460,7 +460,11 @@ class OrderController {
       return res.status(200).json({ source: 'none', message: 'Shipment not yet dispatched' });
     } catch (error) {
       console.error('[Track] Error:', error?.response?.data || error.message);
-      res.status(500).json({ message: 'Tracking unavailable', detail: error.message });
+      return res.status(200).json({
+        source: 'unavailable',
+        message: 'Tracking service is temporarily unavailable. Please try again shortly.',
+        tracking: { tracking_data: { shipment_track_activities: [] } },
+      });
     }
   }
 
