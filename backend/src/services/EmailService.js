@@ -73,6 +73,40 @@ class EmailService {
     }
   }
 
+  async sendOrderStatusUpdate(order, status) {
+    if (!order?.customer_email) return;
+    const normalizedStatus = String(status || order.status || "Updated").trim();
+    const statusCopy = {
+      Shipped: "Your order has been shipped. Tracking will keep updating as the courier scans the shipment.",
+      "Out For Delivery": "Your order is out for delivery today.",
+      Delivered: "Your order has been delivered. We hope it brings a little Banaras into your day.",
+      Cancelled: "Your order has been cancelled.",
+      Processing: "Your order is being prepared with care.",
+    };
+    const message = statusCopy[normalizedStatus] || `Your order status is now ${normalizedStatus}.`;
+
+    const mailOptions = {
+      from: `"Banaras Heritage" <${process.env.EMAIL_USER}>`,
+      to: order.customer_email,
+      subject: `Order #${order.id} ${normalizedStatus} | Banaras Heritage`,
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #3D2817; max-width: 600px; margin: auto; border: 1px solid #ead8b2; padding: 32px; background-color: #fffaf0;">
+          <h1 style="color: #800020; margin: 0 0 12px;">Banaras Heritage</h1>
+          <p style="font-size: 16px;">Dear ${order.customer_name || "Customer"},</p>
+          <p style="font-size: 15px; line-height: 1.6;">${message}</p>
+          <div style="margin: 24px 0; padding: 18px; border-radius: 10px; background: #ffffff; border: 1px solid #ead8b2;">
+            <p style="margin: 0 0 8px; color: #8a6a2a; font-size: 12px; letter-spacing: 1px; text-transform: uppercase;">Order status</p>
+            <p style="margin: 0; color: #800020; font-size: 22px; font-weight: 700;">${normalizedStatus}</p>
+            ${order.shiprocket_awb ? `<p style="margin: 12px 0 0; font-size: 14px;">AWB: <strong>${order.shiprocket_awb}</strong></p>` : ""}
+          </div>
+          <p style="font-size: 13px; color: #7b6d5d;">You can see live updates from your My Orders page.</p>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+  }
+
   async sendOTP(email, otp, name) {
     const mailOptions = {
       from: `"Banaras Heritage" <${process.env.EMAIL_USER}>`,

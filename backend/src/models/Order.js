@@ -50,6 +50,16 @@ const Order = sequelize.define('Order', {
     allowNull: true,
     defaultValue: 0
   },
+  payment_fee: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    defaultValue: 0
+  },
+  payment_discount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    defaultValue: 0
+  },
   total_amount: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false
@@ -111,6 +121,14 @@ const Order = sequelize.define('Order', {
   },
   refund_note: {
     type: DataTypes.TEXT,
+    allowNull: true
+  },
+  return_requested_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  exchange_requested_at: {
+    type: DataTypes.DATE,
     allowNull: true
   }
 }, {

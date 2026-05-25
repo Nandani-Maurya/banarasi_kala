@@ -128,13 +128,8 @@ const Wishlist = () => {
     <main className="wishlist-page">
       <section className="wishlist-hero">
         <div>
-          <span className="wishlist-kicker">Saved Collection</span>
-          <h1>Wishlist</h1>
-          <p>Your favourite Banarasi sarees, kept together for the next perfect pick.</p>
-        </div>
-        <div className="wishlist-hero-count">
-          <strong>{wishlist.length}</strong>
-          <span>{wishlist.length === 1 ? "Saree saved" : "Sarees saved"}</span>
+          <h1>Your Wishlist</h1>
+          <p>{wishlist.length ? `${wishlist.length} saved ${wishlist.length === 1 ? "saree" : "sarees"}` : "Save sarees you love"}</p>
         </div>
       </section>
 

@@ -15,7 +15,7 @@ export const API_ENDPOINTS = {
   wishlist: `${API_BASE_URL}/api/wishlist`,
   feedback: `${API_BASE_URL}/api/feedback`,
   feedbackSubmit: `${API_BASE_URL}/api/feedback/submit`,
-  myOrders: (email) => `${API_BASE_URL}/api/orders/my/${encodeURIComponent(email)}`,
+  myOrders: `${API_BASE_URL}/api/orders/my`,
   trackOrder: (orderId) => `${API_BASE_URL}/api/orders/track/${orderId}`,
   cancelOrder: (orderId) => `${API_BASE_URL}/api/orders/${orderId}/cancel`,
   shiprocket: `${API_BASE_URL}/api/shiprocket`,

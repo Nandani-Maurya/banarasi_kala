@@ -18,6 +18,10 @@ const ORDER_PROCESSING_DAYS = Number(import.meta.env.VITE_ORDER_PROCESSING_DAYS 
 const PACKAGING_WEIGHT_KG = Number(import.meta.env.VITE_PACKAGING_WEIGHT_KG || 0.2);
 const PREFERRED_COURIER_NAME = String(import.meta.env.VITE_PREFERRED_COURIER_NAME || "Xpressbees Surface").toLowerCase();
 const COD_MAX_AMOUNT = Number(import.meta.env.VITE_COD_MAX_AMOUNT || 10000);
+const FREE_SHIPPING_MIN_AMOUNT = Number(import.meta.env.VITE_FREE_SHIPPING_MIN_AMOUNT || 10000);
+const PREPAID_DISCOUNT_AMOUNT = Number(import.meta.env.VITE_PREPAID_DISCOUNT_AMOUNT || 50);
+const COD_FEE_AMOUNT = Number(import.meta.env.VITE_COD_FEE_AMOUNT || 50);
+const COURIER_SELECTION_MODE = String(import.meta.env.VITE_COURIER_SELECTION_MODE || "preferred_or_cheapest").toLowerCase();
 const EMPTY_BUY_NOW_ADDRESS = {
   label: "Home",
   name: "",
@@ -82,12 +86,40 @@ const getAddressLine = (address = {}) =>
     .filter(Boolean)
     .join(", ");
 
+const normalizeCourierName = (name) => String(name || "").trim().toLowerCase();
+
+const getCourierRate = (courier = {}) => {
+  const rate = Number(courier?.rate ?? courier?.freight_charge ?? courier?.courier_charge);
+  return Number.isFinite(rate) && rate >= 0 ? rate : null;
+};
+
+const getServiceableCourierOptions = (couriers = []) =>
+  couriers
+    .map((courier) => ({
+      rate: getCourierRate(courier),
+      etd: courier?.etd || courier?.estimated_delivery_days || null,
+      courier: courier?.courier_name || "Courier",
+      raw: courier,
+    }))
+    .filter((courier) => courier.rate !== null)
+    .sort((left, right) => left.rate - right.rate);
+
+const selectCheckoutCourier = (couriers = []) => {
+  const options = getServiceableCourierOptions(couriers);
+  if (!options.length) return null;
+
+  const preferred = options.find((option) => normalizeCourierName(option.courier).includes(PREFERRED_COURIER_NAME));
+  if (COURIER_SELECTION_MODE === "cheapest") return options[0];
+
+  return preferred || options[0];
+};
+
 const ProductDetail = () => {
   const { slug } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
-  const { addToCart } = useCart();
+  const { cart, addToCart } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
   const { showNotification } = useNotification();
 
@@ -267,9 +299,21 @@ const ProductDetail = () => {
   const canUsePrepaid = true;
   const canUseCod = buyNowSubtotal <= COD_MAX_AMOUNT;
   const buyNowShippingRate = Number(buyNowShipping?.rate || 0);
-  const buyNowShippingDiscount = isFirstOrder ? buyNowShippingRate : 0;
+  const qualifiesForFreeShipping = isFirstOrder || buyNowSubtotal > FREE_SHIPPING_MIN_AMOUNT;
+  const shippingDiscountReasonCode = isFirstOrder ? "first_order" : buyNowSubtotal > FREE_SHIPPING_MIN_AMOUNT ? "minimum_order" : null;
+  const freeShippingReason = isFirstOrder
+    ? "Free shipping on first order"
+    : buyNowSubtotal > FREE_SHIPPING_MIN_AMOUNT
+      ? `Free shipping above ${formatMoney(FREE_SHIPPING_MIN_AMOUNT)}`
+      : "";
+  const buyNowShippingDiscount = qualifiesForFreeShipping ? buyNowShippingRate : 0;
   const buyNowFinalShipping = Math.max(0, buyNowShippingRate - buyNowShippingDiscount);
-  const buyNowGrossTotal = buyNowSubtotal + buyNowFinalShipping;
+  const buyNowReturnDeliveryDeduction = shippingDiscountReasonCode === "first_order" ? 0 : buyNowShippingRate;
+  const buyNowReturnRtoDeduction = shippingDiscountReasonCode === "first_order" ? 0 : buyNowShippingRate;
+  const buyNowReturnLogisticsDeduction = buyNowReturnDeliveryDeduction + buyNowReturnRtoDeduction;
+  const buyNowPaymentFee = buyNowPayment === "cod" ? COD_FEE_AMOUNT : 0;
+  const buyNowPrepaidDiscount = buyNowPayment === "prepaid" ? Math.min(PREPAID_DISCOUNT_AMOUNT, buyNowSubtotal + buyNowFinalShipping) : 0;
+  const buyNowGrossTotal = Math.max(0, buyNowSubtotal + buyNowFinalShipping + buyNowPaymentFee - buyNowPrepaidDiscount);
   const buyNowCouponDiscount = Math.min(Number(appliedBuyNowCoupon?.discount || 0), buyNowGrossTotal);
   const walletUsableAmount = useWallet ? Math.min(Number(walletBalance || 0), Math.max(0, buyNowGrossTotal - buyNowCouponDiscount)) : 0;
   const buyNowTotal = Math.max(0, buyNowGrossTotal - buyNowCouponDiscount - walletUsableAmount);
@@ -361,7 +405,7 @@ const ProductDetail = () => {
   const incrementQty = () => {
     if (isSelectedOutOfStock) return;
     if (quantity >= selectedStockInfo.quantity) {
-      showNotification(`Abhi is product ki sirf ${selectedStockInfo.quantity} quantity add kar sakte ho.`, "warning");
+      showNotification(`Only ${selectedStockInfo.quantity} item${selectedStockInfo.quantity === 1 ? "" : "s"} are available for this product.`, "warning");
       return;
     }
     setQuantity((prev) => prev + 1);
@@ -394,31 +438,21 @@ const ProductDetail = () => {
         setBuyNowShippingLoading(true);
         const rawWeight = Number(product?.weight);
         const productWeightKg = Number.isFinite(rawWeight) && rawWeight > 0 ? (rawWeight > 5 ? rawWeight / 1000 : rawWeight) : 0.5;
-        const totalWeightKg = productWeightKg * Math.max(1, Number(quantity || 1)) + PACKAGING_WEIGHT_KG;
+        const totalQty = Math.max(1, Number(quantity || 1));
+        const totalWeightKg = (productWeightKg * totalQty) + (PACKAGING_WEIGHT_KG * totalQty);
         const response = await fetch(
           `${API_ENDPOINTS.shiprocket}/serviceability?pincode=${encodeURIComponent(cleanPincode)}&weight=${Math.max(0.1, Number(totalWeightKg.toFixed(3)))}&is_cod=${buyNowPayment === "cod" ? 1 : 0}`,
         );
         const data = await response.json();
         if (!response.ok) throw new Error(data?.message || "Unable to check delivery");
 
-        const options = (data?.data?.available_courier_companies || [])
-          .map((courier) => ({
-            rate: Number(courier?.rate ?? courier?.freight_charge ?? courier?.courier_charge),
-            etd: courier?.etd || courier?.estimated_delivery_days || null,
-            courier: courier?.courier_name || "Courier",
-          }))
-          .filter((courier) => Number.isFinite(courier.rate) && courier.rate >= 0)
-          .sort((left, right) => left.rate - right.rate);
-
-        const preferred = options.find((option) => option.courier.toLowerCase().includes("xpressbees") && option.courier.toLowerCase().includes("surface"));
-        const configured = options.find((option) => option.courier.toLowerCase().includes(PREFERRED_COURIER_NAME));
-        const selected = preferred || configured || options[0];
+        const selected = selectCheckoutCourier(data?.data?.available_courier_companies || []);
 
         if (!cancelled) {
           setBuyNowShipping(selected ? {
             ...selected,
             deliveryDate: formatDeliveryDate(getFinalDeliveryDate(selected.etd)),
-          } : { unavailable: true });
+          } : { unavailable: true, message: "Delivery is not possible at this location right now." });
         }
       } catch (error) {
         if (!cancelled) {
@@ -456,6 +490,20 @@ const ProductDetail = () => {
       return;
     }
 
+    const existingBagQuantity = cart
+      .filter((item) => Number(item.id) === Number(product.id) && String(item.colorId || "") === String(selectedColorId || ""))
+      .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    const canAddMore = Math.max(0, selectedStockInfo.quantity - existingBagQuantity);
+    if (quantity > canAddMore) {
+      showNotification(
+        canAddMore > 0
+          ? `You already have ${existingBagQuantity} in your bag. You can add only ${canAddMore} more.`
+          : `You already have all available ${selectedStockInfo.quantity} item(s) in your bag.`,
+        "warning"
+      );
+      return;
+    }
+
     const result = await addToCart(product, quantity, selectedColorId);
     showNotification(result.success ? "Added to Bag!" : result.message, result.success ? "success" : "warning");
   };
@@ -488,7 +536,7 @@ const ProductDetail = () => {
     try {
       const [addressRes, orderRes, walletRes, couponRes] = await Promise.all([
         api.get("/api/addresses"),
-        user?.email ? fetch(API_ENDPOINTS.myOrders(user.email)).then((res) => (res.ok ? res.json() : [])) : Promise.resolve([]),
+        user ? api.get("/api/orders/my").then((res) => res.data).catch(() => []) : Promise.resolve([]),
         api.get("/api/wallet").catch(() => ({ data: { wallet_balance: 0 } })),
         fetch(API_ENDPOINTS.coupons).then((res) => (res.ok ? res.json() : [])).catch(() => []),
       ]);
@@ -526,7 +574,7 @@ const ProductDetail = () => {
       return;
     }
 
-    setBuyNowPayment(canUseCod ? "cod" : "prepaid");
+    setBuyNowPayment("prepaid");
     setBuyNowStep("details");
     setAppliedBuyNowCoupon(null);
     setCouponCode("");
@@ -675,9 +723,12 @@ const ProductDetail = () => {
     subtotal_amount: buyNowSubtotal,
     shipping_charge: buyNowShippingRate,
     shipping_discount: buyNowShippingDiscount,
+    shipping_discount_reason: shippingDiscountReasonCode,
     total_amount: buyNowGrossTotal,
     coupon_code: appliedBuyNowCoupon?.code || null,
     wallet_amount: walletUsableAmount,
+    payment_fee: buyNowPaymentFee,
+    payment_discount: buyNowPrepaidDiscount,
     payment_method: buyNowPayment === "cod" ? "COD" : "Prepaid",
     payment_status: buyNowPayment === "cod" ? "Pending" : "Paid",
     items: [{
@@ -690,14 +741,12 @@ const ProductDetail = () => {
   });
 
   const createBuyNowOrder = async (orderData) => {
-    const response = await fetch(API_ENDPOINTS.orders, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(orderData),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.message || "Unable to place order.");
-    return data;
+    try {
+      const response = await api.post("/api/orders", orderData);
+      return response.data;
+    } catch (error) {
+      throw new Error(error?.response?.data?.message || "Unable to place order.");
+    }
   };
 
   const placeBuyNowOrder = async () => {
@@ -726,9 +775,9 @@ const ProductDetail = () => {
     setBuyNowPlacing(true);
     try {
       if (buyNowPayment === "cod" || buyNowTotal <= 0) {
-        await createBuyNowOrder(orderData);
+        const created = await createBuyNowOrder(orderData);
         showNotification("Order placed successfully.", "success");
-        navigate("/order-confirmation");
+        navigate(`/order-confirmation?orderId=${created.orderId}`);
         return;
       }
 
@@ -766,9 +815,9 @@ const ProductDetail = () => {
             });
             const verifyData = await verifyRes.json();
             if (!verifyRes.ok || !verifyData.success) throw new Error(verifyData.message || "Payment verification failed.");
-            await createBuyNowOrder(orderData);
+            const created = await createBuyNowOrder(orderData);
             showNotification("Order placed successfully.", "success");
-            navigate("/order-confirmation");
+            navigate(`/order-confirmation?orderId=${created.orderId}`);
           } catch (error) {
             showNotification(error.message || "Unable to place paid order.", "error");
           } finally {
@@ -823,30 +872,19 @@ const ProductDetail = () => {
       setDeliveryQuote(null);
       const rawWeight = Number(product?.weight);
       const productWeightKg = Number.isFinite(rawWeight) && rawWeight > 0 ? (rawWeight > 5 ? rawWeight / 1000 : rawWeight) : 0.5;
-      const totalWeightKg = productWeightKg * Math.max(1, Number(quantity || 1)) + PACKAGING_WEIGHT_KG;
+      const totalQty = Math.max(1, Number(quantity || 1));
+      const totalWeightKg = (productWeightKg * totalQty) + (PACKAGING_WEIGHT_KG * totalQty);
       const response = await fetch(
         `${API_ENDPOINTS.shiprocket}/serviceability?pincode=${encodeURIComponent(clean)}&weight=${Math.max(0.1, Number(totalWeightKg.toFixed(3)))}&is_cod=${canUseCod ? 1 : 0}`
       );
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || "Unable to check delivery");
 
-      const couriers = data?.data?.available_courier_companies || [];
-      const options = couriers
-        .map((c) => ({
-          rate: Number(c?.rate ?? c?.freight_charge ?? c?.courier_charge),
-          etd: c?.etd || c?.estimated_delivery_days || null,
-          courier: c?.courier_name || "Courier",
-        }))
-        .filter((c) => Number.isFinite(c.rate) && c.rate >= 0);
-
-      if (!options.length) {
+      const selectedOption = selectCheckoutCourier(data?.data?.available_courier_companies || []);
+      if (!selectedOption) {
         setDeliveryQuote({ unavailable: true });
         return;
       }
-      options.sort((a, b) => a.rate - b.rate);
-      const preferredOptions = options.filter((option) => option.courier.toLowerCase().includes("xpressbees") && option.courier.toLowerCase().includes("surface"));
-      const configuredOptions = options.filter((option) => option.courier.toLowerCase().includes(PREFERRED_COURIER_NAME));
-      const selectedOption = (preferredOptions[0] || configuredOptions[0] || options[0]);
       setDeliveryQuote({
         option: selectedOption,
         deliveryDate: formatDeliveryDate(getFinalDeliveryDate(selectedOption.etd)),
@@ -877,10 +915,11 @@ const ProductDetail = () => {
   const shippingRows = product
     ? [
         ["Prepaid", "Online payment available."],
-        ["COD", `Cash on Delivery is available when product value is ${formatMoney(COD_MAX_AMOUNT)} or below.`],
-        ["Shipping", "Free shipping on first order. After that, delivery charge is calculated by pincode before payment."],
-        ["Return", "Easy return is available. If delivery charge was paid, it is not refundable. On first-order free shipping, the paid product amount is refundable."],
-        ["Exchange", "Easy exchange is available once. After one exchange, return or another exchange is not available for that item."],
+        ["Prepaid benefit", `${formatMoney(PREPAID_DISCOUNT_AMOUNT)} extra discount on prepaid payment.`],
+        ["COD", `Cash on Delivery is available when product value is ${formatMoney(COD_MAX_AMOUNT)} or below. COD charge is ${formatMoney(COD_FEE_AMOUNT)}.`],
+        ["Shipping", `Free shipping on first order and on orders above ${formatMoney(FREE_SHIPPING_MIN_AMOUNT)}. Otherwise delivery charge is calculated by pincode before payment.`],
+        ["Return", "Easy return is available. First-order free shipping returns do not deduct delivery/RTO. Other returns deduct forward delivery and RTO logistics charges."],
+        ["Exchange", "Easy exchange is available once with no delivery/RTO deduction. After one exchange, return or another exchange is not available for that item."],
         ["Taxes", "Price is inclusive of all taxes."],
       ].filter(Boolean)
     : [];
@@ -1375,7 +1414,7 @@ const ProductDetail = () => {
                   >
                     <Icon icon="lucide:credit-card" />
                     <span>Prepaid Razorpay</span>
-                    <small>Online payment available</small>
+                    <small>{formatMoney(PREPAID_DISCOUNT_AMOUNT)} extra off</small>
                   </button>
                   <button
                     type="button"
@@ -1385,10 +1424,17 @@ const ProductDetail = () => {
                   >
                     <Icon icon="lucide:banknote" />
                     <span>Cash on Delivery</span>
-                    <small>{canUseCod ? `Available below ${formatMoney(COD_MAX_AMOUNT)}` : `Not available above ${formatMoney(COD_MAX_AMOUNT)}`}</small>
+                    <small>{canUseCod ? `${formatMoney(COD_FEE_AMOUNT)} COD charge` : `Not available above ${formatMoney(COD_MAX_AMOUNT)}`}</small>
                   </button>
                 </div>
               </section>
+
+              {buyNowShipping?.unavailable && (
+                <div className="buy-now-delivery-error" role="status">
+                  <Icon icon="lucide:map-pin-off" />
+                  <span>{buyNowShipping.message || "Delivery is not possible at this location right now."}</span>
+                </div>
+              )}
 
               <button
                 type="button"
@@ -1497,10 +1543,22 @@ const ProductDetail = () => {
                       {buyNowShippingLoading ? "Checking..." : buyNowShipping?.unavailable ? "Unavailable" : formatMoney(buyNowShippingRate)}
                     </strong>
                   </p>
-                  {isFirstOrder && buyNowShippingRate > 0 && (
+                  {qualifiesForFreeShipping && buyNowShippingRate > 0 && (
                     <p className="buy-now-free">
-                      <span>Free shipping on first order</span>
+                      <span>{freeShippingReason}</span>
                       <strong>-{formatMoney(buyNowShippingDiscount)}</strong>
+                    </p>
+                  )}
+                  {buyNowPrepaidDiscount > 0 && (
+                    <p className="buy-now-free">
+                      <span>Prepaid payment discount</span>
+                      <strong>-{formatMoney(buyNowPrepaidDiscount)}</strong>
+                    </p>
+                  )}
+                  {buyNowPaymentFee > 0 && (
+                    <p>
+                      <span>COD charge</span>
+                      <strong>{formatMoney(buyNowPaymentFee)}</strong>
                     </p>
                   )}
                   {buyNowCouponDiscount > 0 && (
@@ -1521,16 +1579,29 @@ const ProductDetail = () => {
                       <strong>{buyNowShipping.deliveryDate}</strong>
                     </p>
                   )}
+                  {buyNowShipping && !buyNowShipping.unavailable && (
+                    <div className="buy-now-refund-policy">
+                      <span>Return logistics</span>
+                      {shippingDiscountReasonCode === "first_order" ? (
+                        <strong>No delivery or RTO deduction on first-order free shipping.</strong>
+                      ) : (
+                        <strong>
+                          Return refund may deduct {formatMoney(buyNowReturnDeliveryDeduction)} delivery + {formatMoney(buyNowReturnRtoDeduction)} RTO.
+                        </strong>
+                      )}
+                      <em>Exchange has no delivery/RTO deduction.</em>
+                    </div>
+                  )}
                   <p className="buy-now-total">
                     <span>Final amount</span>
                     <strong>{formatMoney(buyNowTotal)}</strong>
                   </p>
                 </div>
 
-                {isFirstOrder && (
+                {qualifiesForFreeShipping && (
                   <div className="buy-now-offer">
                     <Icon icon="lucide:sparkles" />
-                    <span>First order benefit applied: shipping charge is deducted at checkout.</span>
+                    <span>{freeShippingReason} applied: shipping charge is deducted at checkout.</span>
                   </div>
                 )}
 

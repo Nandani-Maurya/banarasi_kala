@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import "./BrowseCircles.css";
@@ -14,32 +14,10 @@ const normalizeItems = (varieties = []) => [
 
 const BrowseCircles = () => {
   const navigate = useNavigate();
-  const sectionRef = useRef(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [hasRequested, setHasRequested] = useState(false);
 
   useEffect(() => {
-    const section = sectionRef.current;
-    if (!section || hasRequested) return undefined;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setHasRequested(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "420px 0px", threshold: 0.01 },
-    );
-
-    observer.observe(section);
-    return () => observer.disconnect();
-  }, [hasRequested]);
-
-  useEffect(() => {
-    if (!hasRequested) return undefined;
-
     const controller = new AbortController();
     fetch(API_ENDPOINTS.varieties, { signal: controller.signal })
       .then((response) => response.json())
@@ -52,7 +30,7 @@ const BrowseCircles = () => {
       .finally(() => setLoading(false));
 
     return () => controller.abort();
-  }, [hasRequested]);
+  }, []);
 
   const marqueeItems = useMemo(() => [...items, ...items], [items]);
 
@@ -61,7 +39,7 @@ const BrowseCircles = () => {
   };
 
   return (
-    <section className="bk-browse-section" ref={sectionRef}>
+    <section className="bk-browse-section">
       <div className="bk-browse-shell">
         <div className="bk-browse-header">
           <span>Variety of Authentic Banarasi Sarees</span>

@@ -8,55 +8,39 @@
 }
 
 .orders-hero {
-  background: #760019;
-  border-bottom: 1px solid rgba(214, 177, 86, 0.4);
-  padding: 14px 18px;
+  background: transparent;
+  border-bottom: 0;
+  padding: 18px 18px 4px;
 }
 
 .orders-hero-content {
   width: min(920px, calc(100vw - 32px));
   margin: 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 14px;
+  text-align: left;
 }
 
 .orders-hero-icon {
-  width: 46px;
-  height: 46px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(238, 202, 112, 0.4);
-  color: #f0cf79;
-  font-size: 22px;
+  display: none;
 }
 
 .orders-eyebrow {
-  margin: 0 0 3px;
-  color: #f0cf79;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  display: none;
 }
 
 .orders-hero h1 {
   margin: 0;
-  color: #fff8e8;
-  font-family: "Cinzel", serif;
-  font-size: clamp(24px, 6vw, 33px);
-  line-height: 1.05;
+  color: #800020;
+  font-family: "Poppins", sans-serif;
+  font-size: clamp(22px, 5vw, 30px);
+  line-height: 1.1;
   font-weight: 700;
 }
 
 .orders-hero span {
   display: block;
-  margin-top: 5px;
-  color: rgba(255, 248, 232, 0.78);
-  font-size: 13px;
+  margin-top: 6px;
+  color: rgba(61, 40, 23, 0.62);
+  font-size: 12px;
   line-height: 1.45;
 }
 
@@ -220,6 +204,7 @@
   border-radius: 12px;
   background: #f1dfbf;
   border: 1px solid rgba(116, 40, 19, 0.12);
+  text-decoration: none;
 }
 
 .order-product-media img {
@@ -254,6 +239,10 @@
   font-weight: 700;
 }
 
+.order-product-title-link {
+  text-decoration: none;
+}
+
 .order-product-subline {
   display: flex;
   align-items: center;
@@ -277,6 +266,13 @@
   width: fit-content;
   color: rgba(50, 21, 15, 0.7);
   font-size: 12px;
+}
+
+.order-product-refund {
+  margin: 8px 0 0;
+  color: #7f5d32;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .order-color-swatch {

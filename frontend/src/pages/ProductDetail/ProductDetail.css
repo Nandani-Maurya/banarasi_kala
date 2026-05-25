@@ -691,10 +691,18 @@
   background: linear-gradient(135deg, #800020, #4b070d);
   color: #ffe1a2;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 950;
-  letter-spacing: 0.16em;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
+  box-shadow: 0 10px 22px rgba(80, 0, 20, 0.12);
+  transition: transform 160ms ease, box-shadow 160ms ease, filter 160ms ease;
+}
+
+.product-add-btn:hover,
+.product-buy-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 26px rgba(80, 0, 20, 0.16);
 }
 
 .product-buy-btn {
@@ -2026,6 +2034,25 @@
   text-transform: uppercase;
 }
 
+.buy-now-delivery-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  color: #9f1239;
+  background: #fff1f2;
+  border: 1px solid rgba(159, 18, 57, 0.14);
+  border-radius: 11px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.buy-now-delivery-error svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
 .buy-now-proceed:disabled {
   cursor: not-allowed;
   background: #8a8a8a;
@@ -2264,6 +2291,38 @@
 .buy-now-totals .buy-now-free span,
 .buy-now-totals .buy-now-free strong {
   color: #047857;
+}
+
+.buy-now-refund-policy {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fff7e8;
+  border: 1px solid rgba(128, 0, 32, 0.1);
+  color: #6f594d;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.buy-now-refund-policy span {
+  color: #8a6a2a;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.buy-now-refund-policy strong {
+  color: #4b160e;
+  font-weight: 600;
+  text-align: left;
+}
+
+.buy-now-refund-policy em {
+  color: #047857;
+  font-style: normal;
+  font-weight: 600;
 }
 
 .buy-now-total {

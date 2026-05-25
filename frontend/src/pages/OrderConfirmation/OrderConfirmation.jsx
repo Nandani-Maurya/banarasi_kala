@@ -1,365 +1,299 @@
 import { Icon } from "@iconify/react";
-import { useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import api from "../../utils/api";
 import "./OrderConfirmation.css";
 
-const OrderConfirmation = () => {
-  const rootRef = useRef(null);
-
-  useEffect(() => {
-    // Reveal animations on mount
-    if (rootRef.current) {
-      const reveals = rootRef.current.querySelectorAll(".reveal-up");
-
-      reveals.forEach((el, index) => {
-        setTimeout(() => {
-          el.classList.add("active");
-        }, index * 200);
-      });
-    }
-  }, []);
-
-  return (
-    <div className="min-h-screen flex flex-col bg-[#F5F1E8]" ref={rootRef}>
-      <main className="flex-grow py-12 lg:py-20">
-        <div className="w-full px-4 lg:px-12">
-          {/* Success Hero */}
-          <div className="text-center mb-16 reveal-up">
-            <div className="flex justify-center mb-8">
-              <svg
-                className="checkmark"
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 52 52"
-              >
-                <circle
-                  className="checkmark-circle"
-                  cx="26"
-                  cy="26"
-                  r="25"
-                  fill="none"
-                />
-                <path
-                  className="checkmark-check"
-                  fill="none"
-                  d="M14.1 27.2l7.1 7.2 16.7-16.8"
-                />
-              </svg>
-            </div>
-            <h1 className="text-4xl lg:text-6xl font-bold text-[#800020] mb-4 brand-font">
-              A New Story Begins
-            </h1>
-            <p className="serif-text text-xl italic text-[#3D2817]/80">
-              Your order is being prepared with care and attention.
-            </p>
-
-            <div className="mt-8 inline-block bg-white/50 backdrop-blur px-8 py-3 rounded-full border border-[#D4AF37]/30">
-              <p className="text-sm tracking-widest font-semibold uppercase">
-                Order Number:{" "}
-                <span className="gold-shimmer ml-2">#BK-98234-A</span>
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-            {/* Left Column: Order Flow & Items */}
-            <div className="lg:col-span-7 space-y-12">
-              {/* Order Timeline */}
-              <div className="bg-white p-8 rounded-2xl shadow-sm border border-[#D4AF37]/10 reveal-up">
-                <h3 className="text-xl font-bold mb-8 flex items-center gap-2 brand-font">
-                  <Icon
-                    icon="lucide:truck"
-                    className="text-[#D4AF37]"
-                  ></Icon>
-                  Shipment Tracking
-                </h3>
-                <div className="relative">
-                  {/* Line */}
-                  <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-gray-100"></div>
-
-                  <div className="space-y-8 relative">
-                    <div className="flex items-start gap-6 timeline-step active">
-                      <div className="step-icon w-12 h-12 rounded-full border-2 border-gray-100 bg-white flex items-center justify-center z-10">
-                        <Icon
-                          icon="lucide:check-circle-2"
-                          className="text-xl text-[#800020]"
-                        ></Icon>
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-[#800020] uppercase tracking-wider text-sm">
-                          Order Confirmed
-                        </h4>
-                        <p className="text-xs text-gray-500 uppercase tracking-widest mt-1">
-                          Today, 10:45 AM • We have received your order
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-6 timeline-step">
-                      <div className="step-icon w-12 h-12 rounded-full border-2 border-gray-100 bg-white flex items-center justify-center z-10 text-gray-400">
-                        <Icon
-                          icon="lucide:box"
-                          className="text-xl"
-                        ></Icon>
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-gray-400 uppercase tracking-wider text-sm">
-                          Artisan Preparation
-                        </h4>
-                        <p className="text-xs text-gray-400 uppercase tracking-widest mt-1">
-                          Estimated: Oct 12, 2024 • Quality checking & finishing
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-6 timeline-step">
-                      <div className="step-icon w-12 h-12 rounded-full border-2 border-gray-100 bg-white flex items-center justify-center z-10 text-gray-400">
-                        <Icon
-                          icon="lucide:ship"
-                          className="text-xl"
-                        ></Icon>
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-gray-400 uppercase tracking-wider text-sm">
-                          Out for Delivery
-                        </h4>
-                        <p className="text-xs text-gray-400 uppercase tracking-widest mt-1">
-                          Expected Arrival: Oct 15 - Oct 18
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Product Recap */}
-              <div className="reveal-up">
-                <h3 className="text-2xl font-bold mb-6 brand-font uppercase tracking-widest">
-                  Items in your Order
-                </h3>
-                <div className="space-y-4">
-                  {/* Item 1 */}
-                  <div className="flex items-center gap-6 bg-white p-4 rounded-xl shadow-sm border border-[#D4AF37]/10">
-                    <div className="w-24 h-32 rounded-lg overflow-hidden flex-shrink-0 border border-gray-100">
-                      <img
-                        src="https://images.unsplash.com/photo-1583391733956-6c7827448d08?auto=format&fit=crop&q=80"
-                        alt="Royal Brocade"
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    <div className="flex-grow">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="font-bold text-lg text-[#800020] uppercase brand-font tracking-tight">
-                            The Royal Brocade
-                          </h4>
-                          <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mt-1">
-                            Katan Silk Pure • Crimson Gold
-                          </p>
-                        </div>
-                        <p className="font-bold text-[#3D2817]">₹42,500</p>
-                      </div>
-                      <div className="mt-4 text-xs text-[#D4AF37] font-bold flex items-center gap-2 uppercase tracking-widest">
-                        <Icon
-                          icon="lucide:tag"
-                          className="text-sm"
-                        ></Icon>
-                        Gift Wrapped: Yes
-                      </div>
-                    </div>
-                  </div>
-                  {/* Item 2 */}
-                  <div className="flex items-center gap-6 bg-white p-4 rounded-xl shadow-sm border border-[#D4AF37]/10">
-                    <div className="w-24 h-32 rounded-lg overflow-hidden flex-shrink-0 border border-gray-100">
-                      <img
-                        src="https://images.unsplash.com/photo-1610030469983-98e550d6193c?auto=format&fit=crop&q=80"
-                        alt="Organza Classic"
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                    <div className="flex-grow">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h4 className="font-bold text-lg text-[#800020] uppercase brand-font tracking-tight">
-                            Traditional Organza Classic
-                          </h4>
-                          <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold mt-1">
-                            Pure Organza Silk • Silver Zari
-                          </p>
-                        </div>
-                        <p className="font-bold text-[#3D2817]">₹28,200</p>
-                      </div>
-                      <div className="mt-4 text-xs text-gray-500 font-bold uppercase tracking-widest">
-                        Quantity: 1
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Return Policy Callout */}
-              <div className="bg-[#800020]/5 p-6 rounded-xl border-l-4 border-[#800020] reveal-up">
-                <h4 className="font-bold text-[#800020] mb-2 uppercase text-xs tracking-[0.2em]">
-                  Quality Guarantee
-                </h4>
-                <p className="text-xs text-[#3D2817]/80 leading-relaxed uppercase tracking-widest font-medium">
-                  We offer a 7-day hassle-free return policy for any
-                  authenticity concerns. Each saree is marked with a unique
-                  silk-mark and handloom certification code which can be
-                  verified upon delivery.
-                </p>
-              </div>
-            </div>
-
-            {/* Right Column: Summary & Support */}
-            <div className="lg:col-span-5 space-y-8">
-              {/* Delivery & Payment Summary */}
-              <div className="bg-[#3D2817] text-white p-8 rounded-2xl shadow-xl reveal-up">
-                <h3 className="text-xl font-bold mb-8 text-[#D4AF37] brand-font uppercase tracking-widest">
-                  Delivery Details
-                </h3>
-
-                <div className="space-y-8">
-                  <div>
-                    <p className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-3 font-bold">
-                      Shipping Address
-                    </p>
-                    <p className="font-bold text-lg tracking-wide">
-                      Aditi Rao Hydari
-                    </p>
-                    <p className="text-white/70 leading-relaxed text-sm mt-1">
-                      702, Kala Heights, 4th Main Road
-                      <br />
-                      Jubilee Hills, Hyderabad, 500033
-                      <br />
-                      Telangana, India
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-6">
-                    <div>
-                      <p className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-3 font-bold">
-                        Payment Method
-                      </p>
-                      <div className="flex items-center gap-3">
-                        <Icon
-                          icon="logos:visa"
-                          className="text-2xl"
-                        ></Icon>
-                        <span className="font-bold text-sm">•••• 9823</span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-white/40 uppercase tracking-[0.2em] mb-3 font-bold">
-                        Shipping Method
-                      </p>
-                      <p className="font-bold text-sm tracking-widest">
-                        ROYAL EXPRESS
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="pt-8 border-t border-white/10">
-                    <div className="flex justify-between items-center mb-2 text-sm">
-                      <p className="text-white/60 uppercase tracking-widest">
-                        Subtotal
-                      </p>
-                      <p className="font-bold">₹70,700</p>
-                    </div>
-                    <div className="flex justify-between items-center mb-2 text-sm">
-                      <p className="text-white/60 uppercase tracking-widest">
-                        Insurance
-                      </p>
-                      <p className="font-bold">₹450</p>
-                    </div>
-                    <div className="flex justify-between items-center mb-2 text-sm">
-                      <p className="text-white/60 uppercase tracking-widest">
-                        Shipping
-                      </p>
-                      <p className="text-[#D4AF37] font-bold">FREE</p>
-                    </div>
-                    <div className="flex justify-between items-center mt-6 pt-6 border-t border-white/20">
-                      <p className="text-lg font-bold uppercase tracking-[0.2em]">
-                        Total Paid
-                      </p>
-                      <p className="text-2xl font-bold text-[#D4AF37]">
-                        ₹71,150
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Customer Support */}
-              <div className="bg-white p-8 rounded-2xl border border-[#D4AF37]/20 shadow-sm reveal-up">
-                <h3 className="text-lg font-bold mb-4 brand-font uppercase tracking-widest">
-                  Need Assistance?
-                </h3>
-                <p className="text-xs text-gray-500 mb-6 uppercase tracking-widest font-semibold leading-relaxed">
-                  Our support team is available 24/7 to help you with your order
-                  or any questions.
-                </p>
-                <div className="space-y-4">
-                  <a
-                    href="mailto:support@banarasikala.com"
-                    className="flex items-center gap-4 p-4 rounded-lg bg-[#F5F1E8] hover:bg-[#D4AF37]/10 transition-colors group"
-                  >
-                    <Icon
-                      icon="lucide:mail"
-                      className="text-xl text-[#800020]"
-                    ></Icon>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#800020]">
-                        Email Us
-                      </p>
-                      <p className="text-xs text-gray-700 font-bold">
-                        support@banarasikala.com
-                      </p>
-                    </div>
-                    <Icon
-                      icon="lucide:chevron-right"
-                      className="ml-auto text-gray-300 group-hover:text-[#800020] transition-transform group-hover:translate-x-1"
-                    ></Icon>
-                  </a>
-                  <a
-                    href="tel:+912212345678"
-                    className="flex items-center gap-4 p-4 rounded-lg bg-[#F5F1E8] hover:bg-[#D4AF37]/10 transition-colors group"
-                  >
-                    <Icon
-                      icon="lucide:phone"
-                      className="text-xl text-[#800020]"
-                    ></Icon>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#800020]">
-                        Call Us
-                      </p>
-                      <p className="text-xs text-gray-700 font-bold">
-                        +91 22 1234 5678
-                      </p>
-                    </div>
-                    <Icon
-                      icon="lucide:chevron-right"
-                      className="ml-auto text-gray-300 group-hover:text-[#800020] transition-transform group-hover:translate-x-1"
-                    ></Icon>
-                  </a>
-                </div>
-              </div>
-
-              {/* Primary CTA */}
-              <div className="pt-4 reveal-up">
-                <Link
-                  to="/collection"
-                  id="continue-shopping-btn"
-                  className="w-full flex items-center justify-center gap-3 py-5 bg-[#800020] text-[#D4AF37] font-bold rounded-xl shadow-2xl hover:scale-[1.02] transition-all uppercase tracking-[0.2em] text-sm"
-                >
-                  <Icon icon="lucide:shopping-bag"></Icon>
-                  CONTINUE SHOPPING
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </main>
-    </div>
-  );
+const toNumber = (value) => {
+  const next = Number(value);
+  return Number.isFinite(next) ? next : 0;
 };
 
-export default OrderConfirmation;
+const formatPrice = (value) => `Rs. ${toNumber(value).toLocaleString("en-IN")}`;
 
+const formatDate = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+};
+
+const getItemImage = (item) => item.image_url || item.product_image_url || "";
+const getItemColor = (item) => item.color_name || item.Color?.name || "Selected color";
+
+const getBreakdown = (order = {}) => {
+  const items = order.OrderItems || [];
+  const itemSubtotal = items.reduce((sum, item) => sum + toNumber(item.price) * Math.max(1, toNumber(item.quantity) || 1), 0);
+  const subtotal = toNumber(order.subtotal_amount) || itemSubtotal;
+  const shippingCharge = toNumber(order.shipping_charge);
+  const shippingDiscount = toNumber(order.shipping_discount);
+  const paymentFee = toNumber(order.payment_fee);
+  const paymentDiscount = toNumber(order.payment_discount);
+  const couponDiscount = toNumber(order.discount_amount);
+  const walletAmount = toNumber(order.wallet_amount);
+  const payable = toNumber(order.payable_amount) || toNumber(order.total_amount) || Math.max(
+    0,
+    subtotal + shippingCharge + paymentFee - shippingDiscount - paymentDiscount - couponDiscount - walletAmount,
+  );
+
+  return { subtotal, shippingCharge, shippingDiscount, paymentFee, paymentDiscount, couponDiscount, walletAmount, payable };
+};
+
+const canCancelOrder = (order) => {
+  const status = String(order?.status || "").toLowerCase();
+  if (!order?.createdAt || ["cancelled", "delivered", "shipped", "out for delivery"].includes(status)) return false;
+  const createdAt = new Date(order.createdAt).getTime();
+  return Number.isFinite(createdAt) && Date.now() - createdAt <= 24 * 60 * 60 * 1000;
+};
+
+const buildTimeline = (order, tracking) => {
+  const status = String(order?.status || "Pending").toLowerCase();
+  const activities = tracking?.tracking?.tracking_data?.shipment_track_activities || [];
+  if (activities.length) {
+    return activities.map((activity, index) => ({
+      title: activity.activity || "Shipment update",
+      detail: [activity.location, activity.date].filter(Boolean).join(" • "),
+      active: index === 0,
+      icon: index === 0 ? "lucide:radio" : "lucide:circle",
+    }));
+  }
+
+  return [
+    {
+      title: "Order placed",
+      detail: `${formatDate(order?.createdAt)} • Confirmation email sent`,
+      active: true,
+      icon: "lucide:check-circle-2",
+    },
+    {
+      title: status === "processing" ? "Preparation in progress" : "Artisan preparation",
+      detail: "Quality check and packing before dispatch",
+      active: ["processing", "shipped", "out for delivery", "delivered"].includes(status),
+      icon: "lucide:package",
+    },
+    {
+      title: "Shipped",
+      detail: order?.shiprocket_awb ? `AWB ${order.shiprocket_awb}` : "Tracking appears after dispatch",
+      active: ["shipped", "out for delivery", "delivered"].includes(status),
+      icon: "lucide:truck",
+    },
+    {
+      title: "Out for delivery",
+      detail: "Courier will attempt delivery at your address",
+      active: ["out for delivery", "delivered"].includes(status),
+      icon: "lucide:navigation",
+    },
+    {
+      title: "Delivered",
+      detail: order?.delivered_at ? formatDate(order.delivered_at) : "Final delivery scan pending",
+      active: status === "delivered",
+      icon: "lucide:badge-check",
+    },
+  ];
+};
+
+export default function OrderConfirmation() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const orderId = searchParams.get("orderId");
+  const [order, setOrder] = useState(null);
+  const [tracking, setTracking] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [cancelLoading, setCancelLoading] = useState(false);
+
+  const breakdown = useMemo(() => getBreakdown(order || {}), [order]);
+  const timeline = useMemo(() => buildTimeline(order, tracking), [order, tracking]);
+  const cancellationAvailable = canCancelOrder(order);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadOrder = async () => {
+      if (!orderId) {
+        setError("Order details are missing.");
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError("");
+      try {
+        const response = await api.get(`/api/orders/${orderId}`);
+        if (cancelled) return;
+        setOrder(response.data);
+
+        try {
+          const trackRes = await api.get(`/api/orders/track/${orderId}`);
+          if (!cancelled) setTracking(trackRes.data);
+        } catch {
+          if (!cancelled) setTracking(null);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err?.response?.data?.message || "Unable to load order details.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    loadOrder();
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId]);
+
+  const handleCancel = async () => {
+    if (!order?.id || !window.confirm("Cancel this order? Refund will be processed in 1-2 days for paid orders.")) return;
+    setCancelLoading(true);
+    try {
+      const response = await api.post(`/api/orders/${order.id}/cancel`);
+      setOrder(response.data.order || order);
+    } catch (err) {
+      setError(err?.response?.data?.message || "Unable to cancel order.");
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <main className="order-confirmation-page">
+        <div className="order-confirmation-state">
+          <span className="order-loader" />
+          <p>Loading your order details...</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (error || !order) {
+    return (
+      <main className="order-confirmation-page">
+        <div className="order-confirmation-state">
+          <Icon icon="lucide:alert-circle" />
+          <h1>Order details unavailable</h1>
+          <p>{error || "Please check My Orders for the latest details."}</p>
+          <button type="button" onClick={() => navigate("/my-orders")}>Go to My Orders</button>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="order-confirmation-page">
+      <section className="order-success-hero">
+        <span className="order-success-icon"><Icon icon="lucide:check" /></span>
+        <div>
+          <p>Order confirmed</p>
+          <h1>Order #{order.id}</h1>
+          <span>Placed on {formatDate(order.createdAt)}. A confirmation email has been sent to {order.customer_email}.</span>
+        </div>
+      </section>
+
+      <section className="order-confirmation-grid">
+        <div className="order-confirmation-main">
+          <section className="order-panel">
+            <div className="order-panel-head">
+              <h2>Shipment timeline</h2>
+              <span>{order.status || "Pending"}</span>
+            </div>
+            <div className="confirmation-timeline">
+              {timeline.map((step, index) => (
+                <div key={`${step.title}-${index}`} className={`confirmation-step ${step.active ? "is-active" : ""}`}>
+                  <span className="confirmation-step-icon"><Icon icon={step.icon} /></span>
+                  <div>
+                    <strong>{step.title}</strong>
+                    <p>{step.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {order.shiprocket_awb && (
+              <div className="awb-strip">
+                <span>AWB</span>
+                <strong>{order.shiprocket_awb}</strong>
+              </div>
+            )}
+          </section>
+
+          <section className="order-panel">
+            <div className="order-panel-head">
+              <h2>Items</h2>
+              <span>{(order.OrderItems || []).length} item(s)</span>
+            </div>
+            <div className="confirmation-items">
+              {(order.OrderItems || []).map((item, index) => {
+                const productUrl = item.product_slug ? `/product/${item.product_slug}` : null;
+                return (
+                <article className="confirmation-item" key={`${item.product_id}-${item.colorId || index}`}>
+                  {productUrl ? (
+                    <Link to={productUrl} className="confirmation-item-media" aria-label={`Open ${item.product_name}`}>
+                      {getItemImage(item) ? <img src={getItemImage(item)} alt={item.product_name} /> : <Icon icon="lucide:image-off" />}
+                    </Link>
+                  ) : (
+                    <div className="confirmation-item-media">
+                      {getItemImage(item) ? <img src={getItemImage(item)} alt={item.product_name} /> : <Icon icon="lucide:image-off" />}
+                    </div>
+                  )}
+                  <div>
+                    {productUrl ? <Link to={productUrl} className="confirmation-product-link"><h3>{item.product_name}</h3></Link> : <h3>{item.product_name}</h3>}
+                    <p>{getItemColor(item)} • Qty {item.quantity}</p>
+                    <span>{formatPrice(item.price)} each</span>
+                    {item.shipping_meta?.refund_rules && (
+                      <small>
+                        Return logistics: {formatPrice(item.shipping_meta.refund_rules.return_delivery_deduction)} delivery + {formatPrice(item.shipping_meta.refund_rules.return_rto_deduction)} RTO. Exchange: no deduction.
+                      </small>
+                    )}
+                  </div>
+                  <strong>{formatPrice(toNumber(item.price) * Math.max(1, toNumber(item.quantity) || 1))}</strong>
+                </article>
+                );
+              })}
+            </div>
+          </section>
+        </div>
+
+        <aside className="order-confirmation-side">
+          <section className="order-panel">
+            <h2>Payment summary</h2>
+            <div className="summary-row"><span>Product total</span><strong>{formatPrice(breakdown.subtotal)}</strong></div>
+            <div className="summary-row"><span>Delivery charge</span><strong>{formatPrice(breakdown.shippingCharge)}</strong></div>
+            {breakdown.shippingDiscount > 0 && <div className="summary-row is-saving"><span>Free shipping</span><strong>-{formatPrice(breakdown.shippingDiscount)}</strong></div>}
+            {breakdown.paymentDiscount > 0 && <div className="summary-row is-saving"><span>Prepaid discount</span><strong>-{formatPrice(breakdown.paymentDiscount)}</strong></div>}
+            {breakdown.paymentFee > 0 && <div className="summary-row"><span>COD charge</span><strong>{formatPrice(breakdown.paymentFee)}</strong></div>}
+            {breakdown.couponDiscount > 0 && <div className="summary-row is-saving"><span>Coupon{order.coupon_code ? ` (${order.coupon_code})` : ""}</span><strong>-{formatPrice(breakdown.couponDiscount)}</strong></div>}
+            {breakdown.walletAmount > 0 && <div className="summary-row is-saving"><span>Wallet used</span><strong>-{formatPrice(breakdown.walletAmount)}</strong></div>}
+            <div className="summary-row is-final"><span>Final amount</span><strong>{formatPrice(breakdown.payable)}</strong></div>
+            <div className="payment-tags">
+              <span>{order.payment_method || "Prepaid"}</span>
+              <span>{order.payment_status || "Paid"}</span>
+            </div>
+          </section>
+
+          <section className="order-panel">
+            <h2>Delivery address</h2>
+            <p className="address-copy">{order.customer_name}<br />{order.address}<br />{order.city}, {order.state} - {order.pincode}<br />Phone: {order.phone}</p>
+          </section>
+
+          <section className="order-panel">
+            <h2>Need to cancel?</h2>
+            <p className="policy-copy">
+              You can cancel within 24 hours or until the order is shipped. Once shipped, live tracking will continue here and in My Orders.
+            </p>
+            {cancellationAvailable ? (
+              <button className="cancel-order-btn" type="button" onClick={handleCancel} disabled={cancelLoading}>
+                {cancelLoading ? "Cancelling..." : "Cancel order"}
+              </button>
+            ) : (
+              <span className="cancel-disabled-note">Cancellation is closed for this order.</span>
+            )}
+          </section>
+
+          <Link className="continue-shopping-link" to="/collection">
+            <Icon icon="lucide:shopping-bag" />
+            Continue shopping
+          </Link>
+        </aside>
+      </section>
+    </main>
+  );
+}

@@ -11,6 +11,7 @@ const ShipRocketService = require('../services/ShipRocketService');
 const WalletService = require('../services/WalletService');
 const { config } = require('../config/env');
 const { Op } = require("sequelize");
+const { AppError } = require('../utils/http');
 
 const sortProductImages = (images = []) => [...images].sort((a, b) => {
   const left = Number.isFinite(Number(a.display_order)) ? Number(a.display_order) : 999;
@@ -45,6 +46,7 @@ const serializeOrder = (order) => {
     color_hex: item.Color?.hex_code || null,
     image_url: pickOrderItemImage(item.Product, item.colorId || item.color_id),
     product_slug: item.Product?.slug || null,
+    shipping_meta: item.shipping_meta || null,
   }));
   return json;
 };
@@ -54,32 +56,9 @@ let orderColumnCache = null;
 
 const ensureOrderAccountingColumns = async () => {
   const queryInterface = sequelize.getQueryInterface();
-  const table = { tableName: 'orders', schema: 'vns_saree' };
+  const table = { tableName: 'orders', schema: config.dbSchema };
   if (orderAccountingColumnsReady && orderColumnCache) return orderColumnCache;
-  let columns = await queryInterface.describeTable(table);
-  const wanted = {
-    subtotal_amount: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
-    shipping_charge: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
-    shipping_discount: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
-    wallet_amount: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
-    payable_amount: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
-    payment_method: { type: DataTypes.STRING, allowNull: true, defaultValue: 'Prepaid' },
-    payment_status: { type: DataTypes.STRING, allowNull: true, defaultValue: 'Paid' },
-    shiprocket_order_id: { type: DataTypes.STRING, allowNull: true },
-    shiprocket_awb: { type: DataTypes.STRING, allowNull: true },
-    cancelled_at: { type: DataTypes.DATE, allowNull: true },
-    refund_status: { type: DataTypes.STRING, allowNull: true },
-    refund_note: { type: DataTypes.TEXT, allowNull: true },
-  };
-
-  let changed = false;
-  for (const [column, definition] of Object.entries(wanted)) {
-    if (!columns[column]) {
-      await queryInterface.addColumn(table, column, definition);
-      changed = true;
-    }
-  }
-  if (changed) columns = await queryInterface.describeTable(table);
+  const columns = await queryInterface.describeTable(table);
   orderColumnCache = columns;
   orderAccountingColumnsReady = true;
   return columns;
@@ -88,45 +67,182 @@ const ensureOrderAccountingColumns = async () => {
 const keepExistingColumns = (payload, columns) =>
   Object.fromEntries(Object.entries(payload).filter(([key]) => columns[key]));
 
+let orderItemColumnsReady = false;
+let orderItemColumnCache = null;
+
+const ensureOrderItemAccountingColumns = async () => {
+  const queryInterface = sequelize.getQueryInterface();
+  const table = { tableName: 'order_items', schema: config.dbSchema };
+  if (orderItemColumnsReady && orderItemColumnCache) return orderItemColumnCache;
+  const columns = await queryInterface.describeTable(table);
+  orderItemColumnCache = columns;
+  orderItemColumnsReady = true;
+  return columns;
+};
+
+const roundMoney = (value) => Math.round((Number(value) || 0) * 100) / 100;
+
+const getProductWeightKg = (product) => {
+  const rawWeight = Number(product?.weight);
+  if (!Number.isFinite(rawWeight) || rawWeight <= 0) return 0.5;
+  return rawWeight > 5 ? rawWeight / 1000 : rawWeight;
+};
+
+const buildItemShippingMeta = ({
+  item,
+  product,
+  allocationWeight,
+  allocatedShipping,
+  allocatedShippingDiscount,
+  shippingDiscountReason,
+}) => {
+  const quantity = Math.max(1, Number(item.quantity || 1));
+  const productWeightKg = getProductWeightKg(product);
+  const boxWeightKg = Math.max(0, Number(config.packageWeightKg || 0));
+  const effectiveShippingPaid = Math.max(0, allocatedShipping - allocatedShippingDiscount);
+  const isFirstOrderFreeShipping = shippingDiscountReason === 'first_order';
+  const returnDeliveryDeduction = isFirstOrderFreeShipping ? 0 : allocatedShipping;
+  const rtoCharge = isFirstOrderFreeShipping ? 0 : roundMoney(allocatedShipping * Math.max(0, Number(config.rtoChargeMultiplier || 1)));
+
+  return {
+    product_weight_kg: roundMoney(productWeightKg),
+    box_weight_kg: roundMoney(boxWeightKg),
+    quantity,
+    allocation_weight_kg: roundMoney(allocationWeight),
+    delivery_charge: roundMoney(allocatedShipping),
+    delivery_discount: roundMoney(allocatedShippingDiscount),
+    delivery_paid: roundMoney(effectiveShippingPaid),
+    rto_charge_estimate: rtoCharge,
+    refund_rules: {
+      free_shipping_reason: shippingDiscountReason || null,
+      exchange_delivery_deduction: 0,
+      exchange_rto_deduction: 0,
+      return_delivery_deduction: roundMoney(returnDeliveryDeduction),
+      return_rto_deduction: rtoCharge,
+      return_total_logistics_deduction: roundMoney(returnDeliveryDeduction + rtoCharge),
+      note: isFirstOrderFreeShipping
+        ? 'First-order free shipping: delivery and RTO are not deducted on return.'
+        : 'Return refund deducts forward delivery and RTO logistics charges. Exchange has no logistics deduction.',
+    },
+  };
+};
+
+const allocateItemShipping = ({ items, productMap, shippingCharge, shippingDiscount, shippingDiscountReason }) => {
+  const lines = items.map((item) => {
+    const quantity = Math.max(1, Number(item.quantity || 1));
+    const product = productMap[item.id];
+    const productWeightKg = getProductWeightKg(product);
+    const allocationWeight = (productWeightKg + Math.max(0, Number(config.packageWeightKg || 0))) * quantity;
+    return { item, product, allocationWeight };
+  });
+  const totalWeight = lines.reduce((sum, line) => sum + line.allocationWeight, 0) || lines.length || 1;
+  let remainingShipping = roundMoney(shippingCharge);
+  let remainingDiscount = roundMoney(shippingDiscount);
+
+  return lines.map((line, index) => {
+    const isLast = index === lines.length - 1;
+    const allocatedShipping = isLast
+      ? remainingShipping
+      : roundMoney((shippingCharge * line.allocationWeight) / totalWeight);
+    const allocatedDiscount = isLast
+      ? remainingDiscount
+      : roundMoney((shippingDiscount * line.allocationWeight) / totalWeight);
+    remainingShipping = roundMoney(remainingShipping - allocatedShipping);
+    remainingDiscount = roundMoney(remainingDiscount - allocatedDiscount);
+
+    return buildItemShippingMeta({
+      item: line.item,
+      product: line.product,
+      allocationWeight: line.allocationWeight,
+      allocatedShipping,
+      allocatedShippingDiscount: allocatedDiscount,
+      shippingDiscountReason,
+    });
+  });
+};
+
+const getColorStockValue = (product, colorId) => {
+  const stocks = product?.color_stocks || {};
+  return Number(stocks?.[colorId] ?? stocks?.[String(colorId)] ?? product?.stock_quantity ?? 0);
+};
+
+const decrementProductInventory = async ({ product, colorId, quantity, transaction }) => {
+  const qty = Math.max(1, Number(quantity || 1));
+  const stocks = { ...(product.color_stocks || {}) };
+  const hasColor = colorId !== null && colorId !== undefined && colorId !== "";
+  const currentColorStock = getColorStockValue(product, colorId);
+  const currentTotalStock = Number(product.stock_quantity || 0);
+
+  if (currentTotalStock < qty || currentColorStock < qty) {
+    throw new AppError(`Only ${Math.max(0, Math.min(currentColorStock, currentTotalStock))} item(s) are available for ${product.name}.`, 400);
+  }
+
+  const updatePayload = { stock_quantity: currentTotalStock - qty };
+  if (hasColor) {
+    stocks[String(colorId)] = currentColorStock - qty;
+    updatePayload.color_stocks = stocks;
+  }
+
+  await product.update(updatePayload, { transaction });
+};
+
 class OrderController {
   async createOrder(req, res) {
     const t = await sequelize.transaction();
     try {
       const { 
         customer_name, customer_email, address, city, state, pincode, phone, 
-        subtotal_amount, shipping_charge = 0, shipping_discount = 0,
-        total_amount, items, coupon_code, wallet_amount = 0, payment_method = 'Prepaid', payment_status = 'Paid'
+        subtotal_amount, shipping_charge = 0, shipping_discount = 0, payment_fee = 0, payment_discount = 0,
+        shipping_discount_reason = null, total_amount, items, coupon_code, wallet_amount = 0, payment_method = 'Prepaid', payment_status = 'Paid'
       } = req.body;
       if (!Array.isArray(items) || items.length === 0) {
         await t.rollback();
         return res.status(400).json({ message: 'Order items are required' });
       }
 
-      const productIds = items.map((item) => item.id).filter(Boolean);
-      const products = await Product.findAll({ where: { id: productIds }, attributes: ['id'], transaction: t });
+      const productIds = [...new Set(items.map((item) => item.id).filter(Boolean))];
+      const products = await Product.findAll({
+        where: { id: productIds },
+        attributes: ['id', 'name', 'weight', 'stock_quantity', 'color_stocks', 'status'],
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
       const productMap = Object.fromEntries(products.map((p) => [p.id, p]));
       const missingProductId = productIds.find((id) => !productMap[id]);
       if (missingProductId) {
         await t.rollback();
         return res.status(400).json({ message: `Invalid product in cart: ${missingProductId}` });
       }
-
-      if (String(payment_method).toUpperCase() === 'COD') {
-        if (Number(total_amount || 0) > config.codMaxAmount) {
+      for (const item of items) {
+        const productForStock = productMap[item.id];
+        if (productForStock.status !== 'active') {
           await t.rollback();
-          return res.status(400).json({ message: `COD is available only up to Rs. ${config.codMaxAmount}.` });
+          return res.status(400).json({ message: `${productForStock.name} is currently unavailable.` });
         }
+        await decrementProductInventory({
+          product: productForStock,
+          colorId: item.colorId || item.color_id || null,
+          quantity: item.quantity,
+          transaction: t,
+        });
       }
 
-      const customer = customer_email
-        ? await Customer.findOne({ where: { email: customer_email }, transaction: t })
-        : null;
+      const authenticatedCustomer = req.userRole === 'customer' && req.user ? req.user : null;
+      const customer = authenticatedCustomer
+        || (customer_email ? await Customer.findOne({ where: { email: customer_email }, transaction: t }) : null);
 
       let discount_amount = 0;
       const itemSubtotal = Number(subtotal_amount || items.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 1)), 0));
       const actualShippingCharge = Math.max(0, Number(shipping_charge || 0));
       const actualShippingDiscount = Math.max(0, Math.min(actualShippingCharge, Number(shipping_discount || 0)));
+      const actualPaymentFee = Math.max(0, Number(payment_fee || 0));
+      const actualPaymentDiscount = Math.max(0, Number(payment_discount || 0));
       let final_total = Number(total_amount || 0);
+
+      if (String(payment_method).toUpperCase() === 'COD' && itemSubtotal > config.codMaxAmount) {
+        await t.rollback();
+        return res.status(400).json({ message: `COD is available only up to Rs. ${config.codMaxAmount}.` });
+      }
 
       if (coupon_code) {
         const Coupon = require('../models/Coupon');
@@ -164,10 +280,18 @@ class OrderController {
       }
 
       const orderColumns = await ensureOrderAccountingColumns();
+      const orderItemColumns = await ensureOrderItemAccountingColumns();
+      const itemShippingMetas = allocateItemShipping({
+        items,
+        productMap,
+        shippingCharge: actualShippingCharge,
+        shippingDiscount: actualShippingDiscount,
+        shippingDiscountReason: shipping_discount_reason,
+      });
       const orderPayload = keepExistingColumns({
         customer_id: customer?.id || null,
-        customer_name,
-        customer_email,
+        customer_name: customer_name || customer?.name,
+        customer_email: customer?.email || customer_email,
         address,
         city,
         state: state || 'Uttar Pradesh',
@@ -176,6 +300,8 @@ class OrderController {
         subtotal_amount: itemSubtotal,
         shipping_charge: actualShippingCharge,
         shipping_discount: actualShippingDiscount,
+        payment_fee: actualPaymentFee,
+        payment_discount: actualPaymentDiscount,
         total_amount: final_total,
         coupon_code,
         discount_amount,
@@ -190,16 +316,20 @@ class OrderController {
         transaction: t,
       });
 
-      const orderItems = items.map(item => ({
+      const orderItems = items.map((item, index) => ({
         order_id: order.id,
         product_id: item.id,
         colorId: item.colorId || item.color_id || null,
         quantity: item.quantity,
         price: item.price,
-        product_name: item.name || item.product_name
-      }));
+        product_name: item.name || item.product_name,
+        shipping_meta: itemShippingMetas[index] || null,
+      })).map((item) => keepExistingColumns(item, orderItemColumns));
 
-      await OrderItem.bulkCreate(orderItems, { transaction: t });
+      await OrderItem.bulkCreate(orderItems, {
+        fields: Object.keys(orderItems[0] || {}),
+        transaction: t,
+      });
 
       if (walletDebit > 0 && customer) {
         await WalletTransaction.create({
@@ -257,7 +387,7 @@ class OrderController {
       res.status(201).json({ message: 'Order placed successfully', orderId: order.id });
     } catch (error) {
       await t.rollback();
-      res.status(500).json({ message: error.message });
+      res.status(error.status || 500).json({ message: error.message });
     }
   }
 
@@ -308,6 +438,13 @@ class OrderController {
       const { orderId } = req.params;
       const order = await Order.findByPk(orderId);
       if (!order) return res.status(404).json({ message: 'Order not found' });
+      const isOwnedByCustomerId = Number(order.customer_id) === Number(req.user?.id);
+      const isLegacyOwnedByEmail = !order.customer_id
+        && req.user?.email
+        && String(order.customer_email || '').toLowerCase() === String(req.user.email).toLowerCase();
+      if (req.userRole !== 'admin' && !isOwnedByCustomerId && !isLegacyOwnedByEmail) {
+        return res.status(403).json({ message: 'This order does not belong to this customer.' });
+      }
 
       // Try AWB first, fall back to SR order ID
       if (order.shiprocket_awb) {
@@ -327,11 +464,70 @@ class OrderController {
     }
   }
 
+  async getCurrentCustomerOrders(req, res) {
+    try {
+      await ensureOrderAccountingColumns();
+      if (!req.user?.id || req.userRole === 'admin') {
+        return res.status(401).json({ message: 'Customer authentication required' });
+      }
+
+      const orders = await Order.findAll({
+        where: {
+          [Op.or]: [
+            { customer_id: req.user.id },
+            { customer_id: null, customer_email: req.user.email },
+          ],
+        },
+        include: [{
+          model: OrderItem,
+          include: [
+            { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
+            { model: Color, attributes: ['id', 'name', 'hex_code'] },
+          ],
+        }],
+        order: [['createdAt', 'DESC']],
+      });
+      res.status(200).json(orders.map(serializeOrder));
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+  }
+
+  async getCustomerOrderById(req, res) {
+    try {
+      await ensureOrderAccountingColumns();
+      if (!req.user?.id || req.userRole === 'admin') {
+        return res.status(401).json({ message: 'Customer authentication required' });
+      }
+
+      const order = await Order.findOne({
+        where: {
+          id: req.params.id,
+          [Op.or]: [
+            { customer_id: req.user.id },
+            { customer_id: null, customer_email: req.user.email },
+          ],
+        },
+        include: [{
+          model: OrderItem,
+          include: [
+            { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
+            { model: Color, attributes: ['id', 'name', 'hex_code'] },
+          ],
+        }],
+      });
+
+      if (!order) return res.status(404).json({ message: 'Order not found' });
+      return res.status(200).json(serializeOrder(order));
+    } catch (error) {
+      return res.status(500).json({ message: error.message });
+    }
+  }
+
   async cancelOrder(req, res) {
     const t = await sequelize.transaction();
     try {
       const { id } = req.params;
-      const requesterEmail = String(req.body?.email || '').trim().toLowerCase();
       const order = await Order.findByPk(id, { transaction: t, lock: t.LOCK.UPDATE });
 
       if (!order) {
@@ -339,7 +535,11 @@ class OrderController {
         return res.status(404).json({ message: 'Order not found' });
       }
 
-      if (requesterEmail && String(order.customer_email || '').toLowerCase() !== requesterEmail) {
+      const isOwnedByCustomerId = Number(order.customer_id) === Number(req.user?.id);
+      const isLegacyOwnedByEmail = !order.customer_id
+        && req.user?.email
+        && String(order.customer_email || '').toLowerCase() === String(req.user.email).toLowerCase();
+      if (req.userRole !== 'admin' && !isOwnedByCustomerId && !isLegacyOwnedByEmail) {
         await t.rollback();
         return res.status(403).json({ message: 'This order does not belong to this customer.' });
       }
@@ -488,6 +688,9 @@ class OrderController {
       }
 
       await t.commit();
+      EmailService.sendOrderStatusUpdate({ ...order.toJSON(), ...updatePayload }, normalized).catch((error) => {
+        console.error(`[Email] status update failed for order #${order.id}:`, error.message);
+      });
       return res.status(200).json({ message: 'Order updated', order });
     } catch (error) {
       await t.rollback();

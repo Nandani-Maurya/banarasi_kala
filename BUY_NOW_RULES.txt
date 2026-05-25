@@ -1,0 +1,91 @@
+Checkout rules
+==============
+
+Configuration
+-------------
+Frontend env:
+- VITE_PREFERRED_COURIER_NAME=Xpressbees Surface
+- VITE_COURIER_SELECTION_MODE=preferred_or_cheapest
+- VITE_COD_MAX_AMOUNT=10000
+- VITE_FREE_SHIPPING_MIN_AMOUNT=10000
+- VITE_PREPAID_DISCOUNT_AMOUNT=50
+- VITE_COD_FEE_AMOUNT=50
+- VITE_ORDER_PROCESSING_DAYS=4
+- VITE_PACKAGING_WEIGHT_KG=0.7
+
+Backend env:
+- COD_MAX_AMOUNT=10000
+- FREE_SHIPPING_MIN_AMOUNT=10000
+- PREPAID_DISCOUNT_AMOUNT=50
+- COD_FEE_AMOUNT=50
+- PACKAGE_WEIGHT_KG=0.7
+- RTO_CHARGE_MULTIPLIER=1
+- SHIPROCKET_PICKUP_LOCATION=Home
+- SHIPROCKET_WEBHOOK_SECRET=
+
+Payment rules
+-------------
+1. These rules apply to both Buy Now and cart checkout.
+2. Prepaid payment is always available for in-stock products.
+3. Prepaid payment gets Rs. 50 extra discount.
+4. COD is available only when product subtotal is Rs. 10,000 or below.
+5. COD is disabled when product subtotal is above Rs. 10,000.
+6. COD adds Rs. 50 extra charge.
+
+Shipping rules
+--------------
+1. These rules apply to both single-product Buy Now and multi-product cart checkout.
+2. First order gets free shipping. In return or exchange, no delivery charge and no RTO charge is deducted.
+3. Orders above Rs. 10,000 also get free shipping, but if returned, forward delivery charge and RTO estimate are deducted from refund.
+4. Paid-shipping returns also deduct forward delivery and RTO estimate.
+5. Exchange has no delivery/RTO deduction and is allowed only once.
+6. Shipment weight sent to ShipRocket is sum((product_weight_kg + box_weight_kg) * quantity).
+7. ShipRocket serviceability reads the saved pickup location directly from the ShipRocket account.
+8. SHIPROCKET_PICKUP_LOCATION selects the saved ShipRocket pickup location name, currently Home.
+
+Courier selection rules
+-----------------------
+1. Use the configured courier in VITE_PREFERRED_COURIER_NAME when available.
+2. If configured courier is not available, use the cheapest serviceable courier.
+3. If VITE_COURIER_SELECTION_MODE=cheapest, always use cheapest serviceable courier.
+4. If no courier is serviceable, disable Proceed / Place Order.
+
+Return, exchange and refund logistics
+-------------------------------------
+1. A delivered order can use only one after-sale action: either one return or one exchange.
+2. Return and exchange are protected by logged-in customer ownership.
+3. Backend stores per-item shipping/refund accounting in order_items.shipping_meta JSONB.
+4. shipping_meta includes product weight, box weight, allocation weight, delivery charge, delivery discount, paid delivery, RTO estimate and refund rules.
+5. Per-item delivery allocation is weight-based, so one returned saree from a multi-product order can be refunded with only that saree's logistics deduction.
+6. Exchange pickup uses ShipRocket return-order flow and stores exchange_requested_at.
+7. Return stores return_requested_at and refund_note with estimated deduction.
+
+Inventory rules
+---------------
+1. Add to Bag checks existing bag quantity plus requested quantity before calling backend.
+2. Backend cart errors return customer-friendly 400 messages instead of generic internal errors.
+3. Order placement locks products in the DB transaction and decrements stock_quantity and selected color_stocks after stock validation.
+4. If requested quantity is higher than available stock, order placement fails and inventory changes are rolled back.
+
+Cart checkout rules
+-------------------
+1. Cart page only shows a bag summary and Proceed to Checkout.
+2. Coupon and wallet are applied on checkout, not from the cart page.
+3. Checkout loads saved addresses, coupons, wallet balance and first-order status.
+4. Checkout sends the same order payload shape as Buy Now: subtotal, shipping charge, shipping discount, payment fee, payment discount, coupon code, wallet amount and gross order amount before coupon/wallet.
+
+Database migration
+------------------
+1. Commerce schema changes are kept in backend/scripts/migrate-commerce-schema.js.
+2. Run `npm run migrate:commerce` from the backend folder before testing new order accounting fields.
+3. Runtime order code only verifies columns and does not create columns automatically.
+
+Order confirmation, email and tracking
+--------------------------------------
+1. Order confirmation email is sent after order creation.
+2. After Buy Now or cart checkout places an order, frontend opens /order-confirmation?orderId=<id>.
+3. Confirmation page loads protected order detail from /api/orders/:id.
+4. Admin status updates send customer emails for Processing, Shipped, Out For Delivery, Delivered and Cancelled.
+5. ShipRocket webhook endpoint /api/shiprocket/webhook can sync shipped/out-for-delivery/delivered/cancelled statuses and send customer status emails after Ship Now, once configured inside ShipRocket.
+6. If SHIPROCKET_WEBHOOK_SECRET is set, webhook calls must send the same value in x-webhook-secret or x-shiprocket-webhook-secret.
+7. Tracking is read from ShipRocket by AWB/order id and appears on confirmation and My Orders when ShipRocket returns scan events.

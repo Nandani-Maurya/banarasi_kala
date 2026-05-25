@@ -37,6 +37,31 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
+const optionalAuthMiddleware = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return next();
+    }
+
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const role = decoded.role || "customer";
+    const user = role === "admin"
+      ? await Admin.findByPk(decoded.id)
+      : await Customer.findByPk(decoded.id);
+
+    if (user) {
+      req.user = user;
+      req.userRole = role;
+      req.customer = user;
+    }
+  } catch (error) {
+    console.error("Optional Auth Middleware Error:", error.message);
+  }
+  next();
+};
+
 const adminMiddleware = (req, res, next) => {
   if (req.userRole === 'admin' || (req.user && req.user.role === 'admin')) {
     next();
@@ -45,4 +70,4 @@ const adminMiddleware = (req, res, next) => {
   }
 };
 
-module.exports = { authMiddleware, adminMiddleware };
+module.exports = { authMiddleware, optionalAuthMiddleware, adminMiddleware };

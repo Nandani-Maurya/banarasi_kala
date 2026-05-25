@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const ShipRocketController = require('../controllers/ShipRocketController');
+const { authMiddleware } = require('../middleware/authMiddleware');
 
 // All ShipRocket routes are admin-only in production.
 // Add your admin auth middleware here when ready:
@@ -72,6 +73,13 @@ router.get('/serviceability', ShipRocketController.checkServiceability);
  * Body: { orderId: number }
  * Initiate return shipment on ShipRocket.
  */
-router.post('/create-return', ShipRocketController.createReturn);
+router.post('/create-return', authMiddleware, ShipRocketController.createReturn);
+router.post('/create-exchange', authMiddleware, ShipRocketController.createExchange);
+
+/**
+ * POST /api/shiprocket/webhook
+ * ShipRocket webhook for shipment status updates.
+ */
+router.post('/webhook', ShipRocketController.webhook);
 
 module.exports = router;

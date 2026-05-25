@@ -1,36 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import "./OccasionCollections.css";
 
 const OccasionCollections = () => {
   const navigate = useNavigate();
-  const sectionRef = useRef(null);
   const [occasions, setOccasions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [hasRequested, setHasRequested] = useState(false);
 
   useEffect(() => {
-    const section = sectionRef.current;
-    if (!section || hasRequested) return undefined;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setHasRequested(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "420px 0px", threshold: 0.01 },
-    );
-
-    observer.observe(section);
-    return () => observer.disconnect();
-  }, [hasRequested]);
-
-  useEffect(() => {
-    if (!hasRequested) return undefined;
-
     const controller = new AbortController();
     fetch(`${API_ENDPOINTS.occasions}?limit=4`, { signal: controller.signal })
       .then((response) => response.json())
@@ -41,14 +19,14 @@ const OccasionCollections = () => {
       .finally(() => setLoading(false));
 
     return () => controller.abort();
-  }, [hasRequested]);
+  }, []);
 
   const openOccasion = (occasionId) => {
     navigate(`/collection?occasion=${occasionId}`);
   };
 
   return (
-    <section className="bk-occasion-section" ref={sectionRef}>
+    <section className="bk-occasion-section">
       <div className="bk-occasion-shell">
         <div className="bk-occasion-heading">
           <span>Occasion Wear</span>

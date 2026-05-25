@@ -1,4 +1,5 @@
 const axios = require('axios');
+const { config } = require('../config/env');
 
 const BASE_URL = 'https://apiv2.shiprocket.in/v1/external';
 
@@ -12,6 +13,8 @@ class ShipRocketService {
   constructor() {
     this._token = null;
     this._tokenExpiry = null; // ms timestamp
+    this._pickupLocations = null;
+    this._pickupLocationsExpiry = null;
   }
 
   // ─── AUTH ────────────────────────────────────────────────────────────────────
@@ -43,6 +46,74 @@ class ShipRocketService {
     };
   }
 
+  _normalizePickupLocation(raw = {}) {
+    const name = raw.pickup_location || raw.pickup_location_name || raw.address_name || raw.name || raw.location_name || raw.title || "";
+    const postcode = raw.pin_code || raw.pin || raw.pincode || raw.postcode || raw.pickup_pincode || raw.zipcode || raw.zip || "";
+    const status = String(raw.status || raw.active || raw.is_active || "").toLowerCase();
+    return {
+      name: String(name || "").trim(),
+      postcode: String(postcode || "").trim(),
+      address: raw.address || raw.address_1 || raw.address_line_1 || raw.pickup_address || "",
+      address2: raw.address_2 || raw.address2 || raw.landmark || "",
+      city: raw.city || raw.pickup_city || "",
+      state: raw.state || raw.pickup_state || "",
+      email: raw.email || raw.pickup_email || "",
+      phone: raw.phone || raw.pickup_phone || raw.mobile || "",
+      isDefault: Boolean(raw.is_default || raw.default || raw.default_address),
+      isActive: status ? !["0", "false", "inactive", "disabled"].includes(status) : true,
+      raw,
+    };
+  }
+
+  _extractPickupLocations(responseData) {
+    const candidates = [
+      responseData?.data?.shipping_address,
+      responseData?.data?.pickup_locations,
+      responseData?.data?.addresses,
+      responseData?.data,
+      responseData?.shipping_address,
+      responseData?.pickup_locations,
+      responseData?.addresses,
+      responseData,
+    ];
+    const list = candidates.find(Array.isArray) || [];
+    return list
+      .map((item) => this._normalizePickupLocation(item))
+      .filter((item) => item.name || item.postcode);
+  }
+
+  async getPickupLocations({ force = false } = {}) {
+    if (!force && this._pickupLocations && this._pickupLocationsExpiry && Date.now() < this._pickupLocationsExpiry) {
+      return this._pickupLocations;
+    }
+
+    const headers = await this._headers();
+    const response = await axios.get(`${BASE_URL}/settings/company/pickup`, { headers });
+    const locations = this._extractPickupLocations(response.data);
+    this._pickupLocations = locations;
+    this._pickupLocationsExpiry = Date.now() + 30 * 60 * 1000;
+    return locations;
+  }
+
+  async getActivePickupLocation() {
+    const locations = await this.getPickupLocations({ force: true });
+    const pickupName = String(config.shiprocketPickupLocation || 'Home').trim().toLowerCase();
+    const selected = locations.find((item) => item.isActive && item.name.toLowerCase() === pickupName)
+      || locations.find((item) => item.name.toLowerCase() === pickupName);
+
+    if (!selected) {
+      throw new Error(`ShipRocket pickup location "${config.shiprocketPickupLocation || 'Home'}" was not found in your ShipRocket account.`);
+    }
+    if (!selected.postcode) {
+      throw new Error(`ShipRocket pickup location "${selected.name}" does not have a pincode.`);
+    }
+
+    return {
+      ...selected,
+      source: 'shiprocket',
+    };
+  }
+
   // ─── ORDER ────────────────────────────────────────────────────────────────────
   _computePackageMetrics(items, productMap) {
     let totalWeight = 0;
@@ -59,7 +130,7 @@ class ShipRocketService {
         const rawWeight = Number(product.weight);
         itemWeightKg = rawWeight > 5 ? rawWeight / 1000 : rawWeight;
       }
-      totalWeight += itemWeightKg * quantity;
+      totalWeight += (itemWeightKg + Math.max(0, Number(config.packageWeightKg || 0))) * quantity;
 
       const rawLength = Number(product?.length);
       const rawWidth = Number(product?.width);
@@ -92,6 +163,7 @@ class ShipRocketService {
    */
   async createOrder(orderData) {
     const { order, items } = orderData;
+    const pickupLocation = await this.getActivePickupLocation();
 
     // Fetch product details for true dimensions & weights
     const productIds = items.map(item => item.product_id).filter(Boolean);
@@ -125,7 +197,7 @@ class ShipRocketService {
     const payload = {
       order_id: `VNS-${order.id}`,
       order_date: orderDate,
-      pickup_location: 'Home',  // Matches pickup location name in ShipRocket dashboard
+      pickup_location: pickupLocation.name,
 
       // Billing == Shipping for this store
       billing_customer_name: order.customer_name,
@@ -170,6 +242,7 @@ class ShipRocketService {
    */
   async createReturnOrder(returnData) {
     const { order, items, reason } = returnData;
+    const pickupLocation = await this.getActivePickupLocation();
 
     // Fetch product details for true dimensions & weights
     const productIds = items.map(item => item.product_id).filter(Boolean);
@@ -201,7 +274,7 @@ class ShipRocketService {
     const payload = {
       order_id: `RET-VNS-${order.id}`,
       order_date: orderDate,
-      pickup_location: 'Home', // Warehouse/Home where customer return gets delivered
+      pickup_location: pickupLocation.name,
 
       // Returns are picked up from the customer
       pickup_customer_name: order.customer_name,
@@ -215,17 +288,17 @@ class ShipRocketService {
       pickup_email: order.customer_email,
       pickup_phone: String(order.phone),
 
-      // Delivered back to your warehouse address
-      shipping_customer_name: 'Banaras Heritage',
+      // Delivered back to the saved ShipRocket pickup address
+      shipping_customer_name: pickupLocation.name,
       shipping_last_name: '',
-      shipping_address: 'D-36/248, August Kunda, August Kunda Road',
-      shipping_address_2: 'Dashashwamedh',
-      shipping_city: 'Varanasi',
-      shipping_pincode: '221001',
-      shipping_state: 'Uttar Pradesh',
+      shipping_address: pickupLocation.address,
+      shipping_address_2: pickupLocation.address2,
+      shipping_city: pickupLocation.city,
+      shipping_pincode: pickupLocation.postcode,
+      shipping_state: pickupLocation.state,
       shipping_country: 'India',
-      shipping_email: '2000nanmaurya@gmail.com',
-      shipping_phone: '9876543210',
+      shipping_email: pickupLocation.email,
+      shipping_phone: pickupLocation.phone,
 
       order_items: orderItems,
       payment_method: 'Prepaid',
@@ -255,11 +328,31 @@ class ShipRocketService {
    */
   async getServiceableCouries(shipmentId, pincode, weight = 0.5, isCod = false) {
     const headers = await this._headers();
+    const pickupLocation = await this.getActivePickupLocation();
+    const params = new URLSearchParams({
+      pickup_postcode: pickupLocation.postcode,
+      delivery_postcode: String(pincode),
+      weight: String(weight),
+      cod: isCod ? '1' : '0',
+    });
+    if (shipmentId) params.set('shipment_id', String(shipmentId));
+
     const response = await axios.get(
-      `${BASE_URL}/courier/serviceability/?pickup_postcode=221001&delivery_postcode=${pincode}&weight=${weight}&cod=${isCod ? 1 : 0}`,
+      `${BASE_URL}/courier/serviceability/?${params.toString()}`,
       { headers }
     );
-    return response.data;
+    return {
+      ...response.data,
+      meta: {
+        ...(response.data?.meta || {}),
+        pickup_postcode: pickupLocation.postcode,
+        pickup_location: pickupLocation.name,
+        pickup_source: pickupLocation.source || 'unknown',
+        delivery_postcode: String(pincode),
+        weight: String(weight),
+        cod: isCod ? 1 : 0,
+      },
+    };
   }
 
   /**

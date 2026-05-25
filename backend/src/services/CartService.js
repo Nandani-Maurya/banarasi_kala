@@ -1,5 +1,6 @@
 const Cart = require("../models/Cart");
 const Product = require("../models/Product");
+const { AppError } = require("../utils/http");
 
 const CART_PRODUCT_ATTRIBUTES = [
   "id",
@@ -35,11 +36,11 @@ class CartService {
 
   async addToCart(customerId, productId, quantity = 1, colorId = null) {
     const product = await Product.findByPk(productId, { attributes: ["id", "stock_quantity", "color_stocks", "status"] });
-    if (!product) throw new Error("Product not found");
-    if (product.status !== "active") throw new Error("This product is currently unavailable.");
+    if (!product) throw new AppError("Product not found", 404);
+    if (product.status !== "active") throw new AppError("This product is currently unavailable.", 400);
 
     const colorStock = Number(product.color_stocks?.[colorId] ?? product.stock_quantity ?? 0);
-    if (colorStock <= 0) throw new Error("This product is out of stock.");
+    if (colorStock <= 0) throw new AppError("This product is out of stock.", 400);
     
     let cartItem = await Cart.findOne({
       where: { customerId, productId, colorId },
@@ -47,7 +48,14 @@ class CartService {
 
     const newQuantity = (cartItem ? cartItem.quantity : 0) + quantity;
     if (newQuantity > colorStock) {
-      throw new Error(`Insufficient stock. Only ${colorStock} items available.`);
+      const alreadyInBag = cartItem ? Number(cartItem.quantity || 0) : 0;
+      const canAdd = Math.max(0, colorStock - alreadyInBag);
+      throw new AppError(
+        canAdd > 0
+          ? `Only ${canAdd} more can be added. You already have ${alreadyInBag} in your bag.`
+          : `You already have the available ${colorStock} item(s) in your bag.`,
+        400
+      );
     }
 
     if (cartItem) {
@@ -67,13 +75,13 @@ class CartService {
 
   async updateQuantity(customerId, productId, quantity, colorId = null) {
     const product = await Product.findByPk(productId, { attributes: ["id", "stock_quantity", "color_stocks", "status"] });
-    if (!product) throw new Error("Product not found");
-    if (product.status !== "active") throw new Error("This product is currently unavailable.");
+    if (!product) throw new AppError("Product not found", 404);
+    if (product.status !== "active") throw new AppError("This product is currently unavailable.", 400);
     const colorStock = Number(product.color_stocks?.[colorId] ?? product.stock_quantity ?? 0);
-    if (colorStock <= 0) throw new Error("This product is out of stock.");
+    if (colorStock <= 0) throw new AppError("This product is out of stock.", 400);
 
     if (quantity > colorStock) {
-      throw new Error(`Insufficient stock. Only ${colorStock} items available.`);
+      throw new AppError(`Only ${colorStock} item(s) are available.`, 400);
     }
 
     const cartItem = await Cart.findOne({
@@ -81,7 +89,7 @@ class CartService {
     });
 
     if (!cartItem) {
-      throw new Error("Item not found in cart");
+      throw new AppError("Item not found in cart", 404);
     }
 
     cartItem.quantity = quantity;

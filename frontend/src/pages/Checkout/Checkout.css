@@ -76,3 +76,540 @@
     opacity: 1;
     transform: translateY(0);
 }
+
+.checkout-page-shell {
+    max-width: 1040px;
+    margin: 0 auto;
+}
+
+.checkout-back-btn {
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    border: 1px solid rgba(128, 0, 32, 0.16);
+    background: rgba(255, 250, 241, 0.92);
+    color: #800020;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    box-shadow: 0 10px 24px rgba(88, 39, 13, 0.08);
+}
+
+.checkout-back-btn span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+
+.checkout-back-inline {
+    margin: 0 0 10px;
+}
+
+.checkout-card,
+.checkout-summary-card {
+    border-radius: 14px !important;
+    border-color: rgba(128, 0, 32, 0.12) !important;
+    background: rgba(255, 250, 241, 0.96) !important;
+    box-shadow: 0 14px 34px rgba(88, 39, 13, 0.1) !important;
+}
+
+.checkout-page-shell .buy-now-section {
+    padding: 13px;
+    background: rgba(255, 255, 255, 0.62);
+    border: 1px solid rgba(128, 0, 32, 0.1);
+    border-radius: 14px;
+    box-shadow: 0 12px 30px rgba(88, 39, 13, 0.08);
+}
+
+.checkout-page-shell .buy-now-section + .buy-now-section {
+    margin-top: 8px;
+}
+
+.checkout-page-shell .buy-now-section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.checkout-page-shell .buy-now-section-title h3 {
+    margin: 0;
+    color: #5d140c;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.checkout-page-shell .buy-now-section-title button,
+.checkout-page-shell .buy-now-form-actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 34px;
+    padding: 0 12px;
+    border: 1px solid rgba(128, 0, 32, 0.14);
+    border-radius: 999px;
+    background: #fffdf8;
+    color: #800020;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.checkout-page-shell .buy-now-payment-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.checkout-page-shell .buy-now-payment-grid button {
+    min-height: 76px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 9px;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid rgba(128, 0, 32, 0.12);
+    border-radius: 12px;
+    background: #fffdf8;
+    color: #35170f;
+    cursor: pointer;
+    text-align: left;
+}
+
+.checkout-layout {
+    gap: 18px !important;
+}
+
+.checkout-flow {
+    display: grid;
+    gap: 8px !important;
+}
+
+.checkout-summary-product-link {
+    text-decoration: none;
+}
+
+.checkout-page-shell .buy-now-payment-grid button.active {
+    border-color: #800020;
+    box-shadow: 0 0 0 3px rgba(128, 0, 32, 0.08);
+}
+
+.checkout-page-shell .buy-now-payment-grid button:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+}
+
+.checkout-page-shell .buy-now-payment-grid svg {
+    grid-row: span 2;
+    width: 22px;
+    height: 22px;
+    color: #800020;
+}
+
+.checkout-page-shell .buy-now-payment-grid span {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.checkout-page-shell .buy-now-payment-grid small {
+    color: rgba(53, 23, 15, 0.55);
+    font-size: 11px;
+    font-weight: 400;
+}
+
+.checkout-summary-card {
+    padding: 22px !important;
+}
+
+.checkout-summary-card h3 {
+    margin-bottom: 18px !important;
+    padding-bottom: 12px !important;
+    font-size: 18px !important;
+    letter-spacing: 0.08em !important;
+}
+
+.checkout-primary-btn {
+    padding: 14px 18px;
+    border-radius: 10px;
+    background: #8f001f;
+    color: #ffe39b;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    box-shadow: 0 12px 24px rgba(128, 0, 32, 0.18);
+    transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.checkout-primary-btn:hover {
+    transform: translateY(-1px);
+}
+
+.checkout-primary-btn:disabled {
+    opacity: 0.62;
+    cursor: not-allowed;
+}
+
+.checkout-add-address {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 34px;
+    padding: 0 12px;
+    border: 1px solid rgba(128, 0, 32, 0.14);
+    border-radius: 999px;
+    background: #fffdf8;
+    color: #800020;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.checkout-address-list,
+.buy-now-address-list {
+    display: grid;
+    gap: 9px;
+}
+
+.buy-now-address {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    background: #fffdf8;
+    border: 1px solid rgba(128, 0, 32, 0.1);
+    border-radius: 12px;
+}
+
+.buy-now-address.active {
+    border-color: rgba(128, 0, 32, 0.46);
+    box-shadow: 0 0 0 3px rgba(128, 0, 32, 0.08);
+}
+
+.buy-now-address input {
+    accent-color: #800020;
+}
+
+.buy-now-address strong,
+.buy-now-address small {
+    display: block;
+}
+
+.buy-now-address strong {
+    color: #35170f;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.buy-now-address em {
+    margin-left: 6px;
+    color: #047857;
+    font-size: 10px;
+    font-style: normal;
+    font-weight: 600;
+}
+
+.buy-now-address small {
+    margin-top: 3px;
+    color: rgba(53, 23, 15, 0.58);
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.35;
+}
+
+.buy-now-address > button {
+    border: 0;
+    background: transparent;
+    color: #800020;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.checkout-no-address {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 14px;
+    border: 1px dashed rgba(128, 0, 32, 0.2);
+    border-radius: 12px;
+    background: #fffdf8;
+}
+
+.checkout-no-address svg {
+    color: #9b6a39;
+    font-size: 22px;
+}
+
+.checkout-no-address strong,
+.checkout-no-address span {
+    display: block;
+}
+
+.checkout-no-address strong {
+    color: #35170f;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.checkout-no-address span {
+    color: rgba(53, 23, 15, 0.58);
+    font-size: 12px;
+}
+
+.checkout-no-address button {
+    min-height: 34px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 9px;
+    background: #800020;
+    color: #ffe1a2;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.buy-now-address-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483010;
+    display: grid;
+    place-items: center;
+    padding: 14px;
+    overflow: auto;
+    background: rgba(45, 27, 14, 0.42);
+    backdrop-filter: blur(7px);
+}
+
+.buy-now-address-modal-card {
+    position: relative;
+    width: min(760px, 100%);
+    max-height: min(820px, calc(100vh - 28px));
+    overflow-y: auto;
+    display: grid;
+    gap: 12px;
+    padding: 18px;
+    background: #fffaf2;
+    border: 1px solid rgba(128, 0, 32, 0.12);
+    border-radius: 12px;
+    box-shadow: 0 28px 78px rgba(45, 27, 14, 0.28);
+}
+
+.buy-now-address-modal-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 34px;
+    height: 34px;
+    display: grid;
+    place-items: center;
+    color: #800020;
+    background: #fffdf8;
+    border: 1px solid rgba(128, 0, 32, 0.14);
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 2;
+}
+
+.buy-now-address-modal-title {
+    padding-right: 42px;
+}
+
+.buy-now-address-modal-title h3 {
+    margin: 0;
+    color: #35170f;
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.buy-now-address-modal-title span {
+    color: rgba(53, 23, 15, 0.56);
+    font-size: 11px;
+}
+
+.buy-now-location-card {
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+    background: rgba(255, 252, 246, 0.74);
+    border: 1px solid rgba(128, 0, 32, 0.12);
+    border-radius: 12px;
+}
+
+.buy-now-location-card span {
+    display: block;
+    margin-bottom: 5px;
+    color: #7a4619;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.buy-now-location-card strong {
+    display: block;
+    color: #35170f;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.buy-now-location-card small {
+    display: block;
+    margin-top: 3px;
+    color: rgba(53, 23, 15, 0.58);
+    font-size: 12px;
+}
+
+.buy-now-location-actions,
+.buy-now-form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.buy-now-location-actions button,
+.buy-now-form-actions button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 34px;
+    padding: 0 11px;
+    border: 1px solid rgba(128, 0, 32, 0.18);
+    border-radius: 9px;
+    background: #fff8ed;
+    color: #800020;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.buy-now-location-actions button.is-danger {
+    color: #b42318;
+    border-color: rgba(180, 35, 24, 0.22);
+}
+
+.buy-now-address-form {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed rgba(128, 0, 32, 0.16);
+}
+
+.buy-now-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.buy-now-address-form label {
+    display: grid;
+    gap: 5px;
+}
+
+.buy-now-address-form label > span {
+    color: rgba(53, 23, 15, 0.64);
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.buy-now-address-form input,
+.buy-now-address-form select {
+    width: 100%;
+    min-height: 38px;
+    padding: 0 11px;
+    border: 1px solid rgba(128, 0, 32, 0.16);
+    border-radius: 9px;
+    background: #fffdf8;
+    color: #35170f;
+    font-size: 13px;
+    font-weight: 400;
+    outline: none;
+}
+
+.buy-now-checkbox {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+}
+
+.buy-now-checkbox input {
+    width: 16px;
+    min-height: 16px;
+    accent-color: #800020;
+}
+
+.buy-now-form-actions {
+    justify-content: flex-end;
+}
+
+.buy-now-form-actions button:last-child {
+    background: #800020;
+    color: #ffe1a2;
+}
+
+.checkout-page-shell .profile-map-modal {
+    z-index: 2147483020;
+}
+
+@media (max-width: 640px) {
+    .checkout-page-shell {
+        padding-left: 14px !important;
+        padding-right: 14px !important;
+    }
+
+    .checkout-layout {
+        gap: 12px !important;
+    }
+
+    .checkout-back-btn {
+        width: 38px;
+        height: 38px;
+    }
+
+    .checkout-card {
+        padding: 16px !important;
+    }
+
+    .checkout-card h2 {
+        margin-bottom: 16px !important;
+        font-size: 20px !important;
+    }
+
+    .checkout-summary-card {
+        padding: 16px !important;
+    }
+
+    .summary-card {
+        position: static !important;
+    }
+
+    .checkout-page-shell .buy-now-payment-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .checkout-no-address {
+        grid-template-columns: auto 1fr;
+    }
+
+    .checkout-no-address button {
+        grid-column: 1 / -1;
+    }
+
+    .buy-now-form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .buy-now-address {
+        grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .buy-now-address > button {
+        grid-column: 2;
+        justify-self: start;
+    }
+}

@@ -157,7 +157,7 @@ export const CartProvider = ({ children }) => {
     
     // 1. Min Purchase Check
     if (currentSubtotal < Number(coupon.min_purchase_amount)) {
-      showNotification(`Add ₹${(Number(coupon.min_purchase_amount) - currentSubtotal).toLocaleString()} more to use this coupon`, "info");
+      showNotification(`Add Rs. ${(Number(coupon.min_purchase_amount) - currentSubtotal).toLocaleString("en-IN")} more to use this coupon.`, "info");
       return false;
     }
 
@@ -196,7 +196,7 @@ export const CartProvider = ({ children }) => {
 
     setDiscountAmount(discount);
     setAppliedCoupon(coupon);
-    showNotification(`✨ Hurray! Coupon ${coupon.code} applied. You saved ₹${discount.toLocaleString()}! 🎉`, "success");
+    showNotification(`Coupon ${coupon.code} applied. You saved Rs. ${discount.toLocaleString("en-IN")}.`, "success");
     return true;
   }, [cart, getSubtotal, showNotification]);
 

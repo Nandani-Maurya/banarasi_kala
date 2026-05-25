@@ -14,31 +14,10 @@ const NewArrivals = () => {
   const sectionRef = useRef(null);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [hasRequested, setHasRequested] = useState(false);
   const [hoveredProductId, setHoveredProductId] = useState(null);
   const [activeSlides, setActiveSlides] = useState({});
 
   useEffect(() => {
-    const section = sectionRef.current;
-    if (!section || hasRequested) return undefined;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setHasRequested(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "420px 0px", threshold: 0.01 },
-    );
-
-    observer.observe(section);
-    return () => observer.disconnect();
-  }, [hasRequested]);
-
-  useEffect(() => {
-    if (!hasRequested) return undefined;
-
     const controller = new AbortController();
     const params = new URLSearchParams({
       status: "active",
@@ -59,7 +38,7 @@ const NewArrivals = () => {
       .finally(() => setLoading(false));
 
     return () => controller.abort();
-  }, [hasRequested]);
+  }, []);
 
   useEffect(() => {
     if (loading || products.length === 0 || !sectionRef.current) return undefined;

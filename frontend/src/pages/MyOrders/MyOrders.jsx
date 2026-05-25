@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useNotification } from "../../context/NotificationContext";
-import API_ENDPOINTS from "../../config/api";
+import api from "../../utils/api";
 import EmptyStateIcon from "../../components/EmptyStateIcon";
 import "./MyOrders.css";
 
@@ -35,17 +35,21 @@ const getOrderBreakdown = (order) => {
   const subtotal = toNumber(order.subtotal_amount) || itemSubtotal;
   const shippingCharge = toNumber(order.shipping_charge);
   const shippingDiscount = toNumber(order.shipping_discount);
+  const paymentFee = toNumber(order.payment_fee);
+  const paymentDiscount = toNumber(order.payment_discount);
   const couponDiscount = toNumber(order.discount_amount);
   const walletAmount = toNumber(order.wallet_amount);
   const payable = toNumber(order.payable_amount) || toNumber(order.total_amount) || Math.max(
     0,
-    subtotal + shippingCharge - shippingDiscount - couponDiscount - walletAmount,
+    subtotal + shippingCharge + paymentFee - shippingDiscount - paymentDiscount - couponDiscount - walletAmount,
   );
 
   return {
     subtotal,
     shippingCharge,
     shippingDiscount,
+    paymentFee,
+    paymentDiscount,
     couponDiscount,
     walletAmount,
     payable,
@@ -90,12 +94,13 @@ const TrackingTimeline = ({ activities = [] }) => {
   );
 };
 
-const OrderCard = ({ order, userEmail, onOrderUpdated, showNotification }) => {
+const OrderCard = ({ order, onOrderUpdated, showNotification }) => {
   const [expanded, setExpanded] = useState(false);
   const [tracking, setTracking] = useState(null);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState(null);
   const [returnLoading, setReturnLoading] = useState(false);
+  const [exchangeLoading, setExchangeLoading] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
 
   const statusConfig = getStatus(order.status);
@@ -114,12 +119,10 @@ const OrderCard = ({ order, userEmail, onOrderUpdated, showNotification }) => {
     setTrackError(null);
 
     try {
-      const response = await fetch(API_ENDPOINTS.trackOrder(order.id));
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.message || "Could not load tracking info.");
-      setTracking(data);
+      const response = await api.get(`/api/orders/track/${order.id}`);
+      setTracking(response.data);
     } catch (error) {
-      setTrackError(error.message || "Could not load tracking info. Please try again.");
+      setTrackError(error?.response?.data?.message || error.message || "Could not load tracking info. Please try again.");
     } finally {
       setTrackLoading(false);
     }
@@ -135,17 +138,12 @@ const OrderCard = ({ order, userEmail, onOrderUpdated, showNotification }) => {
     if (!window.confirm("Cancel this order? Refund will be processed in 1-2 days for paid orders.")) return;
     setCancelLoading(true);
     try {
-      const response = await fetch(API_ENDPOINTS.cancelOrder(order.id), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: userEmail }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.message || "Unable to cancel order.");
+      const response = await api.post(`/api/orders/${order.id}/cancel`);
+      const data = response.data;
       showNotification(data?.refund_message || "Order cancelled successfully.", "success");
       onOrderUpdated?.();
     } catch (error) {
-      showNotification(error.message || "Unable to cancel order.", "error");
+      showNotification(error?.response?.data?.message || error.message || "Unable to cancel order.", "error");
     } finally {
       setCancelLoading(false);
     }
@@ -155,26 +153,37 @@ const OrderCard = ({ order, userEmail, onOrderUpdated, showNotification }) => {
   const etd = tracking?.tracking?.tracking_data?.etd;
   const courierName = tracking?.tracking?.tracking_data?.shipment_track?.[0]?.courier_name;
   const awbCode = tracking?.tracking?.tracking_data?.shipment_track?.[0]?.awb_code;
-  const canRequestReturn = String(order.status).toLowerCase() === "delivered";
+  const hasUsedAfterSale = !!order.return_requested_at || !!order.exchange_requested_at || String(order.status || "").toLowerCase().includes("return") || String(order.status || "").toLowerCase().includes("exchange");
+  const canRequestReturn = String(order.status).toLowerCase() === "delivered" && !hasUsedAfterSale;
+  const canRequestExchange = String(order.status).toLowerCase() === "delivered" && !hasUsedAfterSale;
 
   const handleReturnRequest = async () => {
     const reason = window.prompt("Return reason likhiye (optional):", "Size issue");
     if (reason === null) return;
     setReturnLoading(true);
     try {
-      const response = await fetch(API_ENDPOINTS.createReturn, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: order.id, reason: reason.trim() }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.message || "Return request failed");
-      showNotification("Return request submitted successfully.", "success");
+      const response = await api.post("/api/shiprocket/create-return", { orderId: order.id, reason: reason.trim() });
+      showNotification(response.data?.refund_message || "Return request submitted successfully.", "success");
       onOrderUpdated?.();
     } catch (error) {
-      showNotification(error.message || "Unable to create return request", "error");
+      showNotification(error?.response?.data?.message || error.message || "Unable to create return request", "error");
     } finally {
       setReturnLoading(false);
+    }
+  };
+
+  const handleExchangeRequest = async () => {
+    const reason = window.prompt("Exchange reason likhiye (optional):", "Color or size exchange");
+    if (reason === null) return;
+    setExchangeLoading(true);
+    try {
+      const response = await api.post("/api/shiprocket/create-exchange", { orderId: order.id, reason: reason.trim() });
+      showNotification(response.data?.exchange_message || "Exchange request submitted successfully.", "success");
+      onOrderUpdated?.();
+    } catch (error) {
+      showNotification(error?.response?.data?.message || error.message || "Unable to create exchange request", "error");
+    } finally {
+      setExchangeLoading(false);
     }
   };
 
@@ -202,9 +211,21 @@ const OrderCard = ({ order, userEmail, onOrderUpdated, showNotification }) => {
           const colorHex = item.color_hex || item.Color?.hex_code || "#b7822d";
           const lineTotal = toNumber(item.price) * Math.max(1, toNumber(item.quantity) || 1);
           const productName = item.product_name || `Product #${item.product_id}`;
+          const productUrl = item.product_slug ? `/product/${item.product_slug}` : null;
 
           return (
             <div key={`${item.product_id}-${item.colorId || index}`} className="order-product-item">
+              {productUrl ? (
+              <Link to={productUrl} className="order-product-media" aria-label={`Open ${productName}`}>
+                {imageUrl ? (
+                  <img src={imageUrl} alt={productName} loading="lazy" />
+                ) : (
+                  <div className="order-product-placeholder">
+                    <Icon icon="lucide:image-off" />
+                  </div>
+                )}
+              </Link>
+              ) : (
               <div className="order-product-media">
                 {imageUrl ? (
                   <img src={imageUrl} alt={productName} loading="lazy" />
@@ -214,9 +235,14 @@ const OrderCard = ({ order, userEmail, onOrderUpdated, showNotification }) => {
                   </div>
                 )}
               </div>
+              )}
 
               <div className="order-product-details">
-                <h3>{productName}</h3>
+                {productUrl ? (
+                  <Link to={productUrl} className="order-product-title-link"><h3>{productName}</h3></Link>
+                ) : (
+                  <h3>{productName}</h3>
+                )}
                 <div className="order-product-subline">
                   <span>Qty {item.quantity}</span>
                   <span className="order-dot" />
@@ -226,6 +252,11 @@ const OrderCard = ({ order, userEmail, onOrderUpdated, showNotification }) => {
                   <span className="order-color-swatch" style={{ backgroundColor: colorHex }} />
                   <span>{getItemColorLabel(item)}</span>
                 </div>
+                {item.shipping_meta?.refund_rules && (
+                  <p className="order-product-refund">
+                    Return: {formatPrice(item.shipping_meta.refund_rules.return_delivery_deduction)} delivery + {formatPrice(item.shipping_meta.refund_rules.return_rto_deduction)} RTO deduction. Exchange: no deduction.
+                  </p>
+                )}
               </div>
 
               <span className="order-line-total">{formatPrice(lineTotal)}</span>
@@ -247,6 +278,18 @@ const OrderCard = ({ order, userEmail, onOrderUpdated, showNotification }) => {
           <div className="breakdown-row is-saving">
             <span>Free shipping benefit</span>
             <strong>-{formatPrice(breakdown.shippingDiscount)}</strong>
+          </div>
+        )}
+        {breakdown.paymentDiscount > 0 && (
+          <div className="breakdown-row is-saving">
+            <span>Prepaid payment discount</span>
+            <strong>-{formatPrice(breakdown.paymentDiscount)}</strong>
+          </div>
+        )}
+        {breakdown.paymentFee > 0 && (
+          <div className="breakdown-row">
+            <span>COD charge</span>
+            <strong>{formatPrice(breakdown.paymentFee)}</strong>
           </div>
         )}
         {breakdown.couponDiscount > 0 && (
@@ -293,6 +336,12 @@ const OrderCard = ({ order, userEmail, onOrderUpdated, showNotification }) => {
           <button className="order-action-btn" onClick={handleReturnRequest} type="button" disabled={returnLoading}>
             <Icon icon="lucide:rotate-ccw" />
             {returnLoading ? "Submitting..." : "Request return"}
+          </button>
+        )}
+        {canRequestExchange && (
+          <button className="order-action-btn" onClick={handleExchangeRequest} type="button" disabled={exchangeLoading}>
+            <Icon icon="lucide:repeat-2" />
+            {exchangeLoading ? "Submitting..." : "Request exchange"}
           </button>
         )}
         {cancellationAvailable ? (
@@ -344,24 +393,23 @@ export default function MyOrders() {
   const [error, setError] = useState(null);
 
   const fetchOrders = useCallback(async () => {
-    if (!user?.email) return;
+    if (!user?.id) return;
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(API_ENDPOINTS.myOrders(user.email));
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload?.message || "Failed to fetch orders");
+      const response = await api.get("/api/orders/my");
+      const payload = response.data;
       const data = Array.isArray(payload) ? payload : (payload?.data || []);
       setOrders(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err.message);
+      setError(err?.response?.data?.message || err.message);
     } finally {
       setLoading(false);
     }
   }, [user]);
 
   useEffect(() => {
-    if (!user?.email) {
+    if (!user?.id) {
       navigate("/login?refresh=my-orders");
       return;
     }
@@ -372,12 +420,8 @@ export default function MyOrders() {
     <div className="my-orders-page">
       <section className="orders-hero">
         <div className="orders-hero-content">
-          <span className="orders-hero-icon"><Icon icon="lucide:package-search" /></span>
-          <div>
-            <p className="orders-eyebrow">Banarasi Kala</p>
-            <h1>My Orders</h1>
-            <span>Track orders, payments and delivery in one place.</span>
-          </div>
+          <h1>Your Orders</h1>
+          <span>{orders.length ? `${orders.length} order${orders.length === 1 ? "" : "s"}` : "Track your orders here"}</span>
         </div>
       </section>
 
@@ -416,7 +460,6 @@ export default function MyOrders() {
               <OrderCard
                 key={order.id}
                 order={order}
-                userEmail={user?.email}
                 onOrderUpdated={fetchOrders}
                 showNotification={showNotification}
               />

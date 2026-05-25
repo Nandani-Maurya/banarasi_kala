@@ -1,6 +1,18 @@
 const ShipRocketService = require('../services/ShipRocketService');
 const Order = require('../models/Order');
 const OrderItem = require('../models/OrderItem');
+const EmailService = require('../services/EmailService');
+const { config } = require('../config/env');
+
+const mapShiprocketStatus = (value = '') => {
+  const status = String(value || '').toLowerCase();
+  if (status.includes('delivered')) return 'Delivered';
+  if (status.includes('out for delivery')) return 'Out For Delivery';
+  if (status.includes('shipped') || status.includes('pickup') || status.includes('manifest') || status.includes('in transit')) return 'Shipped';
+  if (status.includes('cancel')) return 'Cancelled';
+  if (status.includes('return')) return 'Return Initiated';
+  return null;
+};
 
 class ShipRocketController {
 
@@ -221,8 +233,21 @@ class ShipRocketController {
       // Fetch order + items from DB
       const order = await Order.findByPk(orderId, { include: [OrderItem] });
       if (!order) return res.status(404).json({ message: 'Order not found' });
+      const isOwnedByCustomerId = Number(order.customer_id) === Number(req.user?.id);
+      const isLegacyOwnedByEmail = !order.customer_id
+        && req.user?.email
+        && String(order.customer_email || '').toLowerCase() === String(req.user.email).toLowerCase();
+      if (req.userRole !== 'admin' && !isOwnedByCustomerId && !isLegacyOwnedByEmail) {
+        return res.status(403).json({ message: 'This order does not belong to this customer.' });
+      }
       if (String(order.status).toLowerCase() !== 'delivered') {
         return res.status(400).json({ message: 'Return is allowed only after delivery' });
+      }
+      if (order.return_requested_at) {
+        return res.status(400).json({ message: 'Return has already been requested for this order.' });
+      }
+      if (order.exchange_requested_at) {
+        return res.status(400).json({ message: 'Exchange already used. Return is not available after exchange.' });
       }
       if (!order.delivered_at) {
         return res.status(400).json({ message: 'Return window cannot be evaluated for this order' });
@@ -244,10 +269,28 @@ class ShipRocketController {
       const data = await ShipRocketService.createReturnOrder({ order, items, reason });
 
       // Update local order status
-      await order.update({ status: `Return Initiated${reason ? `: ${String(reason).slice(0, 120)}` : ''}` });
+      const logisticsDeduction = order.OrderItems.reduce((sum, item) => {
+        const rules = item.shipping_meta?.refund_rules || {};
+        return sum
+          + Number(rules.return_delivery_deduction || 0)
+          + Number(rules.return_rto_deduction || 0);
+      }, 0);
+      const paidAmount = Number(order.payable_amount ?? order.total_amount ?? 0);
+      const estimatedRefund = Math.max(0, paidAmount - logisticsDeduction);
+      const refundNote = logisticsDeduction > 0
+        ? `Return initiated. Estimated refund Rs. ${estimatedRefund.toLocaleString('en-IN')} after Rs. ${logisticsDeduction.toLocaleString('en-IN')} delivery/RTO logistics deduction.`
+        : `Return initiated. Estimated refund Rs. ${estimatedRefund.toLocaleString('en-IN')}; no delivery/RTO deduction applies.`;
+
+      await order.update({
+        status: `Return Initiated${reason ? `: ${String(reason).slice(0, 120)}` : ''}`,
+        return_requested_at: new Date(),
+        refund_status: 'Return Refund Pending',
+        refund_note: refundNote,
+      });
 
       return res.status(200).json({
         message: 'Return order created on ShipRocket successfully',
+        refund_message: refundNote,
         shiprocket_return_order_id: data.order_id,
         shipment_id: data.shipment_id,
         detail: data
@@ -258,6 +301,113 @@ class ShipRocketController {
         message: 'Failed to create return order on ShipRocket',
         detail: error?.response?.data || error.message,
       });
+    }
+  }
+
+  async createExchange(req, res) {
+    try {
+      const { orderId, reason } = req.body;
+      if (!orderId) return res.status(400).json({ message: 'orderId is required' });
+
+      const order = await Order.findByPk(orderId, { include: [OrderItem] });
+      if (!order) return res.status(404).json({ message: 'Order not found' });
+      const isOwnedByCustomerId = Number(order.customer_id) === Number(req.user?.id);
+      const isLegacyOwnedByEmail = !order.customer_id
+        && req.user?.email
+        && String(order.customer_email || '').toLowerCase() === String(req.user.email).toLowerCase();
+      if (req.userRole !== 'admin' && !isOwnedByCustomerId && !isLegacyOwnedByEmail) {
+        return res.status(403).json({ message: 'This order does not belong to this customer.' });
+      }
+      if (String(order.status).toLowerCase() !== 'delivered') {
+        return res.status(400).json({ message: 'Exchange is allowed only after delivery' });
+      }
+      if (order.exchange_requested_at) {
+        return res.status(400).json({ message: 'Exchange has already been requested for this order.' });
+      }
+      if (order.return_requested_at) {
+        return res.status(400).json({ message: 'Return already used. Exchange is not available after return.' });
+      }
+      if (!order.delivered_at) {
+        return res.status(400).json({ message: 'Exchange window cannot be evaluated for this order' });
+      }
+
+      const exchangeWindowDays = 7;
+      const exchangeLastDate = new Date(order.delivered_at);
+      exchangeLastDate.setDate(exchangeLastDate.getDate() + exchangeWindowDays);
+      if (new Date() > exchangeLastDate) {
+        return res.status(400).json({ message: 'Exchange window expired' });
+      }
+
+      const items = order.OrderItems.map(oi => ({
+        product_id: oi.product_id,
+        quantity: oi.quantity,
+        price: oi.price,
+        name: oi.product_name || `Product #${oi.product_id}`,
+      }));
+
+      const data = await ShipRocketService.createReturnOrder({
+        order,
+        items,
+        reason: `Exchange requested${reason ? `: ${reason}` : ''}`,
+      });
+      const note = 'Exchange initiated. No delivery or RTO logistics deduction applies for one approved exchange.';
+
+      await order.update({
+        status: `Exchange Initiated${reason ? `: ${String(reason).slice(0, 120)}` : ''}`,
+        exchange_requested_at: new Date(),
+        refund_status: 'Exchange Pending',
+        refund_note: note,
+      });
+
+      return res.status(200).json({
+        message: 'Exchange pickup created on ShipRocket successfully',
+        exchange_message: note,
+        shiprocket_exchange_order_id: data.order_id,
+        shipment_id: data.shipment_id,
+        detail: data,
+      });
+    } catch (error) {
+      console.error('[ShipRocket] createExchange error:', error?.response?.data || error.message);
+      return res.status(500).json({
+        message: 'Failed to create exchange pickup on ShipRocket',
+        detail: error?.response?.data || error.message,
+      });
+    }
+  }
+
+  async webhook(req, res) {
+    try {
+      if (config.shiprocketWebhookSecret) {
+        const providedSecret = req.headers['x-webhook-secret'] || req.headers['x-shiprocket-webhook-secret'];
+        if (String(providedSecret || '') !== config.shiprocketWebhookSecret) {
+          return res.status(401).json({ message: 'Invalid webhook secret' });
+        }
+      }
+      const payload = req.body || {};
+      const awb = payload.awb || payload.awb_code || payload.awb_number || payload.shipment?.awb || payload.shipment_track?.awb_code;
+      const srOrderId = payload.order_id || payload.shiprocket_order_id || payload.sr_order_id || payload.shipment?.order_id;
+      const rawStatus = payload.current_status || payload.shipment_status || payload.status || payload.activity || payload.shipment?.status;
+      const nextStatus = mapShiprocketStatus(rawStatus);
+
+      if (!nextStatus || (!awb && !srOrderId)) {
+        return res.status(200).json({ message: 'Webhook ignored' });
+      }
+
+      const where = awb ? { shiprocket_awb: String(awb) } : { shiprocket_order_id: String(srOrderId) };
+      const order = await Order.findOne({ where });
+      if (!order) return res.status(200).json({ message: 'Order not found locally' });
+
+      const updatePayload = { status: nextStatus };
+      if (nextStatus === 'Delivered' && !order.delivered_at) updatePayload.delivered_at = new Date();
+      await order.update(updatePayload);
+      EmailService.sendOrderStatusUpdate({ ...order.toJSON(), ...updatePayload }, nextStatus).catch((error) => {
+        console.error(`[Email] ShipRocket webhook email failed for order #${order.id}:`, error.message);
+      });
+
+      return res.status(200).json({ message: 'Order status synced', orderId: order.id, status: nextStatus });
+    } catch (error) {
+      console.error('[ShipRocket] webhook error:', error?.response?.data || error.message);
+      return res.status(500).json({ message: 'Webhook failed' });
     }
   }
 }

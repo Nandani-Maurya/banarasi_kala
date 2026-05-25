@@ -1,19 +1,25 @@
 const express = require('express');
 const router = express.Router();
 const OrderController = require('../controllers/OrderController');
-const { authMiddleware, adminMiddleware } = require('../middleware/authMiddleware');
+const { authMiddleware, optionalAuthMiddleware, adminMiddleware } = require('../middleware/authMiddleware');
 
-// Public checkout route.
-router.post('/', OrderController.createOrder);
+// Checkout route. Logged-in customers are linked by user id; guests remain supported.
+router.post('/', optionalAuthMiddleware, OrderController.createOrder);
 
-// Get all orders for a specific customer email (customer-facing My Orders page)
-router.get('/my/:email', OrderController.getOrdersByEmail);
+// Customer-facing My Orders page. Uses logged-in customer id, not email.
+router.get('/my', authMiddleware, OrderController.getCurrentCustomerOrders);
+
+// Legacy route kept for old clients, but protected and resolved by logged-in user id.
+router.get('/my/:email', authMiddleware, OrderController.getCurrentCustomerOrders);
 
 // Live tracking by order ID (fetches ShipRocket tracking data)
-router.get('/track/:orderId', OrderController.trackOrder);
+router.get('/track/:orderId', authMiddleware, OrderController.trackOrder);
+
+// Single customer order detail. Uses logged-in customer id.
+router.get('/:id', authMiddleware, OrderController.getCustomerOrderById);
 
 // Customer cancellation: allowed within 24 hours, also attempts ShipRocket cancel.
-router.post('/:id/cancel', OrderController.cancelOrder);
+router.post('/:id/cancel', authMiddleware, OrderController.cancelOrder);
 
 // Admin/order lookup route.
 router.get('/', OrderController.getMyOrders);

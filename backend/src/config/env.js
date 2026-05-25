@@ -38,6 +38,13 @@ const config = {
   referralMilestoneCount: Number(process.env.REFERRAL_MILESTONE_COUNT || 3),
   referralMilestoneBonus: Number(process.env.REFERRAL_MILESTONE_BONUS || 1000),
   codMaxAmount: Number(process.env.COD_MAX_AMOUNT || 10000),
+  freeShippingMinAmount: Number(process.env.FREE_SHIPPING_MIN_AMOUNT || 10000),
+  prepaidDiscountAmount: Number(process.env.PREPAID_DISCOUNT_AMOUNT || 50),
+  codFeeAmount: Number(process.env.COD_FEE_AMOUNT || 50),
+  packageWeightKg: Number(process.env.PACKAGE_WEIGHT_KG || 0.7),
+  rtoChargeMultiplier: Number(process.env.RTO_CHARGE_MULTIPLIER || 1),
+  shiprocketPickupLocation: normalize(process.env.SHIPROCKET_PICKUP_LOCATION, "Home"),
+  shiprocketWebhookSecret: normalize(process.env.SHIPROCKET_WEBHOOK_SECRET),
   msg91AuthKey: normalize(process.env.MSG91_AUTHKEY),
   requireMsg91Otp: appMode === "prod" || parseBoolean(process.env.REQUIRE_MSG91_OTP, false),
 };
