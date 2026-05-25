@@ -188,16 +188,6 @@
   }
 }
 
-@keyframes bk-browse-marquee {
-  from {
-    transform: translateX(0);
-  }
-
-  to {
-    transform: translateX(calc(-50% - var(--bk-browse-half-gap, 8px)));
-  }
-}
-
 @media (max-width: 1190px) {
   .bk-browse-shell {
     padding: 0 18px;
@@ -210,7 +200,22 @@
   .bk-browse-mobile-wrap {
     display: block;
     width: 100%;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    touch-action: pan-x;
+    cursor: grab;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  .bk-browse-mobile-wrap:active {
+    cursor: grabbing;
+  }
+
+  .bk-browse-mobile-wrap::-webkit-scrollbar {
+    width: 0;
+    height: 0;
   }
 
   .bk-browse-mobile {
@@ -220,17 +225,12 @@
     gap: 16px;
     flex-wrap: nowrap;
     justify-content: flex-start;
-    --bk-browse-half-gap: 8px;
-    animation: bk-browse-marquee 34s linear infinite;
-    will-change: transform;
+    padding-right: 16px;
   }
 
   .bk-browse-mobile .bk-browse-card {
     animation: none;
-  }
-
-  .bk-browse-mobile-wrap:hover .bk-browse-mobile {
-    animation-play-state: paused;
+    scroll-snap-align: start;
   }
 
   .bk-browse-card {
@@ -271,7 +271,7 @@
 
   .bk-browse-mobile {
     gap: 14px;
-    --bk-browse-half-gap: 7px;
+    padding-right: 14px;
   }
 
   .bk-browse-card {

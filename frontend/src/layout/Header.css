@@ -563,6 +563,7 @@ body.menu-open {
     linear-gradient(90deg, #4b060d 0%, #650d17 50%, #4b060d 100%);
   border-top: 1px solid rgba(199, 146, 48, 0.16);
   border-bottom: 1px solid rgba(199, 146, 48, 0.16);
+  contain: paint;
 }
 
 .bk-topline-track {
@@ -570,7 +571,9 @@ body.menu-open {
   display: flex;
   align-items: center;
   width: max-content;
-  animation: bk-topline-marquee 22s linear infinite;
+  animation: bk-topline-marquee 32s linear infinite;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
 }
 
 .bk-topline p {
@@ -599,11 +602,11 @@ body.menu-open {
 
 @keyframes bk-topline-marquee {
   from {
-    transform: translateX(0);
+    transform: translate3d(0, 0, 0);
   }
 
   to {
-    transform: translateX(-50%);
+    transform: translate3d(-50%, 0, 0);
   }
 }
 
@@ -1157,12 +1160,24 @@ body.menu-open {
     border-bottom: 1px solid rgba(184, 134, 11, 0.16);
   }
 
+  .bk-mobile-panel-main {
+    padding: 14px 0 8px;
+    border-bottom: 0;
+  }
+
+  .bk-mobile-help-section {
+    margin-top: 8px;
+    padding-top: 13px;
+    background: linear-gradient(180deg, rgba(128, 0, 32, 0.035), rgba(255, 250, 242, 0));
+    border-top: 1px solid rgba(128, 0, 32, 0.12);
+  }
+
   .bk-mobile-panel-section:last-child {
     border-bottom: 0;
   }
 
   .bk-mobile-panel-title {
-    padding: 0 16px 7px;
+    padding: 0 18px 8px;
     color: rgba(91, 7, 16, 0.62);
     font-size: 9px;
     font-weight: 600;
@@ -1170,9 +1185,18 @@ body.menu-open {
     text-transform: uppercase;
   }
 
+  .bk-mobile-nav-heading {
+    display: block;
+    padding: 9px 18px 6px;
+    color: #2b170f;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.2;
+  }
+
   .bk-mobile-panel-muted {
     display: block;
-    padding: 9px 16px;
+    padding: 8px 28px;
     color: #7a6252;
     font-size: 11px;
     font-weight: 400;
@@ -1180,17 +1204,27 @@ body.menu-open {
 
   .bk-mobile-panel a {
     display: block;
-    padding: 10px 16px;
+    padding: 9px 18px;
     color: #2b170f;
-    font-size: 11px;
-    font-weight: 450;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.2;
     text-transform: none;
   }
 
+  .bk-mobile-panel a.bk-mobile-variety-link {
+    margin: 0 12px 0 18px;
+    padding: 8px 14px 8px 20px;
+    color: rgba(43, 23, 15, 0.78);
+    font-size: 12px;
+    font-weight: 400;
+  }
+
   .bk-mobile-panel button {
-    padding: 10px 16px;
-    font-size: 11px;
-    font-weight: 450;
+    padding: 9px 18px;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.2;
   }
 
   .bk-mobile-panel a:hover,
@@ -1201,7 +1235,7 @@ body.menu-open {
 
   .bk-mobile-login,
   .bk-mobile-logout {
-    margin: 8px 18px 2px;
+    margin: 8px 18px 4px;
     flex: 0 0 auto;
     width: calc(100% - 36px) !important;
     min-height: 42px;

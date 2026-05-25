@@ -642,8 +642,7 @@ const Header = () => {
             ) : null}
           </div>
 
-          <div className="bk-mobile-panel-section">
-            <span className="bk-mobile-panel-title">Menu</span>
+          <div className="bk-mobile-panel-section bk-mobile-panel-main">
             <Link to="/" onClick={refreshNavClick("/")}>
               Home
             </Link>
@@ -653,44 +652,30 @@ const Header = () => {
             <Link to="/collection" onClick={refreshNavClick("/collection")}>
               Collections
             </Link>
-            <Link to="/about" onClick={refreshNavClick("/about")}>
-              About Us
-            </Link>
-            <Link to="/contact" onClick={refreshNavClick("/contact")}>
-              Contact Us
-            </Link>
-          </div>
-
-          <div className="bk-mobile-panel-section">
-            <span className="bk-mobile-panel-title">Sarees</span>
-            <Link to="/collection" onClick={refreshNavClick("/collection")}>
-              All Sarees
-            </Link>
+            <span className="bk-mobile-nav-heading">Variety</span>
             {sareeVarietiesStatus === "loading" && (
-              <span className="bk-mobile-panel-muted">Loading sarees...</span>
+              <span className="bk-mobile-panel-muted">Loading varieties...</span>
             )}
             {sareeVarietiesStatus === "success" &&
-              sareeVarieties.slice(0, 8).map((variety) => (
+              sareeVarieties.map((variety) => (
                 <Link
                   key={variety.id}
+                  className="bk-mobile-variety-link"
                   to={`/collection?variety=${variety.id}`}
                   onClick={refreshNavClick(`/collection?variety=${variety.id}`)}
                 >
                   {variety.name}
                 </Link>
               ))}
-            {sareeVarietiesStatus === "success" && sareeVarieties.length > 8 && (
-              <Link to="/collection" onClick={refreshNavClick("/collection")}>
-                View All Sarees
-              </Link>
+            {sareeVarietiesStatus === "success" && sareeVarieties.length === 0 && (
+              <span className="bk-mobile-panel-muted">No varieties found</span>
             )}
             {sareeVarietiesStatus === "error" && (
-              <span className="bk-mobile-panel-muted">Unable to load sarees</span>
+              <span className="bk-mobile-panel-muted">Unable to load varieties</span>
             )}
-          </div>
-
-          <div className="bk-mobile-panel-section">
-            <span className="bk-mobile-panel-title">Account</span>
+            <Link to="/about" onClick={refreshNavClick("/about")}>
+              About Us
+            </Link>
             {user ? (
               <>
                 <button type="button" onClick={() => goProtected("/my-orders")}>
@@ -699,30 +684,30 @@ const Header = () => {
                 <button type="button" onClick={() => goProtected("/profile")}>
                   Account
                 </button>
-                <button type="button" onClick={() => goProtected("/profile")}>
-                  Wallet {walletLabel}
-                </button>
-                <button type="button" onClick={openReferModal}>
-                  Refer & Earn
-                </button>
-                <button type="button" onClick={() => goProtected("/wishlist")}>
-                  Wishlist {getWishlistCount() > 0 ? `(${getWishlistCount()})` : ""}
-                </button>
-                <button type="button" onClick={() => goProtected("/cart")}>
-                  Cart {getCartCount() > 0 ? `(${getCartCount()})` : ""}
-                </button>
-                <button type="button" onClick={() => goProtected("/feedback")}>
-                  Feedback
-                </button>
                 <button type="button" className="bk-mobile-logout" onClick={handleLogout}>
                   Logout
                 </button>
               </>
             ) : (
-              <Link className="bk-mobile-login" to="/login" onClick={openLogin}>
-                Login / Sign Up
-              </Link>
+              <>
+                <Link to="/login?mode=signup" onClick={refreshNavClick("/login?mode=signup")}>
+                  Sign Up
+                </Link>
+                <Link to="/login" onClick={openLogin}>
+                  Login
+                </Link>
+              </>
             )}
+          </div>
+
+          <div className="bk-mobile-panel-section bk-mobile-help-section">
+            <span className="bk-mobile-panel-title">Help</span>
+            <Link to="/contact" onClick={refreshNavClick("/contact")}>
+              Contact Us
+            </Link>
+            <Link to="/feedback" onClick={refreshNavClick("/feedback")}>
+              Feedback
+            </Link>
           </div>
         </nav>
       )}
