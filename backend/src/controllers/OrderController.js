@@ -688,9 +688,6 @@ class OrderController {
       }
 
       await t.commit();
-      EmailService.sendOrderStatusUpdate({ ...order.toJSON(), ...updatePayload }, normalized).catch((error) => {
-        console.error(`[Email] status update failed for order #${order.id}:`, error.message);
-      });
       return res.status(200).json({ message: 'Order updated', order });
     } catch (error) {
       await t.rollback();

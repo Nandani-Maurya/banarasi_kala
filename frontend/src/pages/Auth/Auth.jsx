@@ -9,7 +9,8 @@ import "./Auth.css";
 const strengthLabels = ["Weak", "Moderate", "Strong", "Very Strong"];
 const SUPPORT_MESSAGE = "Something went wrong. Please contact support or try again later.";
 const OTP_SEND_LIMIT = 3;
-const OTP_DIGIT_COUNT = Number(import.meta.env.VITE_MSG91_OTP_LENGTH || 4);
+const PHONE_OTP_DIGIT_COUNT = Number(import.meta.env.VITE_MSG91_OTP_LENGTH || 4);
+const EMAIL_OTP_DIGIT_COUNT = Number(import.meta.env.VITE_EMAIL_OTP_LENGTH || 6);
 
 const normalizePhone = (value) => {
   const digits = String(value || "").replace(/\D/g, "");
@@ -164,7 +165,9 @@ const Auth = () => {
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [resetOtpToken, setResetOtpToken] = useState("");
   const [signupOtpToken, setSignupOtpToken] = useState("");
-  const [signupVerifiedPhone, setSignupVerifiedPhone] = useState("");
+  const [loginOtpToken, setLoginOtpToken] = useState("");
+  const [emailOtpSessionToken, setEmailOtpSessionToken] = useState("");
+  const [signupVerifiedEmail, setSignupVerifiedEmail] = useState("");
 
   const { login, signup, user } = useAuth();
   const navigate = useNavigate();
@@ -183,11 +186,12 @@ const Auth = () => {
     referral_code: "",
   });
   const [forgotPasswordData, setForgotPasswordData] = useState({
-    phone: "",
+    email: "",
     newPassword: "",
     confirmPassword: "",
   });
   const alertRef = useRef(null);
+  const activeOtpDigitCount = otpStep?.requestId === "email" ? EMAIL_OTP_DIGIT_COUNT : PHONE_OTP_DIGIT_COUNT;
 
   const showError = (message) => {
     setSuccess("");
@@ -320,9 +324,12 @@ const Auth = () => {
     const { name, value } = event.target;
     const nextValue = name === "phone" ? normalizePhone(value) : value;
     setSignupData((prev) => ({ ...prev, [name]: nextValue }));
-    if (name === "phone" && nextValue !== signupVerifiedPhone) {
+    if (name === "phone") {
       setSignupOtpToken("");
-      setSignupVerifiedPhone("");
+    }
+    if (name === "email" && String(nextValue || "").trim().toLowerCase() !== signupVerifiedEmail) {
+      setSignupOtpToken("");
+      setSignupVerifiedEmail("");
     }
     if (name === "password") updateStrength(value);
   };
@@ -342,6 +349,28 @@ const Auth = () => {
     return Math.max(OTP_SEND_LIMIT - used, 0);
   };
 
+  const startEmailOtp = async (action, email, name = "") => {
+    setOtpLoading(true);
+    setError("");
+    const purposeMap = { signup: "signup", login: "login", reset: "forgot_password" };
+    try {
+      const res = await fetch(`${API_ENDPOINTS.auth}/send-email-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: String(email || "").trim().toLowerCase(), purpose: purposeMap[action], name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Failed to send OTP");
+      setEmailOtpSessionToken(data.token);
+      setOtpStep({ action, phone: String(email || "").trim().toLowerCase(), requestId: "email" });
+      setSuccess("OTP sent to your email.");
+    } catch (err) {
+      setError(err.message || "Unable to send email OTP.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
   const waitForMsg91Method = (methodName) =>
     new Promise((resolve) => {
       const startedAt = Date.now();
@@ -359,6 +388,8 @@ const Auth = () => {
       check();
     });
 
+  // Phone OTP flow kept for reference/backward compatibility as requested.
+  // Current active flow uses email OTP endpoints.
   const startMsg91Otp = async (action, phone) => {
     const cleanPhone = normalizePhone(phone);
     const attemptKey = getOtpAttemptKey(action, cleanPhone);
@@ -432,7 +463,7 @@ const Auth = () => {
     setError("");
     setSuccess("");
     if (!otpStep) return;
-    if (code.length !== OTP_DIGIT_COUNT) {
+    if (code.length !== activeOtpDigitCount) {
       setError("Please enter a valid OTP.");
       return;
     }
@@ -441,6 +472,33 @@ const Auth = () => {
       setOtpCode("");
       setPendingOtpAction(null);
       setError("OTP request expired. Please send OTP again.");
+      return;
+    }
+    if (otpStep.requestId === "email") {
+      try {
+        const purposeMap = { signup: "signup", login: "login", reset: "forgot_password" };
+        const res = await fetch(`${API_ENDPOINTS.auth}/verify-email-otp`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: emailOtpSessionToken, otp: code, purpose: purposeMap[otpStep.action] }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "OTP verify failed");
+        if (otpStep.action === "signup") {
+          setSignupOtpToken(emailOtpSessionToken);
+          setSignupVerifiedEmail(String(signupData.email || "").trim().toLowerCase());
+        }
+        if (otpStep.action === "login") setLoginOtpToken(emailOtpSessionToken);
+        if (otpStep.action === "reset") {
+          setResetOtpToken(emailOtpSessionToken);
+          switchMode("resetPassword");
+        }
+        setOtpStep(null);
+        setOtpCode("");
+        setSuccess("Email OTP verified.");
+      } catch (err) {
+        setError(err.message || "Invalid OTP.");
+      }
       return;
     }
 
@@ -485,6 +543,10 @@ const Auth = () => {
   const handleResendOtp = () => {
     if (!otpStep || otpLoading) return;
     setOtpCode("");
+    if (otpStep.requestId === "email") {
+      startEmailOtp(otpStep.action, otpStep.phone, signupData.name);
+      return;
+    }
     startMsg91Otp(otpStep.action, otpStep.phone);
   };
 
@@ -520,7 +582,11 @@ const Auth = () => {
     setError("");
     setLoading(true);
     try {
-      await login(loginData.identifier, loginData.password, loginData.keepLoggedIn);
+      if (!loginOtpToken) {
+        setError("Please verify email OTP before login.");
+        return;
+      }
+      await login(loginData.identifier, loginData.password, loginData.keepLoggedIn, loginOtpToken);
     } catch (err) {
       console.error("[Auth] login failed:", err);
       setError(getFriendlyError(err, "Unable to login right now. Please contact support or try again later."));
@@ -536,8 +602,8 @@ const Auth = () => {
       setError(validationError);
       return;
     }
-    if (!signupOtpToken || signupVerifiedPhone !== normalizePhone(signupData.phone)) {
-      setError("Please verify your phone number before signing up.");
+    if (!signupOtpToken || signupVerifiedEmail !== signupData.email.trim().toLowerCase()) {
+      setError("Please verify your email OTP before signing up.");
       return;
     }
 
@@ -548,7 +614,7 @@ const Auth = () => {
         ...signupData,
         phone: normalizePhone(signupData.phone),
         email: signupData.email.trim().toLowerCase(),
-        msg91_access_token: signupOtpToken,
+        email_otp_token: signupOtpToken,
       });
       setSuccess("Account created successfully.");
     } catch (err) {
@@ -562,9 +628,9 @@ const Auth = () => {
   const handleForgotPassword = async (event) => {
     event.preventDefault();
     setError("");
-    const phone = normalizePhone(forgotPasswordData.phone);
-    if (!/^[6-9]\d{9}$/.test(phone)) {
-      setError("Please enter a valid 10 digit mobile number.");
+    const email = String(forgotPasswordData.email || "").trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError("Please enter a valid email.");
       return;
     }
 
@@ -573,12 +639,12 @@ const Auth = () => {
       const res = await fetch(`${API_ENDPOINTS.auth}/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ email }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Request failed");
-      setSuccess(data.message || "Account found. Verify phone OTP to continue.");
-      await startMsg91Otp("reset", phone);
+      setSuccess(data.message || "Account found. Verify email OTP to continue.");
+      await startEmailOtp("reset", email);
     } catch (err) {
       console.error("[Auth] forgot password failed:", err);
       setError(getFriendlyError(err, "Unable to start password reset. Please contact support or try again later."));
@@ -605,14 +671,14 @@ const Auth = () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phone: normalizePhone(forgotPasswordData.phone),
-          msg91_access_token: resetOtpToken,
+          email: String(forgotPasswordData.email || "").trim().toLowerCase(),
+          email_otp_token: resetOtpToken,
           newPassword: forgotPasswordData.newPassword,
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Reset failed");
-      setForgotPasswordData({ phone: "", newPassword: "", confirmPassword: "" });
+      setForgotPasswordData({ email: "", newPassword: "", confirmPassword: "" });
       setResetOtpToken("");
       switchMode("login");
       setSuccess("Password reset successfully. You can login now.");
@@ -668,6 +734,7 @@ const Auth = () => {
                 <span><Icon icon="lucide:check" /> Keep me logged in</span>
               </label>
               <button type="button" onClick={() => switchMode("forgotPassword")}>Forgot Password?</button>
+              <button type="button" onClick={() => startEmailOtp("login", loginData.identifier)}>Verify Email OTP</button>
             </div>
             <button type="submit" disabled={loading} className="auth-primary">
               {loading ? "Please wait..." : "Login"}
@@ -698,12 +765,12 @@ const Auth = () => {
               />
               <button
                 type="button"
-                className={signupVerifiedPhone === normalizePhone(signupData.phone) ? "auth-verify-link is-verified" : "auth-verify-link"}
-                onClick={() => startMsg91Otp("signup", signupData.phone)}
-                disabled={otpLoading || signupVerifiedPhone === normalizePhone(signupData.phone)}
+                className={signupVerifiedEmail === signupData.email.trim().toLowerCase() ? "auth-verify-link is-verified" : "auth-verify-link"}
+                onClick={() => startEmailOtp("signup", signupData.email, signupData.name)}
+                disabled={otpLoading || signupVerifiedEmail === signupData.email.trim().toLowerCase()}
               >
-                <Icon icon={signupVerifiedPhone === normalizePhone(signupData.phone) ? "lucide:badge-check" : "lucide:shield-check"} />
-                {signupVerifiedPhone === normalizePhone(signupData.phone) ? "Phone verified" : "Verify phone"}
+                <Icon icon={signupVerifiedEmail === signupData.email.trim().toLowerCase() ? "lucide:badge-check" : "lucide:shield-check"} />
+                {signupVerifiedEmail === signupData.email.trim().toLowerCase() ? "Email verified" : "Verify email"}
               </button>
             </div>
             <div className="auth-referral-field">
@@ -748,17 +815,14 @@ const Auth = () => {
         {activeTab === "forgotPassword" && (
           <form className="auth-form" onSubmit={handleForgotPassword}>
             <AuthField
-              icon="lucide:phone"
-              label="Registered Mobile Number"
-              value={forgotPasswordData.phone}
-              placeholder="Enter 10 digit mobile number"
-              onChange={(event) => setForgotPasswordData((prev) => ({ ...prev, phone: normalizePhone(event.target.value) }))}
-              inputMode="tel"
-              maxLength={11}
-              leftAddon={<span className="auth-country-code"><span className="auth-flag-india" aria-hidden="true" />+91</span>}
+              icon="lucide:mail"
+              label="Registered Email"
+              value={forgotPasswordData.email}
+              placeholder="Enter your registered email"
+              onChange={(event) => setForgotPasswordData((prev) => ({ ...prev, email: event.target.value }))}
             />
             <button type="submit" disabled={loading || otpLoading} className="auth-primary">
-              {loading || otpLoading ? "Verifying..." : "Verify Phone OTP"}
+              {loading || otpLoading ? "Verifying..." : "Verify Email OTP"}
             </button>
             <button type="button" className="auth-text-button" onClick={() => switchMode("login")}>Back to Login</button>
           </form>
@@ -810,13 +874,13 @@ const Auth = () => {
                 <Icon icon="lucide:x" />
               </button>
               <div className="auth-otp-card">
-                <strong>Verify Phone OTP</strong>
-                <span className="auth-otp-phone">+91 {otpStep.phone}</span>
+                <strong>Verify Email OTP</strong>
+                <span className="auth-otp-phone">{otpStep.phone}</span>
                 <OtpBoxes
                   value={otpCode}
-                  length={OTP_DIGIT_COUNT}
+                  length={activeOtpDigitCount}
                   disabled={loading || otpLoading}
-                  onChange={(value) => setOtpCode(value.replace(/\D/g, "").slice(0, OTP_DIGIT_COUNT))}
+                  onChange={(value) => setOtpCode(value.replace(/\D/g, "").slice(0, activeOtpDigitCount))}
                 />
                 <p>
                   {getOtpAttemptsLeft(otpStep.action, otpStep.phone)} resend attempt(s) left. OTP expires in 15 minutes.
