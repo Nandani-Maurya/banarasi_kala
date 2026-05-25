@@ -165,7 +165,6 @@ const Auth = () => {
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [resetOtpToken, setResetOtpToken] = useState("");
   const [signupOtpToken, setSignupOtpToken] = useState("");
-  const [loginOtpToken, setLoginOtpToken] = useState("");
   const [emailOtpSessionToken, setEmailOtpSessionToken] = useState("");
   const [signupVerifiedEmail, setSignupVerifiedEmail] = useState("");
 
@@ -488,7 +487,6 @@ const Auth = () => {
           setSignupOtpToken(emailOtpSessionToken);
           setSignupVerifiedEmail(String(signupData.email || "").trim().toLowerCase());
         }
-        if (otpStep.action === "login") setLoginOtpToken(emailOtpSessionToken);
         if (otpStep.action === "reset") {
           setResetOtpToken(emailOtpSessionToken);
           switchMode("resetPassword");
@@ -581,12 +579,7 @@ const Auth = () => {
     event.preventDefault();
     setError("");
     setLoading(true);
-    try {
-      if (!loginOtpToken) {
-        setError("Please verify email OTP before login.");
-        return;
-      }
-      await login(loginData.identifier, loginData.password, loginData.keepLoggedIn, loginOtpToken);
+    try {      await login(loginData.identifier, loginData.password, loginData.keepLoggedIn);
     } catch (err) {
       console.error("[Auth] login failed:", err);
       setError(getFriendlyError(err, "Unable to login right now. Please contact support or try again later."));
@@ -734,7 +727,6 @@ const Auth = () => {
                 <span><Icon icon="lucide:check" /> Keep me logged in</span>
               </label>
               <button type="button" onClick={() => switchMode("forgotPassword")}>Forgot Password?</button>
-              <button type="button" onClick={() => startEmailOtp("login", loginData.identifier)}>Verify Email OTP</button>
             </div>
             <button type="submit" disabled={loading} className="auth-primary">
               {loading ? "Please wait..." : "Login"}

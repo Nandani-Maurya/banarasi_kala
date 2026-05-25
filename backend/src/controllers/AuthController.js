@@ -13,8 +13,8 @@ class AuthController {
 
   async login(req, res) {
     try {
-      const { identifier, email, password, email_otp_token } = req.body;
-      const result = await AuthService.loginWithOtp(identifier || email, password, email_otp_token);
+      const { identifier, email, password } = req.body;
+      const result = await AuthService.login(identifier || email, password);
       res.json(result);
     } catch (error) {
       console.error("[AuthController:login]", error.message, error.code || "");

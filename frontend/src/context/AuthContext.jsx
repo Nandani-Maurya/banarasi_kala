@@ -47,9 +47,9 @@ export const AuthProvider = ({ children }) => {
     axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
   };
 
-  const login = async (identifier, password, keepLoggedIn, emailOtpToken) => {
+  const login = async (identifier, password, keepLoggedIn) => {
     try {
-      const response = await axios.post(`${API_ENDPOINTS.auth}/login`, { identifier, password, email_otp_token: emailOtpToken });
+      const response = await axios.post(`${API_ENDPOINTS.auth}/login`, { identifier, password });
       const customer = response.data.customer || response.data.user;
       const { accessToken, refreshToken } = response.data;
 
