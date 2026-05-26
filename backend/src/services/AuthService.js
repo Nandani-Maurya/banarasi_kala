@@ -22,14 +22,14 @@ const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_PURPOSES = new Set(["signup", "login", "forgot_password"]);
 
 class AuthService {
-  createOtpSession({ email, purpose, name }) {
+  async createOtpSession({ email, purpose, name }) {
     const normalizedEmail = normalizeEmail(email);
     if (!normalizedEmail) throw new Error("Email is required.");
     if (!OTP_PURPOSES.has(purpose)) throw new Error("Invalid OTP purpose.");
     const otp = EmailService.generateOtp();
     const token = jwt.sign({ email: normalizedEmail, purpose, nonce: Date.now() }, process.env.JWT_SECRET, { expiresIn: "15m" });
     otpStore.set(token, { email: normalizedEmail, purpose, otp, expiresAt: Date.now() + OTP_TTL_MS, verified: false });
-    EmailService.sendOTP(normalizedEmail, otp, name || "Customer");
+    await EmailService.sendOTP(normalizedEmail, otp, name || "Customer");
     return { token, email: normalizedEmail, expiresInSeconds: 600 };
   }
 
@@ -254,7 +254,7 @@ class AuthService {
   }
 
   async sendEmailOtp(email, purpose, name) {
-    return this.createOtpSession({ email, purpose, name });
+    return await this.createOtpSession({ email, purpose, name });
   }
 
   async verifyEmailOtp(token, otp, purpose) {
