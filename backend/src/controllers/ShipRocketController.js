@@ -80,6 +80,21 @@ class ShipRocketController {
       if (!shipment_id) return res.status(400).json({ message: 'shipment_id is required' });
 
       const data = await ShipRocketService.assignAWB(shipment_id, courier_id || null);
+
+      // Persist AWB in local database if returned successfully
+      const awbCode = data?.response?.data?.awb_code;
+      const srOrderId = data?.response?.data?.order_id;
+      if (awbCode && srOrderId) {
+        try {
+          await Order.update(
+            { shiprocket_awb: String(awbCode) },
+            { where: { shiprocket_order_id: String(srOrderId) } }
+          );
+        } catch (dbErr) {
+          console.error('[ShipRocket] Failed to save AWB to database during assignAWB:', dbErr.message);
+        }
+      }
+
       return res.status(200).json(data);
     } catch (error) {
       console.error('[ShipRocket] assignAWB error:', error?.response?.data || error.message);
@@ -376,9 +391,13 @@ class ShipRocketController {
   }
 
   async webhook(req, res) {
+    console.log("Webhook received");
     try {
       if (config.shiprocketWebhookSecret) {
-        const providedSecret = req.headers['x-webhook-secret'] || req.headers['x-shiprocket-webhook-secret'];
+        const providedSecret = 
+          req.headers['x-api-key'] || 
+          req.headers['x-webhook-secret'] || 
+          req.headers['x-shiprocket-webhook-secret'];
         if (String(providedSecret || '') !== config.shiprocketWebhookSecret) {
           return res.status(401).json({ message: 'Invalid webhook secret' });
         }
@@ -393,12 +412,32 @@ class ShipRocketController {
         return res.status(200).json({ message: 'Webhook ignored' });
       }
 
-      const where = awb ? { shiprocket_awb: String(awb) } : { shiprocket_order_id: String(srOrderId) };
+      // Find order by shiprocket_order_id first (since it is populated when pushed), fallback to shiprocket_awb
+      const where = srOrderId 
+        ? { shiprocket_order_id: String(srOrderId) } 
+        : (awb ? { shiprocket_awb: String(awb) } : null);
+
+      if (!where) {
+        return res.status(200).json({ message: 'Webhook ignored' });
+      }
+
       const order = await Order.findOne({ where });
       if (!order) return res.status(200).json({ message: 'Order not found locally' });
 
       const updatePayload = { status: nextStatus };
-      if (nextStatus === 'Delivered' && !order.delivered_at) updatePayload.delivered_at = new Date();
+      
+      // Update AWB or Order ID in database if not already populated
+      if (awb && !order.shiprocket_awb) {
+        updatePayload.shiprocket_awb = String(awb);
+      }
+      if (srOrderId && !order.shiprocket_order_id) {
+        updatePayload.shiprocket_order_id = String(srOrderId);
+      }
+      
+      if (nextStatus === 'Delivered' && !order.delivered_at) {
+        updatePayload.delivered_at = new Date();
+      }
+      
       await order.update(updatePayload);
       EmailService.sendOrderStatusUpdate({ ...order.toJSON(), ...updatePayload }, nextStatus).catch((error) => {
         console.error(`[Email] ShipRocket webhook email failed for order #${order.id}:`, error.message);

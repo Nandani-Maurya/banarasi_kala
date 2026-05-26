@@ -88,6 +88,10 @@ app.use("/api/orders", OrderRoutes);
 // Shipping APIs (admin-initiated).
 app.use("/api/shiprocket", ShipRocketRoutes);
 
+// Safe Webhook endpoint for ShipRocket status updates (does not contain restricted keywords)
+const ShipRocketController = require("./controllers/ShipRocketController");
+app.post("/api/delivery-updates/callback", ShipRocketController.webhook);
+
 // Customer account APIs. Route files enforce customer authentication.
 app.use("/api/cart", CartRoutes);
 app.use("/api/wishlist", WishlistRoutes);
