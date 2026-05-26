@@ -92,6 +92,16 @@ const buildTimeline = (order, tracking) => {
   ];
 };
 
+const CANCEL_REASONS = [
+  "Incorrect item/size selected",
+  "Ordered by mistake / Duplicate order",
+  "Delivery time is too long",
+  "Decided to buy another product",
+  "Applied wrong coupon code / Forgot discount",
+  "Payment or billing issue",
+  "Other reason"
+];
+
 export default function OrderConfirmation() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -100,7 +110,17 @@ export default function OrderConfirmation() {
   const [tracking, setTracking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [cancelLoading, setCancelLoading] = useState(false);
+  
+  const [cancelModal, setCancelModal] = useState({
+    isOpen: false,
+    orderId: null,
+    itemName: ""
+  });
+  const [cancelForm, setCancelForm] = useState({
+    reason: "Incorrect item/size selected",
+    comments: ""
+  });
+  const [modalSubmitLoading, setModalSubmitLoading] = useState(false);
 
   const breakdown = useMemo(() => getBreakdown(order || {}), [order]);
   const timeline = useMemo(() => buildTimeline(order, tracking), [order, tracking]);
@@ -141,16 +161,34 @@ export default function OrderConfirmation() {
     };
   }, [orderId]);
 
-  const handleCancel = async () => {
-    if (!order?.id || !window.confirm("Cancel this order? Refund will be processed in 1-2 days for paid orders.")) return;
-    setCancelLoading(true);
+  const handleCancelClick = () => {
+    setCancelModal({
+      isOpen: true,
+      orderId: order.id,
+      itemName: `Order #${order.id}`
+    });
+    setCancelForm({
+      reason: CANCEL_REASONS[0],
+      comments: ""
+    });
+  };
+
+  const handleModalSubmit = async (e) => {
+    e.preventDefault();
+    setModalSubmitLoading(true);
+    const { orderId } = cancelModal;
+    const finalReason = cancelForm.comments.trim() 
+      ? `${cancelForm.reason} - ${cancelForm.comments.trim()}`
+      : cancelForm.reason;
+
     try {
-      const response = await api.post(`/api/orders/${order.id}/cancel`);
+      const response = await api.post(`/api/orders/${orderId}/cancel`, { reason: finalReason });
       setOrder(response.data.order || order);
+      setCancelModal({ isOpen: false, orderId: null, itemName: "" });
     } catch (err) {
       setError(err?.response?.data?.message || "Unable to cancel order.");
     } finally {
-      setCancelLoading(false);
+      setModalSubmitLoading(false);
     }
   };
 
@@ -280,8 +318,8 @@ export default function OrderConfirmation() {
               You can cancel within 24 hours or until the order is shipped. Once shipped, live tracking will continue here and in My Orders.
             </p>
             {cancellationAvailable ? (
-              <button className="cancel-order-btn" type="button" onClick={handleCancel} disabled={cancelLoading}>
-                {cancelLoading ? "Cancelling..." : "Cancel order"}
+              <button className="cancel-order-btn" type="button" onClick={handleCancelClick}>
+                Cancel order
               </button>
             ) : (
               <span className="cancel-disabled-note">Cancellation is closed for this order.</span>
@@ -294,6 +332,69 @@ export default function OrderConfirmation() {
           </Link>
         </aside>
       </section>
+
+      {cancelModal.isOpen && (
+        <div className="cancel-modal-overlay">
+          <div className="cancel-modal-container">
+            <button 
+              type="button"
+              className="cancel-modal-close" 
+              onClick={() => setCancelModal({ isOpen: false, orderId: null, itemName: "" })}
+            >
+              <Icon icon="lucide:x" />
+            </button>
+            <div className="cancel-modal-header">
+              <h3>Confirm Cancellation</h3>
+              <p>Please specify reason for cancelling <strong>{cancelModal.itemName}</strong></p>
+            </div>
+            
+            <form onSubmit={handleModalSubmit} className="cancel-modal-form">
+              <div className="form-group">
+                <label htmlFor="cancel-reason">Select Reason</label>
+                <select 
+                  id="cancel-reason" 
+                  value={cancelForm.reason} 
+                  onChange={(e) => setCancelForm(prev => ({ ...prev, reason: e.target.value }))}
+                  required
+                >
+                  {CANCEL_REASONS.map((r, i) => (
+                    <option key={i} value={r}>{r}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="cancel-comments">Additional Comments (Optional)</label>
+                <textarea
+                  id="cancel-comments"
+                  placeholder="Bhai, details yahan likh sakte ho (optional)..."
+                  value={cancelForm.comments}
+                  onChange={(e) => setCancelForm(prev => ({ ...prev, comments: e.target.value }))}
+                  rows={4}
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button 
+                  type="button" 
+                  className="modal-action-btn secondary"
+                  onClick={() => setCancelModal({ isOpen: false, orderId: null, itemName: "" })}
+                  disabled={modalSubmitLoading}
+                >
+                  Go Back
+                </button>
+                <button 
+                  type="submit" 
+                  className="modal-action-btn danger"
+                  disabled={modalSubmitLoading}
+                >
+                  {modalSubmitLoading ? "Processing..." : "Confirm Cancellation"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

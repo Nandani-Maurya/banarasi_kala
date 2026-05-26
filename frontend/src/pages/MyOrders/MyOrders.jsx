@@ -16,7 +16,19 @@ const STATUS_CONFIG = {
   "Out For Delivery": { color: "#9a6200", bg: "#fff6dc", icon: "lucide:navigation", label: "Out for delivery" },
 };
 
-const getStatus = (status) => STATUS_CONFIG[status] || STATUS_CONFIG.Pending;
+const getStatus = (status) => {
+  if (!status) return STATUS_CONFIG.Pending;
+  const normalized = String(status).toLowerCase();
+  if (normalized === "pending") return STATUS_CONFIG.Pending;
+  if (normalized === "processing") return STATUS_CONFIG.Processing;
+  if (normalized === "shipped") return STATUS_CONFIG.Shipped;
+  if (normalized === "delivered") return STATUS_CONFIG.Delivered;
+  if (normalized === "cancelled") return STATUS_CONFIG.Cancelled;
+  if (normalized === "out for delivery" || normalized === "out_for_delivery") return STATUS_CONFIG["Out For Delivery"];
+  
+  return STATUS_CONFIG[status] || STATUS_CONFIG.Pending;
+};
+
 const toNumber = (value) => {
   const next = Number(value);
   return Number.isFinite(next) ? next : 0;
@@ -25,6 +37,7 @@ const formatPrice = (value) => `Rs. ${toNumber(value).toLocaleString("en-IN")}`;
 const getItemImage = (item) => item.image_url || item.product_image_url || "";
 const getItemColorLabel = (item) => item.color_name || item.Color?.name || "Selected color";
 const isCancelled = (order) => String(order.status || "").toLowerCase() === "cancelled";
+const isDelivered = (order) => String(order.status || "").toLowerCase() === "delivered";
 
 const getOrderBreakdown = (order) => {
   const items = order.OrderItems || [];
@@ -94,14 +107,51 @@ const TrackingTimeline = ({ activities = [] }) => {
   );
 };
 
-const OrderCard = ({ order, onOrderUpdated, showNotification }) => {
+const CANCEL_REASONS = [
+  "Incorrect item/size selected",
+  "Ordered by mistake / Duplicate order",
+  "Delivery time is too long",
+  "Decided to buy another product",
+  "Applied wrong coupon code / Forgot discount",
+  "Payment or billing issue",
+  "Other reason"
+];
+
+const RETURN_REASONS = [
+  "Size fits differently than expected / Size issue",
+  "Product color/design is different from images",
+  "Received damaged or defective product",
+  "Quality of material is not as expected",
+  "Wrong product delivered",
+  "Changed mind / No longer needed",
+  "Other reason"
+];
+
+const EXCHANGE_REASONS = [
+  "Need a different color/design"
+];
+
+const CANCEL_RETURN_REASONS = [
+  "Decided to keep the product / Changed mind",
+  "Resolved the issue myself",
+  "Product size/fit is fine now",
+  "Other reason"
+];
+
+const CANCEL_EXCHANGE_REASONS = [
+  "Decided to keep the product / Changed mind",
+  "Resolved the issue myself",
+  "Product color/design is fine now",
+  "Other reason"
+];
+
+const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger }) => {
   const [expanded, setExpanded] = useState(false);
   const [tracking, setTracking] = useState(null);
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState(null);
-  const [returnLoading, setReturnLoading] = useState(false);
-  const [exchangeLoading, setExchangeLoading] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const statusConfig = getStatus(order.status);
   const items = order.OrderItems || [];
@@ -134,18 +184,69 @@ const OrderCard = ({ order, onOrderUpdated, showNotification }) => {
     if (nextState) loadTracking();
   };
 
-  const handleCancel = async () => {
-    if (!window.confirm("Cancel this order? Refund will be processed in 1-2 days for paid orders.")) return;
-    setCancelLoading(true);
-    try {
-      const response = await api.post(`/api/orders/${order.id}/cancel`);
-      const data = response.data;
-      showNotification(data?.refund_message || "Order cancelled successfully.", "success");
-      onOrderUpdated?.();
-    } catch (error) {
-      showNotification(error?.response?.data?.message || error.message || "Unable to cancel order.", "error");
-    } finally {
-      setCancelLoading(false);
+  const handleCancelClick = () => {
+    if (onActionTrigger) {
+      onActionTrigger({
+        type: "cancel_order",
+        orderId: order.id,
+        itemId: null,
+        itemName: `Order #${order.id}`
+      });
+    }
+  };
+
+  const handleCancelItemClick = (itemId, itemName) => {
+    if (onActionTrigger) {
+      onActionTrigger({
+        type: "cancel_item",
+        orderId: order.id,
+        itemId,
+        itemName
+      });
+    }
+  };
+
+  const handleReturnRequest = () => {
+    if (onActionTrigger) {
+      onActionTrigger({
+        type: "return",
+        orderId: order.id,
+        itemId: null,
+        itemName: `Order #${order.id}`
+      });
+    }
+  };
+
+  const handleExchangeRequest = () => {
+    if (onActionTrigger) {
+      onActionTrigger({
+        type: "exchange",
+        orderId: order.id,
+        itemId: null,
+        itemName: `Order #${order.id}`
+      });
+    }
+  };
+
+  const handleCancelReturn = () => {
+    if (onActionTrigger) {
+      onActionTrigger({
+        type: "cancel_return",
+        orderId: order.id,
+        itemId: null,
+        itemName: `Return for Order #${order.id}`
+      });
+    }
+  };
+
+  const handleCancelExchange = () => {
+    if (onActionTrigger) {
+      onActionTrigger({
+        type: "cancel_exchange",
+        orderId: order.id,
+        itemId: null,
+        itemName: `Exchange for Order #${order.id}`
+      });
     }
   };
 
@@ -154,38 +255,10 @@ const OrderCard = ({ order, onOrderUpdated, showNotification }) => {
   const courierName = tracking?.tracking?.tracking_data?.shipment_track?.[0]?.courier_name;
   const awbCode = tracking?.tracking?.tracking_data?.shipment_track?.[0]?.awb_code;
   const hasUsedAfterSale = !!order.return_requested_at || !!order.exchange_requested_at || String(order.status || "").toLowerCase().includes("return") || String(order.status || "").toLowerCase().includes("exchange");
+  const isReturnFlow = !!order.return_requested_at || String(order.status || "").toLowerCase().includes("return");
+  const isExchangeFlow = !!order.exchange_requested_at || String(order.status || "").toLowerCase().includes("exchange");
   const canRequestReturn = String(order.status).toLowerCase() === "delivered" && !hasUsedAfterSale;
   const canRequestExchange = String(order.status).toLowerCase() === "delivered" && !hasUsedAfterSale;
-
-  const handleReturnRequest = async () => {
-    const reason = window.prompt("Return reason likhiye (optional):", "Size issue");
-    if (reason === null) return;
-    setReturnLoading(true);
-    try {
-      const response = await api.post("/api/shiprocket/create-return", { orderId: order.id, reason: reason.trim() });
-      showNotification(response.data?.refund_message || "Return request submitted successfully.", "success");
-      onOrderUpdated?.();
-    } catch (error) {
-      showNotification(error?.response?.data?.message || error.message || "Unable to create return request", "error");
-    } finally {
-      setReturnLoading(false);
-    }
-  };
-
-  const handleExchangeRequest = async () => {
-    const reason = window.prompt("Exchange reason likhiye (optional):", "Color or size exchange");
-    if (reason === null) return;
-    setExchangeLoading(true);
-    try {
-      const response = await api.post("/api/shiprocket/create-exchange", { orderId: order.id, reason: reason.trim() });
-      showNotification(response.data?.exchange_message || "Exchange request submitted successfully.", "success");
-      onOrderUpdated?.();
-    } catch (error) {
-      showNotification(error?.response?.data?.message || error.message || "Unable to create exchange request", "error");
-    } finally {
-      setExchangeLoading(false);
-    }
-  };
 
   return (
     <article className={`order-card ${isCancelled(order) ? "is-cancelled" : ""}`}>
@@ -252,6 +325,16 @@ const OrderCard = ({ order, onOrderUpdated, showNotification }) => {
                   <span className="order-color-swatch" style={{ backgroundColor: colorHex }} />
                   <span>{getItemColorLabel(item)}</span>
                 </div>
+                {cancellationAvailable && (
+                  <button 
+                    className="cancel-item-btn" 
+                    type="button" 
+                    onClick={() => handleCancelItemClick(item.id, productName)}
+                  >
+                    <Icon icon="lucide:x-circle" />
+                    <span>Cancel Item</span>
+                  </button>
+                )}
                 {item.shipping_meta?.refund_rules && (
                   <p className="order-product-refund">
                     Return: {formatPrice(item.shipping_meta.refund_rules.return_delivery_deduction)} delivery + {formatPrice(item.shipping_meta.refund_rules.return_rto_deduction)} RTO deduction. Exchange: no deduction.
@@ -328,29 +411,48 @@ const OrderCard = ({ order, onOrderUpdated, showNotification }) => {
       )}
 
       <div className="order-actions">
-        <button className={`order-action-btn primary ${expanded ? "active" : ""}`} onClick={handleExpand} type="button">
-          <Icon icon={expanded ? "lucide:chevron-up" : "lucide:map-pin"} />
-          {expanded ? "Hide tracking" : "Track order"}
-        </button>
+        {!isCancelled(order) && (!isDelivered(order) || hasUsedAfterSale) && (
+          <button className={`order-action-btn primary ${expanded ? "active" : ""}`} onClick={handleExpand} type="button">
+            <Icon icon={expanded ? "lucide:chevron-up" : "lucide:map-pin"} />
+            {hasUsedAfterSale 
+              ? (expanded ? "Hide pickup tracking" : "Track your pickup")
+              : (expanded ? "Hide tracking" : "Track order")
+            }
+          </button>
+        )}
         {canRequestReturn && (
-          <button className="order-action-btn" onClick={handleReturnRequest} type="button" disabled={returnLoading}>
+          <button className="order-action-btn" onClick={handleReturnRequest} type="button">
             <Icon icon="lucide:rotate-ccw" />
-            {returnLoading ? "Submitting..." : "Request return"}
+            Request return
           </button>
         )}
         {canRequestExchange && (
-          <button className="order-action-btn" onClick={handleExchangeRequest} type="button" disabled={exchangeLoading}>
+          <button className="order-action-btn" onClick={handleExchangeRequest} type="button">
             <Icon icon="lucide:repeat-2" />
-            {exchangeLoading ? "Submitting..." : "Request exchange"}
+            Request exchange
           </button>
         )}
-        {cancellationAvailable ? (
-          <button className="order-action-btn danger" onClick={handleCancel} type="button" disabled={cancelLoading}>
+        {isReturnFlow && (
+          <button className="order-action-btn danger" onClick={handleCancelReturn} type="button" disabled={actionLoading}>
             <Icon icon="lucide:x" />
-            {cancelLoading ? "Cancelling..." : "Cancel order"}
+            {actionLoading ? "Processing..." : "Cancel return"}
           </button>
-        ) : (
-          !isCancelled(order) && <span className="cancel-window-note">Cancellation available within 24 hours only.</span>
+        )}
+        {isExchangeFlow && (
+          <button className="order-action-btn danger" onClick={handleCancelExchange} type="button" disabled={actionLoading}>
+            <Icon icon="lucide:x" />
+            {actionLoading ? "Processing..." : "Cancel exchange"}
+          </button>
+        )}
+        {!isReturnFlow && !isExchangeFlow && (
+          cancellationAvailable ? (
+            <button className="order-action-btn danger" onClick={handleCancelClick} type="button">
+              <Icon icon="lucide:x" />
+              Cancel order
+            </button>
+          ) : (
+            !isCancelled(order) && <span className="cancel-window-note">Cancellation available within 24 hours only.</span>
+          )
         )}
       </div>
 
@@ -392,6 +494,19 @@ export default function MyOrders() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const [actionModal, setActionModal] = useState({
+    isOpen: false,
+    type: "cancel_order", // "cancel_order", "cancel_item", "return", "exchange"
+    orderId: null,
+    itemId: null,
+    itemName: ""
+  });
+  const [actionForm, setActionForm] = useState({
+    reason: "Incorrect item/size selected",
+    comments: ""
+  });
+  const [modalSubmitLoading, setModalSubmitLoading] = useState(false);
+
   const fetchOrders = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
@@ -407,6 +522,64 @@ export default function MyOrders() {
       setLoading(false);
     }
   }, [user]);
+
+  const handleActionTrigger = ({ type, orderId, itemId = null, itemName }) => {
+    let defaultReason = "";
+    if (type === "cancel_return") defaultReason = CANCEL_RETURN_REASONS[0];
+    else if (type === "cancel_exchange") defaultReason = CANCEL_EXCHANGE_REASONS[0];
+    else if (type.startsWith("cancel")) defaultReason = CANCEL_REASONS[0];
+    else if (type === "return") defaultReason = RETURN_REASONS[0];
+    else if (type === "exchange") defaultReason = EXCHANGE_REASONS[0];
+
+    setActionModal({
+      isOpen: true,
+      type,
+      orderId,
+      itemId,
+      itemName
+    });
+    setActionForm({
+      reason: defaultReason,
+      comments: ""
+    });
+  };
+
+  const handleModalSubmit = async (e) => {
+    e.preventDefault();
+    setModalSubmitLoading(true);
+    const { type, orderId, itemId, itemName } = actionModal;
+    const finalReason = actionForm.comments.trim() 
+      ? `${actionForm.reason} - ${actionForm.comments.trim()}`
+      : actionForm.reason;
+
+    try {
+      if (type === "cancel_item") {
+        await api.post(`/api/orders/${orderId}/items/${itemId}/cancel`, { reason: finalReason });
+        showNotification(`${itemName} cancelled successfully.`, "success");
+      } else if (type === "cancel_order") {
+        const response = await api.post(`/api/orders/${orderId}/cancel`, { reason: finalReason });
+        showNotification(response.data?.refund_message || "Order cancelled successfully.", "success");
+      } else if (type === "return") {
+        const response = await api.post("/api/shiprocket/create-return", { orderId, reason: finalReason });
+        showNotification(response.data?.refund_message || "Return request submitted successfully.", "success");
+      } else if (type === "exchange") {
+        const response = await api.post("/api/shiprocket/create-exchange", { orderId, reason: finalReason });
+        showNotification(response.data?.exchange_message || "Exchange request submitted successfully.", "success");
+      } else if (type === "cancel_return") {
+        await api.post("/api/shiprocket/cancel-return", { orderId, reason: finalReason });
+        showNotification("Return request cancelled successfully.", "success");
+      } else if (type === "cancel_exchange") {
+        await api.post("/api/shiprocket/cancel-exchange", { orderId, reason: finalReason });
+        showNotification("Exchange request cancelled successfully.", "success");
+      }
+      setActionModal({ isOpen: false, type: "cancel_order", orderId: null, itemId: null, itemName: "" });
+      fetchOrders();
+    } catch (err) {
+      showNotification(err?.response?.data?.message || err.message || "Unable to process request.", "error");
+    } finally {
+      setModalSubmitLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!user?.id) {
@@ -462,11 +635,115 @@ export default function MyOrders() {
                 order={order}
                 onOrderUpdated={fetchOrders}
                 showNotification={showNotification}
+                onActionTrigger={handleActionTrigger}
               />
             ))}
           </div>
         )}
       </main>
+
+      {actionModal.isOpen && (() => {
+        const type = actionModal.type;
+        const isReturn = type === "return";
+        const isExchange = type === "exchange";
+        const isCancelReturn = type === "cancel_return";
+        const isCancelExchange = type === "cancel_exchange";
+
+        let modalTitle = "Confirm Cancellation";
+        let subTextPrefix = "Please specify reason for cancelling";
+        let btnText = "Confirm Cancellation";
+        let btnClass = "modal-action-btn danger";
+        let dropdownOptions = CANCEL_REASONS;
+
+        if (isReturn) {
+          modalTitle = "Request Return";
+          subTextPrefix = "Please specify reason for returning";
+          btnText = "Submit Return Request";
+          btnClass = "modal-action-btn primary";
+          dropdownOptions = RETURN_REASONS;
+        } else if (isExchange) {
+          modalTitle = "Request Exchange";
+          subTextPrefix = "Please specify reason for exchanging";
+          btnText = "Submit Exchange Request";
+          btnClass = "modal-action-btn primary";
+          dropdownOptions = EXCHANGE_REASONS;
+        } else if (isCancelReturn) {
+          modalTitle = "Cancel Return Request";
+          subTextPrefix = "Please specify reason for cancelling return";
+          btnText = "Cancel Return Request";
+          btnClass = "modal-action-btn danger";
+          dropdownOptions = CANCEL_RETURN_REASONS;
+        } else if (isCancelExchange) {
+          modalTitle = "Cancel Exchange Request";
+          subTextPrefix = "Please specify reason for cancelling exchange";
+          btnText = "Cancel Exchange Request";
+          btnClass = "modal-action-btn danger";
+          dropdownOptions = CANCEL_EXCHANGE_REASONS;
+        }
+
+        return (
+          <div className="cancel-modal-overlay">
+            <div className="cancel-modal-container">
+              <button 
+                type="button"
+                className="cancel-modal-close" 
+                onClick={() => setActionModal({ isOpen: false, type: "cancel_order", orderId: null, itemId: null, itemName: "" })}
+              >
+                <Icon icon="lucide:x" />
+              </button>
+              <div className="cancel-modal-header">
+                <h3>{modalTitle}</h3>
+                <p>{subTextPrefix} <strong>{actionModal.itemName}</strong></p>
+              </div>
+              
+              <form onSubmit={handleModalSubmit} className="cancel-modal-form">
+                <div className="form-group">
+                  <label htmlFor="action-reason">Select Reason</label>
+                  <select 
+                    id="action-reason" 
+                    value={actionForm.reason} 
+                    onChange={(e) => setActionForm(prev => ({ ...prev, reason: e.target.value }))}
+                    required
+                  >
+                    {dropdownOptions.map((r, i) => (
+                      <option key={i} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="action-comments">Additional Comments (Optional)</label>
+                  <textarea
+                    id="action-comments"
+                    placeholder="Bhai, details yahan likh sakte ho (optional)..."
+                    value={actionForm.comments}
+                    onChange={(e) => setActionForm(prev => ({ ...prev, comments: e.target.value }))}
+                    rows={4}
+                  />
+                </div>
+
+                <div className="modal-actions">
+                  <button 
+                    type="button" 
+                    className="modal-action-btn secondary"
+                    onClick={() => setActionModal({ isOpen: false, type: "cancel_order", orderId: null, itemId: null, itemName: "" })}
+                    disabled={modalSubmitLoading}
+                  >
+                    Go Back
+                  </button>
+                  <button 
+                    type="submit" 
+                    className={btnClass}
+                    disabled={modalSubmitLoading}
+                  >
+                    {modalSubmitLoading ? "Processing..." : btnText}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

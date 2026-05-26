@@ -571,11 +571,15 @@ class OrderController {
         }
       }
 
+      const { reason } = req.body;
       const paymentMethod = String(order.payment_method || 'Prepaid');
       const paidAmount = Number(order.payable_amount ?? order.total_amount ?? 0);
-      const refundNote = paymentMethod.toUpperCase() === 'COD'
+      let refundNote = paymentMethod.toUpperCase() === 'COD'
         ? 'COD order cancelled. No prepaid refund is needed.'
         : `Refund of Rs. ${paidAmount.toLocaleString('en-IN')} will be processed in 1-2 days.`;
+      if (reason && reason.trim()) {
+        refundNote += ` | Reason: ${reason.trim()}`;
+      }
 
       const columns = await ensureOrderAccountingColumns();
       const updatePayload = keepExistingColumns({
@@ -602,6 +606,172 @@ class OrderController {
       return res.status(200).json({
         message: 'Order cancelled successfully.',
         refund_message: refundNote,
+        shiprocket: shiprocketCancel,
+        order: serializeOrder(updatedOrder),
+      });
+    } catch (error) {
+      await t.rollback();
+      return res.status(500).json({ message: error.message });
+    }
+  }
+
+  async cancelOrderItem(req, res) {
+    const t = await sequelize.transaction();
+    try {
+      const { orderId, itemId } = req.params;
+      const { reason } = req.body;
+      const order = await Order.findByPk(orderId, { transaction: t, lock: t.LOCK.UPDATE });
+
+      if (!order) {
+        await t.rollback();
+        return res.status(404).json({ message: 'Order not found' });
+      }
+
+      const isOwnedByCustomerId = Number(order.customer_id) === Number(req.user?.id);
+      const isLegacyOwnedByEmail = !order.customer_id
+        && req.user?.email
+        && String(order.customer_email || '').toLowerCase() === String(req.user.email).toLowerCase();
+      if (req.userRole !== 'admin' && !isOwnedByCustomerId && !isLegacyOwnedByEmail) {
+        await t.rollback();
+        return res.status(403).json({ message: 'This order does not belong to this customer.' });
+      }
+
+      const currentStatus = String(order.status || '').toLowerCase();
+      if (['cancelled', 'delivered'].includes(currentStatus)) {
+        await t.rollback();
+        return res.status(400).json({ message: `Order is already ${order.status}.` });
+      }
+
+      const createdAt = new Date(order.createdAt);
+      const hoursSinceOrder = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60);
+      if (hoursSinceOrder > 24) {
+        await t.rollback();
+        return res.status(400).json({ message: 'Cancellation is available only within 24 hours of placing the order.' });
+      }
+
+      const item = await OrderItem.findOne({
+        where: { id: itemId, order_id: orderId },
+        transaction: t,
+        lock: t.LOCK.UPDATE
+      });
+
+      if (!item) {
+        await t.rollback();
+        return res.status(404).json({ message: 'Order item not found' });
+      }
+
+      // Restock inventory
+      const product = await Product.findByPk(item.product_id, {
+        attributes: ['id', 'name', 'stock_quantity', 'color_stocks', 'status'],
+        transaction: t,
+        lock: t.LOCK.UPDATE
+      });
+      if (product) {
+        const qty = Number(item.quantity || 1);
+        const colorId = item.colorId || item.color_id;
+        const stocks = { ...(product.color_stocks || {}) };
+        const hasColor = colorId !== null && colorId !== undefined && colorId !== "";
+        
+        const updatePayload = { stock_quantity: Number(product.stock_quantity || 0) + qty };
+        if (hasColor) {
+          const currentColorStock = Number(stocks[String(colorId)] ?? product.stock_quantity ?? 0);
+          stocks[String(colorId)] = currentColorStock + qty;
+          updatePayload.color_stocks = stocks;
+        }
+        await product.update(updatePayload, { transaction: t });
+      }
+
+      // Calculate cancellation values
+      const itemPrice = Number(item.price) * Number(item.quantity);
+      
+      // Check total remaining items
+      const totalItemsCount = await OrderItem.count({
+        where: { order_id: orderId },
+        transaction: t
+      });
+
+      let shiprocketCancel = null;
+
+      // If it was the only item in the order, cancel the whole order
+      if (totalItemsCount <= 1) {
+        if (order.shiprocket_order_id) {
+          try {
+            shiprocketCancel = await ShipRocketService.cancelOrders([order.shiprocket_order_id]);
+          } catch (error) {
+            console.error(`[ShipRocket] Cancel failed for order #${order.id}:`, error?.response?.data || error.message);
+          }
+        }
+
+        const paymentMethod = String(order.payment_method || 'Prepaid');
+        const paidAmount = Number(order.payable_amount ?? order.total_amount ?? 0);
+        let refundNote = paymentMethod.toUpperCase() === 'COD'
+          ? 'COD order cancelled. No prepaid refund is needed.'
+          : `Refund of Rs. ${paidAmount.toLocaleString('en-IN')} will be processed in 1-2 days.`;
+        if (reason && reason.trim()) {
+          refundNote += ` | Reason: ${reason.trim()}`;
+        }
+
+        const columns = await ensureOrderAccountingColumns();
+        const updatePayload = keepExistingColumns({
+          status: 'Cancelled',
+          cancelled_at: new Date(),
+          refund_status: paymentMethod.toUpperCase() === 'COD' ? 'Not Required' : 'Refund Pending',
+          refund_note: refundNote,
+          payment_status: paymentMethod.toUpperCase() === 'COD' ? 'Cancelled' : 'Refund Pending',
+        }, columns);
+
+        await order.update(updatePayload, { transaction: t });
+        await item.destroy({ transaction: t });
+      } else {
+        // Recalculate and update order totals
+        const newSubtotal = Math.max(0, Number(order.subtotal_amount || 0) - itemPrice);
+        const newTotal = Math.max(0, Number(order.total_amount || 0) - itemPrice);
+        const newPayable = Math.max(0, Number(order.payable_amount || 0) - itemPrice);
+
+        const paymentMethod = String(order.payment_method || 'Prepaid');
+        let refundNote = paymentMethod.toUpperCase() === 'COD'
+          ? `Item '${item.product_name}' cancelled. Remaining COD collection adjusted to Rs. ${newPayable.toLocaleString('en-IN')}.`
+          : `Refund of Rs. ${itemPrice.toLocaleString('en-IN')} for cancelled item '${item.product_name}' will be processed in 1-2 days.`;
+        if (reason && reason.trim()) {
+          refundNote += ` | Item Reason: ${reason.trim()}`;
+        }
+
+        // Cancel the old Shiprocket order so merchant can update it
+        if (order.shiprocket_order_id) {
+          try {
+            shiprocketCancel = await ShipRocketService.cancelOrders([order.shiprocket_order_id]);
+          } catch (error) {
+            console.error(`[ShipRocket] Cancel failed for order #${order.id} on item cancellation:`, error?.response?.data || error.message);
+          }
+        }
+
+        const columns = await ensureOrderAccountingColumns();
+        const updatePayload = keepExistingColumns({
+          subtotal_amount: newSubtotal,
+          total_amount: newTotal,
+          payable_amount: newPayable,
+          refund_note: order.refund_note ? `${order.refund_note} | ${refundNote}` : refundNote,
+          refund_status: paymentMethod.toUpperCase() === 'COD' ? 'Not Required' : 'Refund Pending',
+        }, columns);
+
+        await order.update(updatePayload, { transaction: t });
+        await item.destroy({ transaction: t });
+      }
+
+      await t.commit();
+
+      const updatedOrder = await Order.findByPk(orderId, {
+        include: [{
+          model: OrderItem,
+          include: [
+            { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
+            { model: Color, attributes: ['id', 'name', 'hex_code'] },
+          ],
+        }],
+      });
+
+      return res.status(200).json({
+        message: 'Item cancelled successfully.',
         shiprocket: shiprocketCancel,
         order: serializeOrder(updatedOrder),
       });

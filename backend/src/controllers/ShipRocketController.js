@@ -1,3 +1,4 @@
+const { Op } = require('sequelize');
 const ShipRocketService = require('../services/ShipRocketService');
 const Order = require('../models/Order');
 const OrderItem = require('../models/OrderItem');
@@ -6,11 +7,20 @@ const { config } = require('../config/env');
 
 const mapShiprocketStatus = (value = '') => {
   const status = String(value || '').toLowerCase();
+  
+  // Handle return/exchange reverse statuses first to avoid catching by standard shipped check
+  if (status.includes('returned to origin') || status.includes('returned')) return 'Returned';
+  if (status.includes('picked up') || status.includes('picked_up')) return 'Return Picked Up';
+  if (status.includes('out for pickup') || status.includes('out_for_pickup')) return 'Out For Pickup';
+  if (status.includes('pickup scheduled') || status.includes('pickup_scheduled') || status.includes('pickup queued') || status.includes('pickup_queued')) return 'Pickup Scheduled';
+  
   if (status.includes('delivered')) return 'Delivered';
   if (status.includes('out for delivery')) return 'Out For Delivery';
-  if (status.includes('shipped') || status.includes('pickup') || status.includes('manifest') || status.includes('in transit')) return 'Shipped';
+  if (status.includes('shipped') || status.includes('manifest') || status.includes('in transit')) return 'Shipped';
+  if (status.includes('pickup')) return 'Shipped'; // Standard forward order pickup
   if (status.includes('cancel')) return 'Cancelled';
   if (status.includes('return')) return 'Return Initiated';
+  
   return null;
 };
 
@@ -264,11 +274,9 @@ class ShipRocketController {
       if (order.exchange_requested_at) {
         return res.status(400).json({ message: 'Exchange already used. Return is not available after exchange.' });
       }
-      if (!order.delivered_at) {
-        return res.status(400).json({ message: 'Return window cannot be evaluated for this order' });
-      }
+      const deliveredTime = order.delivered_at || order.updatedAt || new Date();
       const returnWindowDays = 7;
-      const returnLastDate = new Date(order.delivered_at);
+      const returnLastDate = new Date(deliveredTime);
       returnLastDate.setDate(returnLastDate.getDate() + returnWindowDays);
       if (new Date() > returnLastDate) {
         return res.status(400).json({ message: 'Return window expired' });
@@ -301,6 +309,7 @@ class ShipRocketController {
         return_requested_at: new Date(),
         refund_status: 'Return Refund Pending',
         refund_note: refundNote,
+        shiprocket_return_order_id: data.order_id ? String(data.order_id) : null
       });
 
       return res.status(200).json({
@@ -342,12 +351,9 @@ class ShipRocketController {
       if (order.return_requested_at) {
         return res.status(400).json({ message: 'Return already used. Exchange is not available after return.' });
       }
-      if (!order.delivered_at) {
-        return res.status(400).json({ message: 'Exchange window cannot be evaluated for this order' });
-      }
-
+      const deliveredTime = order.delivered_at || order.updatedAt || new Date();
       const exchangeWindowDays = 7;
-      const exchangeLastDate = new Date(order.delivered_at);
+      const exchangeLastDate = new Date(deliveredTime);
       exchangeLastDate.setDate(exchangeLastDate.getDate() + exchangeWindowDays);
       if (new Date() > exchangeLastDate) {
         return res.status(400).json({ message: 'Exchange window expired' });
@@ -372,6 +378,7 @@ class ShipRocketController {
         exchange_requested_at: new Date(),
         refund_status: 'Exchange Pending',
         refund_note: note,
+        shiprocket_exchange_order_id: data.order_id ? String(data.order_id) : null
       });
 
       return res.status(200).json({
@@ -412,41 +419,181 @@ class ShipRocketController {
         return res.status(200).json({ message: 'Webhook ignored' });
       }
 
-      // Find order by shiprocket_order_id first (since it is populated when pushed), fallback to shiprocket_awb
-      const where = srOrderId 
-        ? { shiprocket_order_id: String(srOrderId) } 
-        : (awb ? { shiprocket_awb: String(awb) } : null);
-
-      if (!where) {
-        return res.status(200).json({ message: 'Webhook ignored' });
+      // Find order by matching forward or reverse IDs or AWBs
+      let order = null;
+      if (srOrderId) {
+        order = await Order.findOne({
+          where: {
+            [Op.or]: [
+              { shiprocket_order_id: String(srOrderId) },
+              { shiprocket_return_order_id: String(srOrderId) },
+              { shiprocket_exchange_order_id: String(srOrderId) }
+            ]
+          }
+        });
+      }
+      if (!order && awb) {
+        order = await Order.findOne({
+          where: {
+            [Op.or]: [
+              { shiprocket_awb: String(awb) },
+              { shiprocket_return_awb: String(awb) },
+              { shiprocket_exchange_awb: String(awb) }
+            ]
+          }
+        });
       }
 
-      const order = await Order.findOne({ where });
       if (!order) return res.status(200).json({ message: 'Order not found locally' });
 
-      const updatePayload = { status: nextStatus };
-      
-      // Update AWB or Order ID in database if not already populated
-      if (awb && !order.shiprocket_awb) {
-        updatePayload.shiprocket_awb = String(awb);
+      // Determine if this is a reverse tracking webhook
+      const isReverse = 
+        (order.shiprocket_return_order_id && String(order.shiprocket_return_order_id) === String(srOrderId)) ||
+        (order.shiprocket_return_awb && String(order.shiprocket_return_awb) === String(awb)) ||
+        (order.shiprocket_exchange_order_id && String(order.shiprocket_exchange_order_id) === String(srOrderId)) ||
+        (order.shiprocket_exchange_awb && String(order.shiprocket_exchange_awb) === String(awb)) ||
+        (String(order.status).toLowerCase().includes('return') || String(order.status).toLowerCase().includes('exchange'));
+
+      const updatePayload = {};
+
+      if (isReverse) {
+        const isExchange = 
+          (order.shiprocket_exchange_order_id && String(order.shiprocket_exchange_order_id) === String(srOrderId)) ||
+          (order.shiprocket_exchange_awb && String(order.shiprocket_exchange_awb) === String(awb)) ||
+          String(order.status).toLowerCase().includes('exchange');
+
+        const prefix = isExchange ? "Exchange" : "Return";
+        let reverseStatus = nextStatus;
+        if (nextStatus === "Shipped") reverseStatus = `${prefix} Shipped`;
+        else if (nextStatus === "Returned") reverseStatus = `${prefix} Completed`;
+        else if (nextStatus === "Cancelled") reverseStatus = `${prefix} Cancelled`;
+        else if (nextStatus === "Delivered") reverseStatus = `${prefix} Delivered`;
+        else if (nextStatus === "Return Picked Up") reverseStatus = `${prefix} Picked Up`;
+        else if (nextStatus === "Out For Pickup") reverseStatus = `Out For ${prefix} Pickup`;
+        else if (nextStatus === "Pickup Scheduled") reverseStatus = `${prefix} Pickup Scheduled`;
+        
+        updatePayload.status = reverseStatus;
+
+        if (awb) {
+          if (isExchange && !order.shiprocket_exchange_awb) {
+            updatePayload.shiprocket_exchange_awb = String(awb);
+          } else if (!isExchange && !order.shiprocket_return_awb) {
+            updatePayload.shiprocket_return_awb = String(awb);
+          }
+        }
+      } else {
+        // Forward shipment updates
+        updatePayload.status = nextStatus;
+        
+        if (awb && !order.shiprocket_awb) {
+          updatePayload.shiprocket_awb = String(awb);
+        }
+        if (srOrderId && !order.shiprocket_order_id) {
+          updatePayload.shiprocket_order_id = String(srOrderId);
+        }
+        
+        if (nextStatus === 'Delivered' && !order.delivered_at) {
+          updatePayload.delivered_at = new Date();
+        }
       }
-      if (srOrderId && !order.shiprocket_order_id) {
-        updatePayload.shiprocket_order_id = String(srOrderId);
-      }
-      
-      if (nextStatus === 'Delivered' && !order.delivered_at) {
-        updatePayload.delivered_at = new Date();
-      }
-      
+
       await order.update(updatePayload);
-      EmailService.sendOrderStatusUpdate({ ...order.toJSON(), ...updatePayload }, nextStatus).catch((error) => {
+      EmailService.sendOrderStatusUpdate({ ...order.toJSON(), ...updatePayload }, updatePayload.status).catch((error) => {
         console.error(`[Email] ShipRocket webhook email failed for order #${order.id}:`, error.message);
       });
 
-      return res.status(200).json({ message: 'Order status synced', orderId: order.id, status: nextStatus });
+      return res.status(200).json({ message: 'Order status synced', orderId: order.id, status: updatePayload.status });
     } catch (error) {
       console.error('[ShipRocket] webhook error:', error?.response?.data || error.message);
       return res.status(500).json({ message: 'Webhook failed' });
+    }
+  }
+
+  async cancelReturn(req, res) {
+    try {
+      const { orderId, reason } = req.body;
+      if (!orderId) return res.status(400).json({ message: 'orderId is required' });
+
+      const order = await Order.findByPk(orderId);
+      if (!order) return res.status(404).json({ message: 'Order not found' });
+
+      const isOwnedByCustomerId = Number(order.customer_id) === Number(req.user?.id);
+      const isLegacyOwnedByEmail = !order.customer_id
+        && req.user?.email
+        && String(order.customer_email || '').toLowerCase() === String(req.user.email).toLowerCase();
+      if (req.userRole !== 'admin' && !isOwnedByCustomerId && !isLegacyOwnedByEmail) {
+        return res.status(403).json({ message: 'This order does not belong to this customer.' });
+      }
+
+      if (!order.return_requested_at) {
+        return res.status(400).json({ message: 'No active return request found for this order.' });
+      }
+
+      if (order.shiprocket_return_order_id) {
+        try {
+          await ShipRocketService.cancelOrders([order.shiprocket_return_order_id]);
+        } catch (srErr) {
+          console.error('[ShipRocket] cancelReturn reverse order cancel warning:', srErr.message);
+        }
+      }
+
+      await order.update({
+        status: 'Delivered',
+        return_requested_at: null,
+        refund_status: null,
+        refund_note: reason ? `Return cancelled: ${reason}` : 'Return request cancelled by customer.',
+        shiprocket_return_order_id: null,
+        shiprocket_return_awb: null
+      });
+
+      return res.status(200).json({ message: 'Return request cancelled successfully and order status reverted to Delivered.' });
+    } catch (error) {
+      console.error('[ShipRocket] cancelReturn error:', error.message);
+      return res.status(500).json({ message: 'Failed to cancel return request', detail: error.message });
+    }
+  }
+
+  async cancelExchange(req, res) {
+    try {
+      const { orderId, reason } = req.body;
+      if (!orderId) return res.status(400).json({ message: 'orderId is required' });
+
+      const order = await Order.findByPk(orderId);
+      if (!order) return res.status(404).json({ message: 'Order not found' });
+
+      const isOwnedByCustomerId = Number(order.customer_id) === Number(req.user?.id);
+      const isLegacyOwnedByEmail = !order.customer_id
+        && req.user?.email
+        && String(order.customer_email || '').toLowerCase() === String(req.user.email).toLowerCase();
+      if (req.userRole !== 'admin' && !isOwnedByCustomerId && !isLegacyOwnedByEmail) {
+        return res.status(403).json({ message: 'This order does not belong to this customer.' });
+      }
+
+      if (!order.exchange_requested_at) {
+        return res.status(400).json({ message: 'No active exchange request found for this order.' });
+      }
+
+      if (order.shiprocket_exchange_order_id) {
+        try {
+          await ShipRocketService.cancelOrders([order.shiprocket_exchange_order_id]);
+        } catch (srErr) {
+          console.error('[ShipRocket] cancelExchange reverse order cancel warning:', srErr.message);
+        }
+      }
+
+      await order.update({
+        status: 'Delivered',
+        exchange_requested_at: null,
+        refund_status: null,
+        refund_note: reason ? `Exchange cancelled: ${reason}` : 'Exchange request cancelled by customer.',
+        shiprocket_exchange_order_id: null,
+        shiprocket_exchange_awb: null
+      });
+
+      return res.status(200).json({ message: 'Exchange request cancelled successfully and order status reverted to Delivered.' });
+    } catch (error) {
+      console.error('[ShipRocket] cancelExchange error:', error.message);
+      return res.status(500).json({ message: 'Failed to cancel exchange request', detail: error.message });
     }
   }
 }

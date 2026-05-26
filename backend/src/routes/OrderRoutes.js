@@ -21,6 +21,9 @@ router.get('/:id', authMiddleware, OrderController.getCustomerOrderById);
 // Customer cancellation: allowed within 24 hours, also attempts ShipRocket cancel.
 router.post('/:id/cancel', authMiddleware, OrderController.cancelOrder);
 
+// Customer cancelling a specific item within an order: allowed within 24 hours.
+router.post('/:orderId/items/:itemId/cancel', authMiddleware, OrderController.cancelOrderItem);
+
 // Admin/order lookup route.
 router.get('/', OrderController.getMyOrders);
 

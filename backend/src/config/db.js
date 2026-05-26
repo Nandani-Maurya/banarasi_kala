@@ -42,6 +42,17 @@ const connectDB = async () => {
     console.log("PostgreSQL connected successfully.");
     console.log(`Database schema: ${config.dbSchema}`);
 
+    await sequelize.query(`
+      ALTER TABLE vns_saree.orders ADD COLUMN IF NOT EXISTS shiprocket_return_order_id VARCHAR(255);
+      ALTER TABLE vns_saree.orders ADD COLUMN IF NOT EXISTS shiprocket_exchange_order_id VARCHAR(255);
+      ALTER TABLE vns_saree.orders ADD COLUMN IF NOT EXISTS shiprocket_return_awb VARCHAR(255);
+      ALTER TABLE vns_saree.orders ADD COLUMN IF NOT EXISTS shiprocket_exchange_awb VARCHAR(255);
+    `).then(() => {
+      console.log("Shiprocket reverse logistics database columns ensured successfully.");
+    }).catch(err => {
+      console.log("DB ALTER query skipped/failed:", err.message);
+    });
+
     await runSchemaSync();
   
   } catch (error) {

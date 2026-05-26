@@ -130,6 +130,22 @@ const Order = sequelize.define('Order', {
   exchange_requested_at: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+  shiprocket_return_order_id: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  shiprocket_exchange_order_id: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  shiprocket_return_awb: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  shiprocket_exchange_awb: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 }, {
   tableName: 'orders',

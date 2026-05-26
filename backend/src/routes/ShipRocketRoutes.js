@@ -75,6 +75,8 @@ router.get('/serviceability', ShipRocketController.checkServiceability);
  */
 router.post('/create-return', authMiddleware, ShipRocketController.createReturn);
 router.post('/create-exchange', authMiddleware, ShipRocketController.createExchange);
+router.post('/cancel-return', authMiddleware, ShipRocketController.cancelReturn);
+router.post('/cancel-exchange', authMiddleware, ShipRocketController.cancelExchange);
 
 /**
  * POST /api/shiprocket/webhook
