@@ -1568,6 +1568,7 @@
   display: grid;
   place-items: center;
   padding: 18px;
+  padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   background: rgba(36, 16, 10, 0.52);
   backdrop-filter: blur(4px);
   overscroll-behavior: contain;
@@ -1576,6 +1577,7 @@
 .buy-now-card {
   width: min(980px, 100%);
   max-height: min(92vh, 820px);
+  max-height: min(92dvh, 820px);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
@@ -1637,6 +1639,7 @@
   min-height: 0;
   overflow: auto;
   padding: 16px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   overscroll-behavior: contain;
 }
 
@@ -2716,10 +2719,12 @@
   .buy-now-modal {
     align-items: center;
     padding: 10px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   }
 
   .buy-now-card {
     max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px - env(safe-area-inset-bottom, 0px));
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr) auto;
     border-radius: 16px 16px 10px 10px;
@@ -2731,6 +2736,10 @@
 
   .buy-now-header h2 {
     font-size: 20px;
+  }
+
+  .buy-now-content {
+    padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px));
   }
 
   .buy-now-summary {

@@ -27,6 +27,7 @@ const CheckoutOrderPanel = ({
   showSummary = true,
 }) => {
   const addressLine = getAddressLine || (() => "");
+  const reviewPaymentIcon = reviewPayment?.title?.toLowerCase().includes("cash") ? "lucide:banknote" : "lucide:shield-check";
 
   return (
     <div className={`checkout-order-panel ${showSummary ? "" : "no-summary"}`}>
@@ -125,16 +126,17 @@ const CheckoutOrderPanel = ({
             )}
           </>
         ) : (
-          <section className="buy-now-section checkout-section">
-            <div className="buy-now-section-title">
-              <h3>{reviewTitle}</h3>
-              <button type="button" onClick={onEditDetails}>
-                <Icon icon="lucide:arrow-left" />
-                Edit
-              </button>
-            </div>
-            <div className="checkout-review-grid">
-              {reviewItems.length > 0 && (
+          <>
+            {reviewItems.length > 0 && (
+              <section className="buy-now-section checkout-section">
+                <div className="buy-now-section-title">
+                  <h3>{reviewTitle}</h3>
+                  <button type="button" onClick={onEditDetails}>
+                    <Icon icon="lucide:arrow-left" />
+                    Edit
+                  </button>
+                </div>
+                <div className="checkout-review-grid">
                 <div className="checkout-review-panel">
                   <span>Products</span>
                   {reviewItems.map((item) => (
@@ -149,24 +151,46 @@ const CheckoutOrderPanel = ({
                     </div>
                   ))}
                 </div>
-              )}
-              {reviewAddress && (
-                <div className="checkout-review-panel">
-                  <span>Deliver to</span>
-                  <strong>{reviewAddress.name}</strong>
-                  <p>{reviewAddress.line}</p>
-                  <small>{reviewAddress.phone}</small>
                 </div>
-              )}
-              {reviewPayment && (
-                <div className="checkout-review-panel">
-                  <span>Payment</span>
-                  <strong>{reviewPayment.title}</strong>
-                  <p>{reviewPayment.description}</p>
+              </section>
+            )}
+
+            {reviewAddress && (
+              <section className="buy-now-section checkout-section">
+                <div className="buy-now-section-title">
+                  <h3>Delivery address</h3>
+                  <button type="button" onClick={onEditDetails}>
+                    <Icon icon="lucide:arrow-left" />
+                    Edit
+                  </button>
                 </div>
-              )}
-            </div>
-          </section>
+                <div className="buy-now-address checkout-review-address-card active">
+                  <input type="radio" checked readOnly aria-label="Selected delivery address" />
+                  <span>
+                    <strong>{reviewAddress.label || "Home"} {reviewAddress.isDefault ? <em>Default</em> : null}</strong>
+                    <small>{reviewAddress.line}</small>
+                    <small>{reviewAddress.name} - {reviewAddress.phone}</small>
+                  </span>
+                  <button type="button" onClick={onEditDetails}>Edit</button>
+                </div>
+              </section>
+            )}
+
+            {reviewPayment && (
+              <section className="buy-now-section checkout-section">
+                <div className="buy-now-section-title">
+                  <h3>Payment</h3>
+                </div>
+                <div className="buy-now-payment-grid checkout-review-payment-grid">
+                  <button type="button" className="active" onClick={onEditDetails}>
+                    <Icon icon={reviewPaymentIcon} />
+                    <span>{reviewPayment.title}</span>
+                    <small>{reviewPayment.description}</small>
+                  </button>
+                </div>
+              </section>
+            )}
+          </>
         )}
       </div>
 

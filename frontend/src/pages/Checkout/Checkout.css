@@ -83,6 +83,7 @@
     z-index: 2147483000;
     width: 100vw;
     height: 100vh;
+    height: 100dvh;
     background:
         linear-gradient(rgba(36, 16, 10, 0.58), rgba(36, 16, 10, 0.58)),
         var(--bk-section-bg),
@@ -99,6 +100,7 @@
     place-items: center;
     min-height: 100%;
     padding: 18px;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
 }
 
 .checkout-page-shell {
@@ -113,6 +115,7 @@
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     max-height: min(92vh, 820px);
+    max-height: min(92dvh, 820px);
     overflow: hidden;
     border: 1px solid rgba(128, 0, 32, 0.16);
     border-radius: 16px;
@@ -245,6 +248,7 @@
     min-height: 0;
     gap: 18px !important;
     padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     max-height: none;
     overflow: auto;
     overscroll-behavior: contain;
@@ -1151,6 +1155,7 @@
 @media (max-width: 640px) {
     .checkout-page main {
         padding: 10px;
+        padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
     }
 
     .checkout-page-shell {
@@ -1161,11 +1166,13 @@
 
     .checkout-modal-card {
         max-height: calc(100vh - 20px);
+        max-height: calc(100dvh - 20px - env(safe-area-inset-bottom, 0px));
     }
 
     .checkout-layout {
         gap: 12px !important;
         padding: 16px;
+        padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px));
     }
 
     .checkout-card {

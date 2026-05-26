@@ -1443,13 +1443,7 @@ const ProductDetail = () => {
                   disabled: buyNowLoading || buyNowShippingLoading || !selectedBuyNowAddress || !buyNowShipping || buyNowShipping?.unavailable,
                 }}
                 reviewTitle="Review details"
-                reviewItems={[{
-                  key: product.id,
-                  image: mainImage,
-                  name: productName,
-                  meta: `${selectedColor?.name ? `${selectedColor.name} - ` : ""}Qty ${quantity}`,
-                  total: formatMoney(buyNowSubtotal),
-                }]}
+                reviewItems={[]}
                 reviewAddress={{
                   name: selectedBuyNowAddress?.name || user?.name,
                   line: getAddressLine(selectedBuyNowAddress),

@@ -28,6 +28,22 @@
   margin-top: 0;
 }
 
+.checkout-review-address-card {
+  cursor: default;
+}
+
+.checkout-review-address-card input {
+  pointer-events: none;
+}
+
+.checkout-review-payment-grid {
+  grid-template-columns: 1fr;
+}
+
+.checkout-review-payment-grid button {
+  cursor: default;
+}
+
 @media (max-width: 820px) {
   .checkout-order-panel {
     grid-template-columns: 1fr;
