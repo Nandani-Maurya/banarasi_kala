@@ -101,8 +101,14 @@ export const AuthProvider = ({ children }) => {
     delete axios.defaults.headers.common['Authorization'];
   };
 
+  const updateUser = (updatedCustomer) => {
+    setUser(updatedCustomer);
+    const storage = localStorage.getItem('customer') ? localStorage : sessionStorage;
+    storage.setItem('customer', JSON.stringify(updatedCustomer));
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, signup, logout, loading, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

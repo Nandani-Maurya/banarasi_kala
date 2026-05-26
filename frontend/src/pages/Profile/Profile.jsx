@@ -455,7 +455,7 @@ function ProfileMiniModal({ modal, onClose, onConfirm }) {
 }
 
 export default function Profile() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [addresses, setAddresses] = useState([]);
@@ -508,6 +508,9 @@ export default function Profile() {
 
         if (!alive) return;
         setProfile(meRes.data);
+        if (updateUser) {
+          updateUser(meRes.data);
+        }
         try {
           const addressRes = await api.get("/api/addresses");
           if (!alive) return;
@@ -618,7 +621,11 @@ export default function Profile() {
         email: form.email,
       });
       const updated = res.data?.customer || res.data;
-      setProfile((prev) => (prev ? { ...prev, ...updated } : prev));
+      setProfile((prev) => {
+        const next = prev ? { ...prev, ...updated } : prev;
+        if (updateUser && next) updateUser(next);
+        return next;
+      });
       setIsEditing(false);
       showSuccess("Profile updated", "Your account details were saved.");
     } catch (err) {
