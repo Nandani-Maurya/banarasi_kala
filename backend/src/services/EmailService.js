@@ -3,16 +3,21 @@ const dns = require('dns');
 require('dotenv').config();
 
 const transporter = nodemailer.createTransport({
+  service: 'gmail', // Standard configuration for Gmail
   host: 'smtp.gmail.com',
   port: 465,
-  secure: true, // true for 465, false for other ports
-  lookup: (hostname, options, callback) => {
-    return dns.lookup(hostname, { family: 4 }, callback);
-  },
+  secure: true, // TLS/SSL for port 465
+  pool: true,   // Keeps connections open, great for heavy servers like Render
+  maxConnections: 5,
+  maxMessages: 100,
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    pass: process.env.EMAIL_PASS, // Make sure this is a 16-character App Password, NOT your raw password!
   },
+  tls: {
+    // Docker/Render environments me internal verification failures se bachne ke liye
+    rejectUnauthorized: false
+  }
 });
 
 class EmailService {
