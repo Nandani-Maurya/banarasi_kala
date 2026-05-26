@@ -310,24 +310,27 @@
 
 .bk-home-stock-badge {
   position: absolute;
-  top: 10px;
-  left: 10px;
+  top: 9px;
+  left: 9px;
   z-index: 4;
-  max-width: calc(100% - 20px);
-  padding: 6px 10px;
-  color: #fff8ed;
-  background: rgba(128, 0, 32, 0.92);
+  max-width: calc(100% - 18px);
+  padding: 5px 8px;
+  color: #7a1023;
+  background: rgba(255, 250, 241, 0.88);
+  border: 1px solid rgba(128, 0, 32, 0.14);
   border-radius: 999px;
-  font-size: 10px;
-  font-weight: 700;
+  box-shadow: 0 6px 14px rgba(55, 15, 10, 0.12);
+  backdrop-filter: blur(8px);
+  font-size: 8px;
+  font-weight: 750;
   line-height: 1;
   text-transform: uppercase;
 }
 
 .bk-home-stock-badge.low {
-  color: #7c2d12;
-  background: rgba(255, 237, 213, 0.94);
-  border: 1px solid rgba(194, 65, 12, 0.18);
+  color: #8a4c12;
+  background: rgba(255, 248, 239, 0.9);
+  border-color: rgba(184, 134, 11, 0.2);
 }
 
 .bk-arrival-mrp {

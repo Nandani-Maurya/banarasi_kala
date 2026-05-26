@@ -170,6 +170,26 @@ hat undo kiy ahai:root {
     width: 80%;
 }
 
+.filter-skeleton-price-track {
+    display: block;
+    width: 100%;
+    height: 9px;
+    margin: 4px 0 18px;
+    border-radius: 999px;
+    background: var(--bk-loader-gradient);
+    background-size: 220% 100%;
+    animation: collection-skeleton-shimmer var(--collection-loader-duration) ease-in-out infinite;
+}
+
+.filter-skeleton-price-values {
+    display: block;
+    width: 100%;
+    height: 14px;
+    border-radius: 999px;
+    background:
+        linear-gradient(90deg, var(--bk-loader-base) 0 24%, transparent 24% 76%, var(--bk-loader-base) 76% 100%);
+}
+
 .filter-item {
     display: flex;
     align-items: center;
@@ -319,21 +339,22 @@ hat undo kiy ahai:root {
 
 .collection-stock-badge {
     position: absolute;
-    left: 10px;
-    bottom: 10px;
+    top: 9px;
+    left: 9px;
     z-index: 4;
-    max-width: calc(100% - 20px);
-    padding: 7px 10px;
+    max-width: calc(100% - 58px);
+    padding: 5px 8px;
     border-radius: 999px;
-    background: rgba(255, 248, 239, 0.94);
-    color: #8b001f;
-    border: 1px solid rgba(128, 0, 32, 0.2);
-    box-shadow: 0 8px 20px rgba(55, 15, 10, 0.16);
+    background: rgba(255, 250, 241, 0.88);
+    color: #7a1023;
+    border: 1px solid rgba(128, 0, 32, 0.14);
+    box-shadow: 0 6px 14px rgba(55, 15, 10, 0.12);
+    backdrop-filter: blur(8px);
     font-family: "Inter", "Poppins", Arial, sans-serif;
-    font-size: 10px;
-    font-weight: 900;
+    font-size: 8px;
+    font-weight: 750;
     line-height: 1.1;
-    text-transform: capitalize;
+    text-transform: uppercase;
     letter-spacing: 0.02em;
     white-space: nowrap;
     overflow: hidden;
@@ -341,9 +362,9 @@ hat undo kiy ahai:root {
 }
 
 .collection-stock-badge.low {
-    background: rgba(142, 0, 35, 0.94);
-    color: #fff8ec;
-    border-color: rgba(255, 236, 196, 0.45);
+    background: rgba(255, 248, 239, 0.9);
+    color: #8a4c12;
+    border-color: rgba(184, 134, 11, 0.2);
 }
 
 .product-card.out-of-stock .card-img {
@@ -390,12 +411,13 @@ hat undo kiy ahai:root {
 .collection-card-dots {
     position: absolute;
     left: 50%;
-    bottom: 50px;
-    z-index: 3;
+    bottom: 9px;
+    z-index: 4;
     display: inline-flex;
     gap: 5px;
     padding: 5px 7px;
-    background: rgba(255, 250, 241, 0.72);
+    background: rgba(255, 250, 241, 0.78);
+    box-shadow: 0 4px 12px rgba(55, 15, 10, 0.12);
     border-radius: 999px;
     transform: translateX(-50%);
     opacity: 0;
@@ -689,6 +711,44 @@ hat undo kiy ahai:root {
     margin-bottom: 4px;
 }
 
+.mobile-filter-body .sidebar-header h2 {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.mobile-filter-body .filter-section {
+    padding: 18px 0;
+}
+
+.mobile-filter-body .filter-section h3.filter-title {
+    margin-bottom: 16px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
+
+.mobile-filter-body .filter-item {
+    margin-bottom: 12px;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1.3;
+}
+
+.mobile-filter-body .filter-item input {
+    width: 17px;
+    height: 17px;
+}
+
+.mobile-filter-body .collection-price-range {
+    font-size: 12px;
+    font-weight: 650;
+}
+
+.mobile-filter-body .filter-more-btn {
+    font-size: 12px;
+    font-weight: 700;
+}
+
 .mobile-filter-footer {
     padding: 14px 18px calc(14px + env(safe-area-inset-bottom));
     border-top: 1px solid rgba(128, 0, 32, 0.12);
@@ -778,11 +838,12 @@ hat undo kiy ahai:root {
     }
 
     .collection-stock-badge {
+        top: 7px;
         left: 7px;
-        bottom: 7px;
-        max-width: calc(100% - 14px);
-        padding: 5px 7px;
-        font-size: 8px;
+        bottom: auto;
+        max-width: calc(100% - 48px);
+        padding: 4px 7px;
+        font-size: 7px;
     }
 
     .card-details {

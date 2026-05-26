@@ -8,13 +8,16 @@ import { API_ENDPOINTS } from "../../config/api";
 import api from "../../utils/api";
 import { validateCheckoutForm } from "../../utils/validation";
 import { LocationPickerModal } from "../Profile/Profile";
+import CheckoutOrderPanel from "../../components/CheckoutOrderPanel";
+import { getProductStockInfo } from "../../utils/stockStatus";
 import "./Checkout.css";
 
 const PACKAGING_WEIGHT_KG = Number(import.meta.env.VITE_PACKAGING_WEIGHT_KG || 0.7);
+const ORDER_PROCESSING_DAYS = Number(import.meta.env.VITE_ORDER_PROCESSING_DAYS || 4);
 const COD_MAX_AMOUNT = Number(import.meta.env.VITE_COD_MAX_AMOUNT || 10000);
-const FREE_SHIPPING_MIN_AMOUNT = Number(import.meta.env.VITE_FREE_SHIPPING_MIN_AMOUNT || 10000);
 const PREPAID_DISCOUNT_AMOUNT = Number(import.meta.env.VITE_PREPAID_DISCOUNT_AMOUNT || 50);
 const COD_FEE_AMOUNT = Number(import.meta.env.VITE_COD_FEE_AMOUNT || 50);
+const PLATFORM_FEE_AMOUNT = Number(import.meta.env.VITE_PLATFORM_FEE_AMOUNT || 5);
 const EMPTY_CHECKOUT_ADDRESS = {
   label: "Home",
   name: "",
@@ -51,17 +54,66 @@ const getCheckoutAddressLine = (address = {}) =>
     .filter(Boolean)
     .join(", ");
 
+const formatDeliveryDate = (date) =>
+  date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+
+const addDays = (date, days) => {
+  const next = new Date(date);
+  next.setDate(next.getDate() + Number(days || 0));
+  return next;
+};
+
+const getShiprocketEtaDate = (eta) => {
+  if (!eta) return null;
+  const numericDays = String(eta).match(/\d+/)?.[0];
+  const parsedDate = new Date(eta);
+  if (!Number.isNaN(parsedDate.getTime())) return parsedDate;
+  if (numericDays) return addDays(new Date(), Number(numericDays));
+  return null;
+};
+
+const getFinalDeliveryDate = (eta) => {
+  const shiprocketDate = getShiprocketEtaDate(eta);
+  return addDays(shiprocketDate || new Date(), ORDER_PROCESSING_DAYS);
+};
+
+const getCourierRate = (courier = {}) => {
+  const rate = Number(courier?.rate ?? courier?.freight_charge ?? courier?.courier_charge);
+  return Number.isFinite(rate) && rate >= 0 ? rate : null;
+};
+
+const selectCheckoutCourier = (couriers = []) =>
+  couriers
+    .map((courier) => ({
+      rate: getCourierRate(courier),
+      etd: courier?.etd || courier?.estimated_delivery_days || null,
+    }))
+    .filter((courier) => courier.rate !== null)
+    .sort((left, right) => left.rate - right.rate)[0] || null;
+
 const Checkout = () => {
-  const { cart, getSubtotal, clearCart } = useCart();
+  const { cart, clearCart } = useCart();
   const { user } = useAuth();
   const { showNotification } = useNotification();
   const navigate = useNavigate();
-  const subtotal = getSubtotal();
-  const isProductCodAllowed = cart.every(item => Array.isArray(item.payment_options) && item.payment_options.includes("cod"));
+  const checkoutCart = cart.map((item) => {
+    const stockInfo = getProductStockInfo(item, item.colorId);
+    const isUnavailable = stockInfo.isOutOfStock || Number(item.quantity || 1) > stockInfo.quantity;
+    return { ...item, checkoutUnavailable: isUnavailable, checkoutStockInfo: stockInfo };
+  });
+  const payableCart = checkoutCart.filter((item) => !item.checkoutUnavailable);
+  const unavailableCart = checkoutCart.filter((item) => item.checkoutUnavailable);
+  const subtotal = payableCart.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
+  const isProductCodAllowed = payableCart.length > 0 && payableCart.every(item => Array.isArray(item.payment_options) && item.payment_options.includes("cod"));
   const isCodAllowed = isProductCodAllowed && subtotal <= COD_MAX_AMOUNT;
   const [activePayment, setActivePayment] = useState("online");
   const [loading, setLoading] = useState(false);
   const [shippingCharge, setShippingCharge] = useState(0);
+  const [shippingDeliveryDate, setShippingDeliveryDate] = useState(null);
   const [shippingLoading, setShippingLoading] = useState(false);
   const [isFirstOrder, setIsFirstOrder] = useState(false);
   const [addresses, setAddresses] = useState([]);
@@ -72,6 +124,9 @@ const Checkout = () => {
   const [couponDiscount, setCouponDiscount] = useState(0);
   const [walletBalance, setWalletBalance] = useState(0);
   const [useWallet, setUseWallet] = useState(false);
+  const [couponPanelOpen, setCouponPanelOpen] = useState(false);
+  const [couponModalOpen, setCouponModalOpen] = useState(false);
+  const [couponCelebration, setCouponCelebration] = useState(null);
   const [checkoutStep, setCheckoutStep] = useState("details");
   const [addressForm, setAddressForm] = useState(getEmptyCheckoutAddress(user));
   const [editingAddressId, setEditingAddressId] = useState(null);
@@ -90,19 +145,20 @@ const Checkout = () => {
     phone: user?.phone || "",
   });
 
-  const shippingDiscountReason = isFirstOrder ? "first_order" : subtotal > FREE_SHIPPING_MIN_AMOUNT ? "minimum_order" : null;
+  const shippingDiscountReason = shippingCharge > 0 ? (isFirstOrder ? "first_order" : "free_delivery") : null;
   const shippingDiscount = shippingDiscountReason ? shippingCharge : 0;
   const finalShippingCharge = Math.max(0, shippingCharge - shippingDiscount);
   const returnDeliveryDeduction = shippingDiscountReason === "first_order" ? 0 : shippingCharge;
   const returnRtoDeduction = shippingDiscountReason === "first_order" ? 0 : shippingCharge;
-  const paymentFee = activePayment === "cod" ? COD_FEE_AMOUNT : 0;
-  const prepaidDiscount = activePayment === "online" ? Math.min(PREPAID_DISCOUNT_AMOUNT, subtotal + finalShippingCharge) : 0;
-  const orderGrossTotal = Math.max(0, subtotal + finalShippingCharge + paymentFee - prepaidDiscount);
+  const paymentFee = payableCart.length > 0 && activePayment === "cod" ? COD_FEE_AMOUNT : 0;
+  const platformFee = payableCart.length > 0 ? PLATFORM_FEE_AMOUNT : 0;
+  const prepaidDiscount = payableCart.length > 0 && activePayment === "online" ? Math.min(PREPAID_DISCOUNT_AMOUNT, subtotal + finalShippingCharge) : 0;
+  const orderGrossTotal = Math.max(0, subtotal + finalShippingCharge + paymentFee + platformFee - prepaidDiscount);
   const effectiveCouponDiscount = Math.min(couponDiscount, orderGrossTotal);
   const grossAfterCoupon = Math.max(0, orderGrossTotal - effectiveCouponDiscount);
   const walletUsableAmount = useWallet ? Math.min(Number(walletBalance || 0), grossAfterCoupon) : 0;
   const total = Math.max(0, grossAfterCoupon - walletUsableAmount);
-  const totalWeightKg = cart.reduce((sum, item) => {
+  const totalWeightKg = payableCart.reduce((sum, item) => {
     const rawWeight = Number(item.weight);
     if (!Number.isFinite(rawWeight) || rawWeight <= 0) {
       return sum + (0.5 * Number(item.quantity || 1));
@@ -111,6 +167,20 @@ const Checkout = () => {
     const qty = Math.max(1, Number(item.quantity || 1));
     return sum + (weightKg * qty) + (PACKAGING_WEIGHT_KG * qty);
   }, 0);
+
+  const getCouponSavingsText = (coupon) => {
+    if (!coupon) return "Coupons & offers";
+    const code = String(coupon.code || "").toUpperCase();
+    if (coupon.discount_type === "percentage") return `Save ${Number(coupon.discount_percent || 0)}% with ${code}`;
+    return `Save Rs. ${Number(coupon.discount_amount || 0).toLocaleString("en-IN")} with ${code}`;
+  };
+
+  const getCouponSubtext = (coupon) => {
+    if (!coupon) return "Choose an offer for this order.";
+    const minAmount = Number(coupon.min_purchase_amount || 0);
+    if (minAmount > subtotal) return `Shop for Rs. ${(minAmount - subtotal).toLocaleString("en-IN")} more to apply`;
+    return coupon.description || "Tap to apply this offer at checkout.";
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -269,6 +339,9 @@ const Checkout = () => {
     setAppliedCoupon({ ...coupon, discount: nextDiscount });
     setCouponDiscount(nextDiscount);
     setCouponCode(coupon.code);
+    setCouponPanelOpen(false);
+    setCouponModalOpen(false);
+    setCouponCelebration({ code: coupon.code, discount: nextDiscount });
     showNotification(`Coupon ${coupon.code} applied.`, "success");
   };
 
@@ -276,9 +349,14 @@ const Checkout = () => {
     setAppliedCoupon(null);
     setCouponDiscount(0);
     setCouponCode("");
+    setCouponCelebration(null);
   };
 
   const proceedToReview = () => {
+    if (payableCart.length === 0) {
+      showNotification("All items in your cart are unavailable right now.", "warning");
+      return;
+    }
     const { isValid, errors } = validateCheckoutForm(formData);
     if (!isValid) {
       showNotification(`Please fix: ${Object.values(errors).join(" | ")}`, "warning");
@@ -306,6 +384,12 @@ const Checkout = () => {
     }
   }, [cart, navigate]);
 
+  useEffect(() => {
+    if (!couponCelebration) return undefined;
+    const timer = setTimeout(() => setCouponCelebration(null), 2400);
+    return () => clearTimeout(timer);
+  }, [couponCelebration]);
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -313,8 +397,9 @@ const Checkout = () => {
 
   useEffect(() => {
     const cleanPincode = formData.pincode.trim();
-    if (!/^\d{6}$/.test(cleanPincode) || cart.length === 0) {
+    if (!/^\d{6}$/.test(cleanPincode) || payableCart.length === 0) {
       setShippingCharge(0);
+      setShippingDeliveryDate(null);
       setShippingLoading(false);
       return;
     }
@@ -334,17 +419,16 @@ const Checkout = () => {
 
         const data = await response.json();
         const couriers = data?.data?.available_courier_companies || [];
-        const rateValues = couriers
-          .map((c) => Number(c?.rate ?? c?.freight_charge ?? c?.courier_charge))
-          .filter((v) => Number.isFinite(v) && v >= 0);
-        const bestRate = rateValues.length ? Math.min(...rateValues) : 0;
+        const selectedCourier = selectCheckoutCourier(couriers);
 
         if (!cancelled) {
-          setShippingCharge(bestRate);
+          setShippingCharge(selectedCourier?.rate || 0);
+          setShippingDeliveryDate(selectedCourier?.etd ? formatDeliveryDate(getFinalDeliveryDate(selectedCourier.etd)) : null);
         }
       } catch (error) {
         if (!cancelled) {
           setShippingCharge(0);
+          setShippingDeliveryDate(null);
         }
       } finally {
         if (!cancelled) {
@@ -357,7 +441,7 @@ const Checkout = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [formData.pincode, cart, totalWeightKg, activePayment]);
+  }, [formData.pincode, payableCart.length, totalWeightKg, activePayment]);
 
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
@@ -369,6 +453,11 @@ const Checkout = () => {
 
     setLoading(true);
     try {
+      if (payableCart.length === 0) {
+        showNotification("All items in your cart are unavailable right now.", "warning");
+        setLoading(false);
+        return;
+      }
       if (activePayment === "cod" && !isCodAllowed) {
         showNotification(`COD is available only up to Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")} and only for COD-enabled products.`, "warning");
         setLoading(false);
@@ -390,11 +479,11 @@ const Checkout = () => {
         coupon_code: appliedCoupon?.code || null,
         discount_amount: effectiveCouponDiscount,
         wallet_amount: walletUsableAmount,
-        payment_fee: paymentFee,
+        payment_fee: paymentFee + platformFee,
         payment_discount: prepaidDiscount,
         payment_method: activePayment === 'cod' ? 'COD' : 'Prepaid',
         payment_status: activePayment === 'cod' ? 'Pending' : 'Paid',
-        items: cart.map((item) => ({
+        items: payableCart.map((item) => ({
           id: item.id,
           name: item.name,
           quantity: item.quantity,
@@ -466,19 +555,138 @@ const Checkout = () => {
   };
 
   return (
-    <div className="relative min-h-screen flex flex-col bg-[#F5F1E8]" ref={rootRef}>
+    <div className="checkout-page relative min-h-screen flex flex-col bg-[#F5F1E8]" ref={rootRef}>
       <main className="flex-grow py-5 lg:py-8">
         <div className="checkout-page-shell w-full px-4 lg:px-12">
-          <button
-            type="button"
-            onClick={() => (checkoutStep === "review" ? setCheckoutStep("details") : navigate("/cart"))}
-            className="checkout-back-btn checkout-back-inline"
-            aria-label={checkoutStep === "review" ? "Back to delivery details" : "Back to bag"}
-          >
-            <Icon icon="lucide:arrow-left" />
-            <span>{checkoutStep === "review" ? "Back" : "Bag"}</span>
-          </button>
-          <div className="checkout-layout grid grid-cols-1 lg:grid-cols-12 gap-12">
+          <div className="checkout-modal-card">
+            <div className="checkout-modal-header">
+              <div>
+                <span>{checkoutStep === "review" ? "Review order" : "Checkout"}</span>
+                <h2>Complete your order</h2>
+              </div>
+              <button type="button" onClick={() => navigate("/cart")} aria-label="Close checkout">
+                <Icon icon="lucide:x" />
+              </button>
+            </div>
+          <div className="checkout-layout">
+            <CheckoutOrderPanel
+              step={checkoutStep}
+              addresses={addresses}
+              selectedAddressId={selectedAddressId}
+              onSelectAddress={selectAddress}
+              onAddAddress={() => openAddressModal()}
+              onEditAddress={openAddressModal}
+              getAddressLine={getCheckoutAddressLine}
+              user={user}
+              paymentOptions={[
+                {
+                  id: "online",
+                  icon: "lucide:shield-check",
+                  title: "Online Payment",
+                  description: `Pay securely using Razorpay. Rs. ${PREPAID_DISCOUNT_AMOUNT.toLocaleString("en-IN")} extra off`,
+                  active: activePayment === "online",
+                  onSelect: () => setActivePayment("online"),
+                },
+                {
+                  id: "cod",
+                  icon: "lucide:banknote",
+                  title: "Cash on Delivery",
+                  description: isCodAllowed ? `Rs. ${COD_FEE_AMOUNT.toLocaleString("en-IN")} COD charge` : subtotal > COD_MAX_AMOUNT ? `Not available above Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}` : "Unavailable for some items",
+                  active: activePayment === "cod",
+                  disabled: !isCodAllowed,
+                  onSelect: () => {
+                    if (isCodAllowed) {
+                      setActivePayment("cod");
+                    } else if (subtotal > COD_MAX_AMOUNT) {
+                      showNotification(`COD is available only up to Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}.`, "warning");
+                    } else {
+                      showNotification("Some products in your cart do not support Cash on Delivery.", "warning");
+                    }
+                  },
+                },
+              ]}
+              reviewItems={checkoutCart.map((item) => ({
+                key: `${item.id}-${item.colorId}-review`,
+                image: item.image_url,
+                name: item.name,
+                meta: `Qty ${item.quantity} x Rs. ${Number(item.price).toLocaleString("en-IN")}`,
+                total: item.checkoutUnavailable ? "Excluded" : `Rs. ${(Number(item.price) * Number(item.quantity || 1)).toLocaleString("en-IN")}`,
+                unavailable: item.checkoutUnavailable,
+                unavailableLabel: item.checkoutStockInfo?.badge || "Unavailable - excluded from total",
+              }))}
+              reviewAddress={{
+                name: formData.fullName,
+                line: [formData.address, formData.city, formData.pincode].filter(Boolean).join(", "),
+                phone: formData.phone,
+              }}
+              reviewPayment={{
+                title: activePayment === "cod" ? "Cash on Delivery" : "Online Payment",
+                description: activePayment === "cod" ? "Pay when your order is delivered." : "Pay securely using Razorpay.",
+              }}
+              onEditDetails={() => setCheckoutStep("details")}
+              summaryProps={{
+                title: "Order Summary",
+                items: checkoutCart.map((item) => ({
+                  key: `${item.id}-${item.colorId}`,
+                  href: `/product/${item.slug}`,
+                  image: item.image_url,
+                  name: item.name,
+                  meta: `${item.quantity} x Rs. ${Number(item.price).toLocaleString("en-IN")}`,
+                  total: item.checkoutUnavailable ? "Excluded" : `Rs. ${(Number(item.price) * Number(item.quantity || 1)).toLocaleString("en-IN")}`,
+                  unavailable: item.checkoutUnavailable,
+                  unavailableLabel: item.checkoutStockInfo?.badge || "Unavailable - excluded from total",
+                })),
+                showOffers: true,
+                coupons: availableCoupons,
+                appliedCoupon,
+                couponDiscount: effectiveCouponDiscount,
+                couponCode,
+                setCouponCode,
+                onApplyCoupon: applyCheckoutCoupon,
+                onRemoveCoupon: removeCheckoutCoupon,
+                walletBalance,
+                useWallet,
+                setUseWallet,
+                rows: [
+                  { label: "Subtotal", value: `Rs. ${subtotal.toLocaleString("en-IN")}` },
+                  ...(unavailableCart.length > 0 ? [{ label: "Unavailable items", value: `${unavailableCart.length} excluded`, tone: "accent" }] : []),
+                  ...(appliedCoupon ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-Rs. ${effectiveCouponDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
+                  { label: "Free delivery charge", value: shippingLoading ? "Calculating..." : shippingCharge > 0 ? <><s>Rs. {shippingCharge.toLocaleString("en-IN")}</s> Free</> : "Free", tone: "success" },
+                  ...(prepaidDiscount > 0 ? [{ label: "Prepaid payment discount", value: `-Rs. ${prepaidDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
+                  ...(paymentFee > 0 ? [{ label: "COD charge", value: `Rs. ${paymentFee.toLocaleString("en-IN")}`, tone: "accent" }] : []),
+                  { label: "Platform fee", value: `Rs. ${platformFee.toLocaleString("en-IN")}` },
+                  ...(walletUsableAmount > 0 ? [{ label: "Wallet used", value: `-Rs. ${walletUsableAmount.toLocaleString("en-IN")}`, tone: "success" }] : []),
+                ],
+                logistics: shippingCharge > 0 ? {
+                  label: "Returns & exchange available",
+                  tooltip: shippingDiscountReason === "first_order"
+                    ? "Return and exchange are available. For your first order, delivery and RTO charges will not be deducted."
+                    : `Return and exchange are available. On return, refund may deduct Rs. ${returnDeliveryDeduction.toLocaleString("en-IN")} delivery and Rs. ${returnRtoDeduction.toLocaleString("en-IN")} RTO.`,
+                } : null,
+                deliveryPromise: shippingDeliveryDate ? {
+                  title: `Arriving ${shippingDeliveryDate}`,
+                  subtitle: "Free standard delivery",
+                  tooltip: "This is an estimated delivery date. It may change based on courier availability and your location.",
+                } : null,
+                totalLabel: "Total Payable",
+                total,
+                formatMoney: (value) => `Rs. ${Number(value || 0).toLocaleString("en-IN")}`,
+                action: {
+                  label: checkoutStep === "details"
+                    ? (shippingLoading ? "Checking delivery..." : "Continue")
+                    : (loading ? "Processing..." : activePayment === "cod" ? "Place COD Order" : "Pay & Place Order"),
+                  onClick: checkoutStep === "details" ? proceedToReview : handlePlaceOrder,
+                  disabled: checkoutStep === "details" ? (shippingLoading || payableCart.length === 0) : (loading || payableCart.length === 0),
+                },
+                couponModalOpen,
+                setCouponModalOpen,
+                couponCodeOpen: couponPanelOpen,
+                setCouponCodeOpen: setCouponPanelOpen,
+                couponCelebration,
+              }}
+            />
+            {false && (
+            <>
             <div className="checkout-flow lg:col-span-8 space-y-12">
               {checkoutStep === "details" && (
               <>
@@ -570,62 +778,37 @@ const Checkout = () => {
               {checkoutStep === "review" && (
               <section className="buy-now-section checkout-section">
                 <div className="buy-now-section-title">
-                  <h3>Coupons & wallet</h3>
+                  <h3>Review your order</h3>
+                  <button type="button" onClick={() => setCheckoutStep("details")}>
+                    <Icon icon="lucide:arrow-left" />
+                    Edit
+                  </button>
                 </div>
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-xs font-bold text-[#3D2817]/60 uppercase tracking-widest mb-2">Coupon code</label>
-                    <div className="flex gap-3">
-                      <input
-                        value={couponCode}
-                        onChange={(event) => setCouponCode(event.target.value)}
-                        placeholder="Enter coupon"
-                        className="flex-1 bg-[#F5F1E8]/50 border border-[#D4AF37]/30 rounded-lg px-4 py-3 focus:outline-none focus:border-[#800020]"
-                      />
-                      {appliedCoupon ? (
-                        <button type="button" onClick={removeCheckoutCoupon} className="px-5 rounded-lg border border-red-200 text-red-700 font-semibold text-sm">
-                          Remove
-                        </button>
-                      ) : (
-                        <button type="button" onClick={() => applyCheckoutCoupon()} className="px-5 rounded-lg bg-[#800020] text-[#D4AF37] font-semibold text-sm">
-                          Apply
-                        </button>
-                      )}
-                    </div>
+                <div className="checkout-review-grid">
+                  <div className="checkout-review-panel">
+                    <span>Products</span>
+                    {cart.map((item) => (
+                      <div key={`${item.id}-${item.colorId}-review`} className="checkout-review-product">
+                        <img src={item.image_url} alt="" />
+                        <div>
+                          <strong>{item.name}</strong>
+                          <small>Qty {item.quantity} x Rs. {Number(item.price).toLocaleString("en-IN")}</small>
+                        </div>
+                        <b>Rs. {(Number(item.price) * Number(item.quantity || 1)).toLocaleString("en-IN")}</b>
+                      </div>
+                    ))}
                   </div>
-
-                  {availableCoupons.length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {availableCoupons.slice(0, 4).map((coupon) => (
-                        <button
-                          key={coupon.id || coupon.code}
-                          type="button"
-                          onClick={() => applyCheckoutCoupon(coupon)}
-                          className="rounded-xl border border-[#D4AF37]/20 bg-[#F5F1E8]/30 p-4 text-left hover:border-[#800020]/50 transition-colors"
-                        >
-                          <span className="block text-sm font-bold text-[#800020] uppercase tracking-widest">{coupon.code}</span>
-                          <span className="mt-1 block text-xs text-[#6f594d]">
-                            {coupon.discount_type === "percentage" ? `${Number(coupon.discount_percent || 0)}% off` : `Rs. ${Number(coupon.discount_amount || 0).toLocaleString("en-IN")} off`}
-                            {coupon.min_purchase_amount ? ` on Rs. ${Number(coupon.min_purchase_amount).toLocaleString("en-IN")}+` : ""}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  <label className="flex items-center justify-between gap-4 rounded-xl border border-[#D4AF37]/20 bg-[#F5F1E8]/30 p-4">
-                    <span>
-                      <span className="block text-sm font-semibold text-[#3D2817]">Use wallet money</span>
-                      <span className="block text-xs text-[#6f594d]">Available Rs. {Number(walletBalance || 0).toLocaleString("en-IN")}</span>
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={useWallet}
-                      disabled={Number(walletBalance || 0) <= 0}
-                      onChange={(event) => setUseWallet(event.target.checked)}
-                      className="h-5 w-5 accent-[#800020]"
-                    />
-                  </label>
+                  <div className="checkout-review-panel">
+                    <span>Deliver to</span>
+                    <strong>{formData.fullName}</strong>
+                    <p>{[formData.address, formData.city, formData.pincode].filter(Boolean).join(", ")}</p>
+                    <small>{formData.phone}</small>
+                  </div>
+                  <div className="checkout-review-panel">
+                    <span>Payment</span>
+                    <strong>{activePayment === "cod" ? "Cash on Delivery" : "Online Payment"}</strong>
+                    <p>{activePayment === "cod" ? "Pay when your order is delivered." : "Pay securely with Razorpay."}</p>
+                  </div>
                 </div>
               </section>
               )}
@@ -634,6 +817,58 @@ const Checkout = () => {
             <div className="lg:col-span-4">
               <div className="summary-card sticky top-28">
                 <div className="checkout-summary-card bg-white rounded-2xl p-8 shadow-xl border border-[#D4AF37]/20">
+                  <CheckoutReviewSummary
+                    title="Order Summary"
+                    items={cart.map((item) => ({
+                      key: `${item.id}-${item.colorId}`,
+                      href: `/product/${item.slug}`,
+                      image: item.image_url,
+                      name: item.name,
+                      meta: `${item.quantity} x Rs. ${Number(item.price).toLocaleString("en-IN")}`,
+                      total: `Rs. ${(Number(item.price) * Number(item.quantity || 1)).toLocaleString("en-IN")}`,
+                    }))}
+                    showOffers={checkoutStep === "review"}
+                    coupons={availableCoupons}
+                    appliedCoupon={appliedCoupon}
+                    couponDiscount={effectiveCouponDiscount}
+                    couponCode={couponCode}
+                    setCouponCode={setCouponCode}
+                    onApplyCoupon={applyCheckoutCoupon}
+                    onRemoveCoupon={removeCheckoutCoupon}
+                    walletBalance={walletBalance}
+                    useWallet={useWallet}
+                    setUseWallet={setUseWallet}
+                    rows={[
+                      { label: "Subtotal", value: `Rs. ${subtotal.toLocaleString("en-IN")}` },
+                      ...(appliedCoupon ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-Rs. ${effectiveCouponDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
+                      { label: "Free delivery charge", value: shippingLoading ? "Calculating..." : shippingCharge > 0 ? <><s>Rs. {shippingCharge.toLocaleString("en-IN")}</s> Free</> : "Free", tone: "success" },
+                      ...(prepaidDiscount > 0 ? [{ label: "Prepaid payment discount", value: `-Rs. ${prepaidDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
+                      ...(paymentFee > 0 ? [{ label: "COD charge", value: `Rs. ${paymentFee.toLocaleString("en-IN")}`, tone: "accent" }] : []),
+                      { label: "Platform fee", value: `Rs. ${platformFee.toLocaleString("en-IN")}` },
+                      ...(walletUsableAmount > 0 ? [{ label: "Wallet used", value: `-Rs. ${walletUsableAmount.toLocaleString("en-IN")}`, tone: "success" }] : []),
+                    ]}
+                    logistics={shippingCharge > 0 ? {
+                      label: "Returns & exchange available",
+                      tooltip: shippingDiscountReason === "first_order"
+                        ? "Return and exchange are available. For your first order, delivery and RTO charges will not be deducted."
+                        : `Return and exchange are available. On return, refund may deduct Rs. ${returnDeliveryDeduction.toLocaleString("en-IN")} delivery and Rs. ${returnRtoDeduction.toLocaleString("en-IN")} RTO.`,
+                    } : null}
+                    totalLabel="Total Payable"
+                    total={total}
+                    formatMoney={(value) => `Rs. ${Number(value || 0).toLocaleString("en-IN")}`}
+                    action={{
+                      label: checkoutStep === "details"
+                        ? (shippingLoading ? "Checking delivery..." : "Continue")
+                        : (loading ? "Processing..." : activePayment === "cod" ? "Place COD Order" : "Pay & Place Order"),
+                      onClick: checkoutStep === "details" ? proceedToReview : handlePlaceOrder,
+                      disabled: checkoutStep === "details" ? shippingLoading : loading,
+                    }}
+                    couponModalOpen={couponModalOpen}
+                    setCouponModalOpen={setCouponModalOpen}
+                    couponCodeOpen={couponPanelOpen}
+                    setCouponCodeOpen={setCouponPanelOpen}
+                    couponCelebration={couponCelebration}
+                  />
                   <h3 className="text-xl font-bold text-[#3D2817] mb-8 uppercase tracking-widest border-b border-[#D4AF37]/10 pb-4 brand-font">Order Summary</h3>
                   <div className="space-y-6 mb-8">
                     {cart.map((item) => {
@@ -653,6 +888,46 @@ const Checkout = () => {
                     })}
                   </div>
 
+                  {checkoutStep === "review" && (
+                    <div className="checkout-summary-actions">
+                      <div className="checkout-offers-head">
+                        <Icon icon="lucide:badge-percent" />
+                        <strong>Coupons & offers</strong>
+                      </div>
+                      <button type="button" className="checkout-coupon-feature" onClick={() => (appliedCoupon ? null : applyCheckoutCoupon(availableCoupons[0]))} disabled={Boolean(appliedCoupon) || !availableCoupons[0]}>
+                        <span className="checkout-coupon-badge"><Icon icon="lucide:percent" /></span>
+                        <span className="checkout-coupon-copy">
+                          <strong>{appliedCoupon ? `Applied ${appliedCoupon.code}` : getCouponSavingsText(availableCoupons[0])}</strong>
+                          <small>{appliedCoupon ? `Rs. ${effectiveCouponDiscount.toLocaleString("en-IN")} saved on this order` : getCouponSubtext(availableCoupons[0])}</small>
+                        </span>
+                        <Icon icon={appliedCoupon ? "lucide:check-circle-2" : "lucide:chevron-right"} />
+                      </button>
+                      {appliedCoupon && (
+                        <button type="button" className="checkout-remove-coupon" onClick={removeCheckoutCoupon}>
+                          Remove coupon
+                        </button>
+                      )}
+                      {!appliedCoupon && availableCoupons.length > 1 && (
+                        <button type="button" className="checkout-view-coupons" onClick={() => setCouponModalOpen(true)}>
+                          View all coupons
+                          <Icon icon="lucide:chevron-right" />
+                        </button>
+                      )}
+                      <label className={`checkout-wallet-row ${Number(walletBalance || 0) <= 0 ? "disabled" : ""}`}>
+                        <span>
+                          <strong>Use wallet money</strong>
+                          <small>Available Rs. {Number(walletBalance || 0).toLocaleString("en-IN")}</small>
+                        </span>
+                        <input
+                          type="checkbox"
+                          checked={useWallet}
+                          disabled={Number(walletBalance || 0) <= 0}
+                          onChange={(event) => setUseWallet(event.target.checked)}
+                        />
+                      </label>
+                    </div>
+                  )}
+
                   <div className="pt-6 border-t border-[#D4AF37]/10 space-y-4">
                     <div className="flex justify-between items-center text-xs">
                       <span className="text-gray-500 uppercase tracking-widest font-bold">Subtotal</span>
@@ -666,15 +941,9 @@ const Checkout = () => {
                       </div>
                     )}
 
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="text-gray-500 uppercase tracking-widest font-bold">Shipping</span>
-                      <span className={`font-bold ${shippingCharge > 0 ? "text-[#3D2817]" : "text-green-600"}`}>
-                        {shippingLoading
-                          ? "CALCULATING..."
-                          : shippingCharge > 0
-                            ? `Rs. ${shippingCharge.toLocaleString("en-IN")}`
-                            : "FREE DELIVERY"}
-                      </span>
+                    <div className="flex justify-between items-center text-xs text-emerald-600 font-bold">
+                      <span>FREE DELIVERY CHARGE</span>
+                      <span>{shippingLoading ? "CALCULATING..." : shippingCharge > 0 ? <><s>Rs. {shippingCharge.toLocaleString("en-IN")}</s> Free</> : "FREE"}</span>
                     </div>
                     {prepaidDiscount > 0 && (
                       <div className="flex justify-between items-center text-xs text-emerald-600 font-bold">
@@ -688,12 +957,10 @@ const Checkout = () => {
                         <span>Rs. {paymentFee.toLocaleString("en-IN")}</span>
                       </div>
                     )}
-                    {shippingDiscount > 0 && (
-                      <div className="flex justify-between items-center text-xs text-emerald-600 font-bold">
-                        <span>{shippingDiscountReason === "first_order" ? "FIRST ORDER FREE SHIPPING" : "FREE SHIPPING ABOVE RS. 10,000"}</span>
-                        <span>-Rs. {shippingDiscount.toLocaleString("en-IN")}</span>
-                      </div>
-                    )}
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-gray-500 uppercase tracking-widest font-bold">Platform fee</span>
+                      <span className="font-bold text-[#3D2817]">Rs. {platformFee.toLocaleString("en-IN")}</span>
+                    </div>
                     {walletUsableAmount > 0 && (
                       <div className="flex justify-between items-center text-xs text-emerald-600 font-bold">
                         <span>WALLET USED</span>
@@ -701,10 +968,20 @@ const Checkout = () => {
                       </div>
                     )}
                     {shippingCharge > 0 && (
-                      <div className="rounded-lg border border-[#D4AF37]/20 bg-[#FFF7E8] p-3 text-xs leading-relaxed text-[#6f594d]">
-                        {shippingDiscountReason === "first_order"
-                          ? "Return on first-order free shipping: delivery and RTO will not be deducted. Exchange has no logistics deduction."
-                          : `Return refund may deduct Rs. ${returnDeliveryDeduction.toLocaleString("en-IN")} delivery + Rs. ${returnRtoDeduction.toLocaleString("en-IN")} RTO. Exchange has no logistics deduction.`}
+                      <div className="checkout-logistics-note">
+                        <span>Returns & exchange available</span>
+                        <button
+                          type="button"
+                          className="checkout-info-chip"
+                          aria-label="Return and exchange information"
+                          data-tooltip={
+                            shippingDiscountReason === "first_order"
+                              ? "Return and exchange are available. For your first order, delivery and RTO charges will not be deducted."
+                              : `Return and exchange are available. On return, refund may deduct Rs. ${returnDeliveryDeduction.toLocaleString("en-IN")} delivery and Rs. ${returnRtoDeduction.toLocaleString("en-IN")} RTO.`
+                          }
+                        >
+                          <Icon icon="lucide:info" />
+                        </button>
                       </div>
                     )}
                   </div>
@@ -732,6 +1009,9 @@ const Checkout = () => {
                 </div>
               </div>
             </div>
+            </>
+            )}
+          </div>
           </div>
         </div>
       </main>
@@ -838,6 +1118,62 @@ const Checkout = () => {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {couponModalOpen && (
+        <div className="checkout-coupon-modal" role="dialog" aria-modal="true" aria-label="Coupons and offers">
+          <div className="checkout-coupon-modal-card">
+            <button type="button" className="checkout-coupon-modal-close" onClick={() => setCouponModalOpen(false)} aria-label="Close coupons">
+              <Icon icon="lucide:x" />
+            </button>
+            <div className="checkout-coupon-modal-title">
+              <Icon icon="lucide:badge-percent" />
+              <div>
+                <span>Checkout offers</span>
+                <h3>Coupons & offers</h3>
+              </div>
+            </div>
+            <button type="button" className="checkout-manual-coupon" onClick={() => setCouponPanelOpen((open) => !open)}>
+              Have a coupon code?
+              <Icon icon={couponPanelOpen ? "lucide:chevron-up" : "lucide:chevron-down"} />
+            </button>
+            {couponPanelOpen && (
+              <div className="checkout-coupon-panel">
+                <div className="checkout-coupon-entry">
+                  <input
+                    value={couponCode}
+                    onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                    placeholder="Coupon code"
+                  />
+                  <button type="button" onClick={() => applyCheckoutCoupon()}>Apply</button>
+                </div>
+              </div>
+            )}
+            {availableCoupons.length > 0 ? (
+              <div className="checkout-coupon-list">
+                {availableCoupons.map((coupon) => (
+                  <button key={coupon.id || coupon.code} type="button" onClick={() => applyCheckoutCoupon(coupon)}>
+                    <span className="checkout-coupon-code">{coupon.code}</span>
+                    <span className="checkout-coupon-detail">
+                      <strong>{getCouponSavingsText(coupon)}</strong>
+                      <small>{getCouponSubtext(coupon)}</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="checkout-coupon-empty">No coupons are available right now.</p>
+            )}
+          </div>
+        </div>
+      )}
+      {couponCelebration && (
+        <div className="checkout-coupon-boom" role="status" aria-live="polite">
+          <span><Icon icon="lucide:sparkles" /></span>
+          <div>
+            <strong>Yay! Coupon applied</strong>
+            <p>{couponCelebration.discount > 0 ? `Rs. ${Number(couponCelebration.discount).toLocaleString("en-IN")} off with ${couponCelebration.code}` : `${couponCelebration.code} is active on this order`}</p>
           </div>
         </div>
       )}

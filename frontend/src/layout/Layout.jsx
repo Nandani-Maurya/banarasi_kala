@@ -120,13 +120,16 @@ const Layout = () => {
   const [isRouteRefreshing, setIsRouteRefreshing] = useState(false);
   const footerlessAuthPages = ["/cart", "/wishlist", "/contact", "/feedback", "/profile"];
   const footerlessPages = ["/cart", "/wishlist", "/my-orders", "/profile"];
+  const chromeHiddenPages = ["/checkout"];
+  const hideChrome = chromeHiddenPages.includes(location.pathname);
   const hideFooter =
+    hideChrome ||
     location.pathname === "/login" ||
     footerlessPages.includes(location.pathname) ||
     (!user && footerlessAuthPages.includes(location.pathname));
   const isHomePage = location.pathname === "/";
-  const hideWhatsapp = location.pathname === "/contact";
-  const hideSignupGift = loading || Boolean(user) || location.pathname === "/login";
+  const hideWhatsapp = hideChrome || location.pathname === "/contact";
+  const hideSignupGift = hideChrome || loading || Boolean(user) || location.pathname === "/login";
   const routeRefreshKey = [
     location.pathname,
     location.search,
@@ -142,7 +145,7 @@ const Layout = () => {
 
   return (
     <>
-      <Header />
+      {!hideChrome && <Header />}
       <div
         className={`bk-layout-content ${
           isHomePage ? "bk-layout-content-home" : ""

@@ -1,16 +1,28 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { useLocation } from "react-router-dom";
 
 const ScrollToTop = () => {
   const { pathname, search, hash, key, state } = useLocation();
 
   useEffect(() => {
+    if (!("scrollRestoration" in window.history)) return undefined;
+    const previous = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+
+    return () => {
+      window.history.scrollRestoration = previous;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (hash) return undefined;
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    return undefined;
+  }, [pathname, search, hash, key, state?.refreshKey]);
+
+  useEffect(() => {
     if (hash) return undefined;
 
-    // Try immediate scroll
-    window.scrollTo(0, 0);
-    
-    // Also try with a small delay to override browser scroll restoration
     const timeoutId = setTimeout(() => {
       window.scrollTo({
         top: 0,

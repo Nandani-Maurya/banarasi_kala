@@ -1,0 +1,40 @@
+.checkout-order-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.95fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.checkout-order-panel.no-summary {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.checkout-order-main {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.checkout-order-summary {
+  min-width: 0;
+}
+
+.checkout-order-summary .crs-card {
+  position: sticky;
+  top: 12px;
+}
+
+.checkout-order-proceed {
+  margin-top: 0;
+}
+
+@media (max-width: 820px) {
+  .checkout-order-panel {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .checkout-order-summary .crs-card {
+    position: static;
+  }
+}

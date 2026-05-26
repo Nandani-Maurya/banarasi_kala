@@ -29,7 +29,7 @@ const OccasionCollections = () => {
     <section className="bk-occasion-section">
       <div className="bk-occasion-shell">
         <div className="bk-occasion-heading">
-          <span>Occasion Wear</span>
+          <span>Crafted for Your Special Occasions</span>
           <h2>Occasion Special Sarees</h2>
         </div>
 

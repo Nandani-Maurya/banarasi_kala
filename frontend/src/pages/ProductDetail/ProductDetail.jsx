@@ -10,6 +10,8 @@ import api from "../../utils/api";
 import { getProductCoverImage, getProductImages } from "../../utils/productMedia";
 import { getProductStockInfo } from "../../utils/stockStatus";
 import { LocationPickerModal } from "../Profile/Profile";
+import CheckoutReviewSummary from "../../components/CheckoutReviewSummary";
+import CheckoutOrderPanel from "../../components/CheckoutOrderPanel";
 import "./ProductDetail.css";
 
 const PRODUCT_RATING = "4.8";
@@ -18,9 +20,9 @@ const ORDER_PROCESSING_DAYS = Number(import.meta.env.VITE_ORDER_PROCESSING_DAYS 
 const PACKAGING_WEIGHT_KG = Number(import.meta.env.VITE_PACKAGING_WEIGHT_KG || 0.2);
 const PREFERRED_COURIER_NAME = String(import.meta.env.VITE_PREFERRED_COURIER_NAME || "Xpressbees Surface").toLowerCase();
 const COD_MAX_AMOUNT = Number(import.meta.env.VITE_COD_MAX_AMOUNT || 10000);
-const FREE_SHIPPING_MIN_AMOUNT = Number(import.meta.env.VITE_FREE_SHIPPING_MIN_AMOUNT || 10000);
 const PREPAID_DISCOUNT_AMOUNT = Number(import.meta.env.VITE_PREPAID_DISCOUNT_AMOUNT || 50);
 const COD_FEE_AMOUNT = Number(import.meta.env.VITE_COD_FEE_AMOUNT || 50);
+const PLATFORM_FEE_AMOUNT = Number(import.meta.env.VITE_PLATFORM_FEE_AMOUNT || 5);
 const COURIER_SELECTION_MODE = String(import.meta.env.VITE_COURIER_SELECTION_MODE || "preferred_or_cheapest").toLowerCase();
 const EMPTY_BUY_NOW_ADDRESS = {
   label: "Home",
@@ -161,6 +163,10 @@ const ProductDetail = () => {
   const [couponLoading, setCouponLoading] = useState(false);
   const [appliedBuyNowCoupon, setAppliedBuyNowCoupon] = useState(null);
   const [availableCoupons, setAvailableCoupons] = useState([]);
+  const [buyNowCouponPanelOpen, setBuyNowCouponPanelOpen] = useState(false);
+  const [buyNowShowAllCoupons, setBuyNowShowAllCoupons] = useState(false);
+  const [buyNowCouponModalOpen, setBuyNowCouponModalOpen] = useState(false);
+  const [couponCelebration, setCouponCelebration] = useState(null);
 
   const frameRef = useRef(null);
   const perspectiveRef = useRef(null);
@@ -293,27 +299,49 @@ const ProductDetail = () => {
   const availableQuantity = isSelectedOutOfStock ? 0 : Math.max(0, Math.floor(Number(selectedStockInfo.quantity || 0)));
   const quantityOptions = availableQuantity > 0 ? Array.from({ length: availableQuantity }, (_, index) => index + 1) : [0];
   const formatMoney = (value) => `Rs. ${Number(value || 0).toLocaleString("en-IN")}`;
+  const formatDeliveryDate = (value) => {
+    if (!value) return "";
+    const parsedDate = new Date(value);
+    if (Number.isNaN(parsedDate.getTime())) return value;
+    return parsedDate.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  };
+  const getCouponSavingsText = (coupon) => {
+    if (!coupon) return "Coupons & offers";
+    const code = String(coupon.code || "").toUpperCase();
+    if (coupon.discount_type === "percentage") return `Save ${Number(coupon.discount_percent || 0)}% with ${code}`;
+    return `Save ${formatMoney(coupon.discount_amount)} with ${code}`;
+  };
+  const getCouponSubtext = (coupon) => {
+    if (!coupon) return "Choose an offer for this order.";
+    const minAmount = Number(coupon.min_purchase_amount || 0);
+    if (minAmount > buyNowSubtotal) {
+      return `Shop for ${formatMoney(minAmount - buyNowSubtotal)} more to apply`;
+    }
+    return coupon.description || "Tap to apply this offer at checkout.";
+  };
   const productName = product?.name || "";
   const buyNowSubtotal = Number(product?.selling_price || 0) * Math.max(1, Number(quantity || 1));
   const selectedBuyNowAddress = buyNowAddresses.find((address) => String(address.id) === String(selectedBuyNowAddressId));
   const canUsePrepaid = true;
   const canUseCod = buyNowSubtotal <= COD_MAX_AMOUNT;
   const buyNowShippingRate = Number(buyNowShipping?.rate || 0);
-  const qualifiesForFreeShipping = isFirstOrder || buyNowSubtotal > FREE_SHIPPING_MIN_AMOUNT;
-  const shippingDiscountReasonCode = isFirstOrder ? "first_order" : buyNowSubtotal > FREE_SHIPPING_MIN_AMOUNT ? "minimum_order" : null;
+  const qualifiesForFreeShipping = buyNowShippingRate > 0;
+  const shippingDiscountReasonCode = buyNowShippingRate > 0 ? (isFirstOrder ? "first_order" : "free_delivery") : null;
   const freeShippingReason = isFirstOrder
-    ? "Free shipping on first order"
-    : buyNowSubtotal > FREE_SHIPPING_MIN_AMOUNT
-      ? `Free shipping above ${formatMoney(FREE_SHIPPING_MIN_AMOUNT)}`
-      : "";
+    ? "First order free delivery"
+    : "Free delivery charge";
   const buyNowShippingDiscount = qualifiesForFreeShipping ? buyNowShippingRate : 0;
   const buyNowFinalShipping = Math.max(0, buyNowShippingRate - buyNowShippingDiscount);
   const buyNowReturnDeliveryDeduction = shippingDiscountReasonCode === "first_order" ? 0 : buyNowShippingRate;
   const buyNowReturnRtoDeduction = shippingDiscountReasonCode === "first_order" ? 0 : buyNowShippingRate;
-  const buyNowReturnLogisticsDeduction = buyNowReturnDeliveryDeduction + buyNowReturnRtoDeduction;
   const buyNowPaymentFee = buyNowPayment === "cod" ? COD_FEE_AMOUNT : 0;
+  const buyNowPlatformFee = PLATFORM_FEE_AMOUNT;
   const buyNowPrepaidDiscount = buyNowPayment === "prepaid" ? Math.min(PREPAID_DISCOUNT_AMOUNT, buyNowSubtotal + buyNowFinalShipping) : 0;
-  const buyNowGrossTotal = Math.max(0, buyNowSubtotal + buyNowFinalShipping + buyNowPaymentFee - buyNowPrepaidDiscount);
+  const buyNowGrossTotal = Math.max(0, buyNowSubtotal + buyNowFinalShipping + buyNowPaymentFee + buyNowPlatformFee - buyNowPrepaidDiscount);
   const buyNowCouponDiscount = Math.min(Number(appliedBuyNowCoupon?.discount || 0), buyNowGrossTotal);
   const walletUsableAmount = useWallet ? Math.min(Number(walletBalance || 0), Math.max(0, buyNowGrossTotal - buyNowCouponDiscount)) : 0;
   const buyNowTotal = Math.max(0, buyNowGrossTotal - buyNowCouponDiscount - walletUsableAmount);
@@ -470,6 +498,12 @@ const ProductDetail = () => {
   }, [buyNowOpen, selectedBuyNowAddress?.pincode, buyNowPayment, quantity, product?.weight, isSelectedOutOfStock]);
 
   useEffect(() => {
+    if (!couponCelebration) return undefined;
+    const timer = window.setTimeout(() => setCouponCelebration(null), 2400);
+    return () => window.clearTimeout(timer);
+  }, [couponCelebration]);
+
+  useEffect(() => {
     if (!buyNowOpen) return undefined;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -578,6 +612,10 @@ const ProductDetail = () => {
     setBuyNowStep("details");
     setAppliedBuyNowCoupon(null);
     setCouponCode("");
+    setBuyNowCouponPanelOpen(false);
+    setBuyNowShowAllCoupons(false);
+    setBuyNowCouponModalOpen(false);
+    setCouponCelebration(null);
     setUseWallet(false);
     setBuyNowOpen(true);
     await loadBuyNowData();
@@ -593,6 +631,10 @@ const ProductDetail = () => {
     setBuyNowMapOpen(false);
     setAppliedBuyNowCoupon(null);
     setCouponCode("");
+    setBuyNowCouponPanelOpen(false);
+    setBuyNowShowAllCoupons(false);
+    setBuyNowCouponModalOpen(false);
+    setCouponCelebration(null);
     setUseWallet(false);
     resetBuyNowForm();
   };
@@ -615,6 +657,13 @@ const ProductDetail = () => {
       if (!response.ok) throw new Error(data.message || "Invalid coupon code.");
       setAppliedBuyNowCoupon(data);
       setCouponCode(code);
+      setBuyNowCouponPanelOpen(false);
+      setBuyNowShowAllCoupons(false);
+      setBuyNowCouponModalOpen(false);
+      setCouponCelebration({
+        code,
+        discount: Number(data.discount || data.discount_amount || 0),
+      });
       showNotification(`Coupon ${code} applied.`, "success");
     } catch (error) {
       setAppliedBuyNowCoupon(null);
@@ -627,6 +676,10 @@ const ProductDetail = () => {
   const removeBuyNowCoupon = () => {
     setAppliedBuyNowCoupon(null);
     setCouponCode("");
+    setBuyNowCouponPanelOpen(false);
+    setBuyNowShowAllCoupons(false);
+    setBuyNowCouponModalOpen(false);
+    setCouponCelebration(null);
     showNotification("Coupon removed.", "info");
   };
 
@@ -727,7 +780,7 @@ const ProductDetail = () => {
     total_amount: buyNowGrossTotal,
     coupon_code: appliedBuyNowCoupon?.code || null,
     wallet_amount: walletUsableAmount,
-    payment_fee: buyNowPaymentFee,
+    payment_fee: buyNowPaymentFee + buyNowPlatformFee,
     payment_discount: buyNowPrepaidDiscount,
     payment_method: buyNowPayment === "cod" ? "COD" : "Prepaid",
     payment_status: buyNowPayment === "cod" ? "Pending" : "Paid",
@@ -917,7 +970,7 @@ const ProductDetail = () => {
         ["Prepaid", "Online payment available."],
         ["Prepaid benefit", `${formatMoney(PREPAID_DISCOUNT_AMOUNT)} extra discount on prepaid payment.`],
         ["COD", `Cash on Delivery is available when product value is ${formatMoney(COD_MAX_AMOUNT)} or below. COD charge is ${formatMoney(COD_FEE_AMOUNT)}.`],
-        ["Shipping", `Free shipping on first order and on orders above ${formatMoney(FREE_SHIPPING_MIN_AMOUNT)}. Otherwise delivery charge is calculated by pincode before payment.`],
+        ["Shipping", "Delivery charge is calculated by pincode and shown as a free delivery discount at payment review."],
         ["Return", "Easy return is available. First-order free shipping returns do not deduct delivery/RTO. Other returns deduct forward delivery and RTO logistics charges."],
         ["Exchange", "Easy exchange is available once with no delivery/RTO deduction. After one exchange, return or another exchange is not available for that item."],
         ["Taxes", "Price is inclusive of all taxes."],
@@ -1351,6 +1404,120 @@ const ProductDetail = () => {
             </div>
 
             <div className="buy-now-content">
+              <CheckoutOrderPanel
+                step={buyNowStep === "payment" ? "review" : "details"}
+                addresses={buyNowAddresses}
+                selectedAddressId={selectedBuyNowAddressId}
+                onSelectAddress={(address) => setSelectedBuyNowAddressId(String(address.id))}
+                onAddAddress={() => openBuyNowAddressModal()}
+                onEditAddress={editBuyNowAddress}
+                getAddressLine={getAddressLine}
+                user={user}
+                addressLoading={buyNowLoading}
+                emptyAddressIcon="lucide:map-pin-off"
+                emptyAddressText="Add a delivery address to continue checkout."
+                paymentOptions={[
+                  {
+                    id: "prepaid",
+                    icon: "lucide:shield-check",
+                    title: "Online Payment",
+                    description: `Pay securely using Razorpay. ${formatMoney(PREPAID_DISCOUNT_AMOUNT)} extra off`,
+                    active: buyNowPayment === "prepaid",
+                    disabled: !canUsePrepaid,
+                    onSelect: () => setBuyNowPayment("prepaid"),
+                  },
+                  {
+                    id: "cod",
+                    icon: "lucide:banknote",
+                    title: "Cash on Delivery",
+                    description: canUseCod ? `${formatMoney(COD_FEE_AMOUNT)} COD charge` : `Not available above ${formatMoney(COD_MAX_AMOUNT)}`,
+                    active: buyNowPayment === "cod",
+                    disabled: !canUseCod,
+                    onSelect: () => setBuyNowPayment("cod"),
+                  },
+                ]}
+                deliveryError={buyNowShipping?.unavailable ? (buyNowShipping.message || "Delivery is not possible at this location right now.") : null}
+                proceedAction={{
+                  label: buyNowShippingLoading ? "Checking delivery..." : "Proceed",
+                  onClick: proceedToFinalPayment,
+                  disabled: buyNowLoading || buyNowShippingLoading || !selectedBuyNowAddress || !buyNowShipping || buyNowShipping?.unavailable,
+                }}
+                reviewTitle="Review details"
+                reviewItems={[{
+                  key: product.id,
+                  image: mainImage,
+                  name: productName,
+                  meta: `${selectedColor?.name ? `${selectedColor.name} - ` : ""}Qty ${quantity}`,
+                  total: formatMoney(buyNowSubtotal),
+                }]}
+                reviewAddress={{
+                  name: selectedBuyNowAddress?.name || user?.name,
+                  line: getAddressLine(selectedBuyNowAddress),
+                  phone: selectedBuyNowAddress?.phone || user?.phone,
+                }}
+                reviewPayment={{
+                  title: buyNowPayment === "cod" ? "Cash on Delivery" : "Online Payment",
+                  description: buyNowPayment === "cod" ? "Pay when your order is delivered." : "Pay securely using Razorpay.",
+                }}
+                onEditDetails={() => setBuyNowStep("details")}
+                showSummary={buyNowStep === "payment"}
+                summaryProps={{
+                  title: "Order Summary",
+                  items: [{
+                    key: product.id,
+                    image: mainImage,
+                    name: productName,
+                    meta: `${selectedColor?.name ? `${selectedColor.name} - ` : ""}Qty ${quantity}`,
+                    total: formatMoney(buyNowSubtotal),
+                  }],
+                  coupons: availableCoupons,
+                  appliedCoupon: appliedBuyNowCoupon,
+                  couponDiscount: buyNowCouponDiscount,
+                  couponCode,
+                  setCouponCode,
+                  couponLoading,
+                  onApplyCoupon: (couponOrCode) => applyBuyNowCoupon(typeof couponOrCode === "object" ? couponOrCode?.code : couponOrCode),
+                  onRemoveCoupon: removeBuyNowCoupon,
+                  walletBalance,
+                  useWallet,
+                  setUseWallet,
+                  rows: [
+                    { label: "Product total", value: formatMoney(buyNowSubtotal) },
+                    { label: "Free delivery charge", value: buyNowShippingLoading ? "Checking..." : buyNowShipping?.unavailable ? "Unavailable" : <><s>{formatMoney(buyNowShippingRate)}</s> Free</>, tone: "success" },
+                    ...(buyNowPrepaidDiscount > 0 ? [{ label: "Prepaid payment discount", value: `-${formatMoney(buyNowPrepaidDiscount)}`, tone: "success" }] : []),
+                    ...(buyNowPaymentFee > 0 ? [{ label: "COD charge", value: formatMoney(buyNowPaymentFee), tone: "accent" }] : []),
+                    { label: "Platform fee", value: formatMoney(buyNowPlatformFee) },
+                    ...(buyNowCouponDiscount > 0 ? [{ label: "Coupon discount", value: `-${formatMoney(buyNowCouponDiscount)}`, tone: "success" }] : []),
+                    ...(walletUsableAmount > 0 ? [{ label: "Wallet used", value: `-${formatMoney(walletUsableAmount)}`, tone: "success" }] : []),
+                  ],
+                  deliveryPromise: buyNowShipping?.deliveryDate ? {
+                    title: `Arriving ${formatDeliveryDate(buyNowShipping.deliveryDate)}`,
+                    subtitle: "Free standard delivery",
+                    tooltip: "This is an estimated delivery date. It may change based on courier availability and your location.",
+                  } : null,
+                  logistics: buyNowShipping && !buyNowShipping.unavailable ? {
+                    label: "Returns & exchange available",
+                    tooltip: shippingDiscountReasonCode === "first_order"
+                      ? "Return and exchange are available. For your first order, delivery and RTO charges will not be deducted."
+                      : `Return and exchange are available. On return, refund may deduct ${formatMoney(buyNowReturnDeliveryDeduction)} delivery and ${formatMoney(buyNowReturnRtoDeduction)} RTO.`,
+                  } : null,
+                  totalLabel: "Final amount",
+                  total: buyNowTotal,
+                  formatMoney,
+                  action: {
+                    label: buyNowPlacing ? "Processing..." : "Place Order",
+                    onClick: placeBuyNowOrder,
+                    disabled: buyNowLoading || buyNowShippingLoading || buyNowPlacing || !selectedBuyNowAddress || !buyNowShipping || buyNowShipping?.unavailable,
+                  },
+                  couponModalOpen: buyNowCouponModalOpen,
+                  setCouponModalOpen: setBuyNowCouponModalOpen,
+                  couponCodeOpen: buyNowCouponPanelOpen,
+                  setCouponCodeOpen: setBuyNowCouponPanelOpen,
+                  couponCelebration,
+                }}
+              />
+              {false && (
+              <>
               {buyNowStep === "details" ? (
                 <>
               <section className="buy-now-section">
@@ -1468,153 +1635,65 @@ const ProductDetail = () => {
                 </div>
               </section>
 
-              <section className="buy-now-section">
-                <div className="buy-now-section-title">
-                  <h3>Coupons & wallet</h3>
-                </div>
-                {availableCoupons.length > 0 && (
-                  <div className="buy-now-coupon-list">
-                    {availableCoupons.slice(0, 6).map((coupon) => (
-                      <button
-                        type="button"
-                        key={coupon.id || coupon.code}
-                        className={appliedBuyNowCoupon?.code === coupon.code ? "active" : ""}
-                        onClick={() => applyBuyNowCoupon(coupon.code)}
-                        disabled={couponLoading || Boolean(appliedBuyNowCoupon)}
-                      >
-                        <strong>{coupon.code}</strong>
-                        <span>
-                          {coupon.discount_type === "percentage"
-                            ? `${coupon.discount_percent || 0}% off`
-                            : `${formatMoney(coupon.discount_amount)} off`}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <div className="buy-now-coupon">
-                  <input
-                    type="text"
-                    placeholder="Coupon code"
-                    value={couponCode}
-                    onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
-                    disabled={Boolean(appliedBuyNowCoupon)}
-                  />
-                  {appliedBuyNowCoupon ? (
-                    <button type="button" onClick={removeBuyNowCoupon}>Remove</button>
-                  ) : (
-                    <button type="button" onClick={applyBuyNowCoupon} disabled={couponLoading || buyNowGrossTotal <= 0}>
-                      {couponLoading ? "Applying..." : "Apply"}
-                    </button>
-                  )}
-                </div>
-                <label className={`buy-now-wallet ${walletBalance <= 0 ? "disabled" : ""}`}>
-                  <input
-                    type="checkbox"
-                    checked={useWallet}
-                    onChange={(event) => setUseWallet(event.target.checked)}
-                    disabled={walletBalance <= 0}
-                  />
-                  <span>
-                    <strong>Use wallet balance</strong>
-                    <small>{walletBalance > 0 ? `${formatMoney(walletBalance)} available` : "No wallet balance available"}</small>
-                  </span>
-                </label>
-              </section>
-
               <section className="buy-now-section buy-now-final-section">
-                <div className="buy-now-item">
-                  {mainImage && <img src={mainImage} alt="" />}
-                  <div>
-                    <strong>{productName}</strong>
-                    <span>{selectedColor?.name ? `${selectedColor.name} • ` : ""}Qty {quantity}</span>
-                  </div>
-                  <b>{formatMoney(buyNowSubtotal)}</b>
-                </div>
-
-                <div className="buy-now-totals">
-                  <p>
-                    <span>Product total</span>
-                    <strong>{formatMoney(buyNowSubtotal)}</strong>
-                  </p>
-                  <p>
-                    <span>Delivery charge</span>
-                    <strong>
-                      {buyNowShippingLoading ? "Checking..." : buyNowShipping?.unavailable ? "Unavailable" : formatMoney(buyNowShippingRate)}
-                    </strong>
-                  </p>
-                  {qualifiesForFreeShipping && buyNowShippingRate > 0 && (
-                    <p className="buy-now-free">
-                      <span>{freeShippingReason}</span>
-                      <strong>-{formatMoney(buyNowShippingDiscount)}</strong>
-                    </p>
-                  )}
-                  {buyNowPrepaidDiscount > 0 && (
-                    <p className="buy-now-free">
-                      <span>Prepaid payment discount</span>
-                      <strong>-{formatMoney(buyNowPrepaidDiscount)}</strong>
-                    </p>
-                  )}
-                  {buyNowPaymentFee > 0 && (
-                    <p>
-                      <span>COD charge</span>
-                      <strong>{formatMoney(buyNowPaymentFee)}</strong>
-                    </p>
-                  )}
-                  {buyNowCouponDiscount > 0 && (
-                    <p className="buy-now-free">
-                      <span>Coupon discount</span>
-                      <strong>-{formatMoney(buyNowCouponDiscount)}</strong>
-                    </p>
-                  )}
-                  {walletUsableAmount > 0 && (
-                    <p className="buy-now-free">
-                      <span>Wallet used</span>
-                      <strong>-{formatMoney(walletUsableAmount)}</strong>
-                    </p>
-                  )}
-                  {buyNowShipping?.deliveryDate && (
-                    <p>
-                      <span>Estimated delivery</span>
-                      <strong>{buyNowShipping.deliveryDate}</strong>
-                    </p>
-                  )}
-                  {buyNowShipping && !buyNowShipping.unavailable && (
-                    <div className="buy-now-refund-policy">
-                      <span>Return logistics</span>
-                      {shippingDiscountReasonCode === "first_order" ? (
-                        <strong>No delivery or RTO deduction on first-order free shipping.</strong>
-                      ) : (
-                        <strong>
-                          Return refund may deduct {formatMoney(buyNowReturnDeliveryDeduction)} delivery + {formatMoney(buyNowReturnRtoDeduction)} RTO.
-                        </strong>
-                      )}
-                      <em>Exchange has no delivery/RTO deduction.</em>
-                    </div>
-                  )}
-                  <p className="buy-now-total">
-                    <span>Final amount</span>
-                    <strong>{formatMoney(buyNowTotal)}</strong>
-                  </p>
-                </div>
-
-                {qualifiesForFreeShipping && (
-                  <div className="buy-now-offer">
-                    <Icon icon="lucide:sparkles" />
-                    <span>{freeShippingReason} applied: shipping charge is deducted at checkout.</span>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  className="buy-now-place"
-                  onClick={placeBuyNowOrder}
-                  disabled={buyNowLoading || buyNowShippingLoading || buyNowPlacing || !selectedBuyNowAddress || !buyNowShipping || buyNowShipping?.unavailable}
-                >
-                  {buyNowPlacing ? "Processing..." : buyNowPayment === "cod" ? "Place COD Order" : "Pay & Place Order"}
-                </button>
+                <CheckoutReviewSummary
+                  title=""
+                  items={[{
+                    key: product.id,
+                    image: mainImage,
+                    name: productName,
+                    meta: `${selectedColor?.name ? `${selectedColor.name} • ` : ""}Qty ${quantity}`,
+                    total: formatMoney(buyNowSubtotal),
+                  }]}
+                  coupons={availableCoupons}
+                  appliedCoupon={appliedBuyNowCoupon}
+                  couponDiscount={buyNowCouponDiscount}
+                  couponCode={couponCode}
+                  setCouponCode={setCouponCode}
+                  couponLoading={couponLoading}
+                  onApplyCoupon={(couponOrCode) => applyBuyNowCoupon(typeof couponOrCode === "object" ? couponOrCode?.code : couponOrCode)}
+                  onRemoveCoupon={removeBuyNowCoupon}
+                  walletBalance={walletBalance}
+                  useWallet={useWallet}
+                  setUseWallet={setUseWallet}
+                  rows={[
+                    { label: "Product total", value: formatMoney(buyNowSubtotal) },
+                    { label: "Free delivery charge", value: buyNowShippingLoading ? "Checking..." : buyNowShipping?.unavailable ? "Unavailable" : <><s>{formatMoney(buyNowShippingRate)}</s> Free</>, tone: "success" },
+                    ...(buyNowPrepaidDiscount > 0 ? [{ label: "Prepaid payment discount", value: `-${formatMoney(buyNowPrepaidDiscount)}`, tone: "success" }] : []),
+                    ...(buyNowPaymentFee > 0 ? [{ label: "COD charge", value: formatMoney(buyNowPaymentFee), tone: "accent" }] : []),
+                    { label: "Platform fee", value: formatMoney(buyNowPlatformFee) },
+                    ...(buyNowCouponDiscount > 0 ? [{ label: "Coupon discount", value: `-${formatMoney(buyNowCouponDiscount)}`, tone: "success" }] : []),
+                    ...(walletUsableAmount > 0 ? [{ label: "Wallet used", value: `-${formatMoney(walletUsableAmount)}`, tone: "success" }] : []),
+                  ]}
+                  deliveryPromise={buyNowShipping?.deliveryDate ? {
+                    title: `Arriving ${formatDeliveryDate(buyNowShipping.deliveryDate)}`,
+                    subtitle: "Free standard delivery",
+                    tooltip: "This is an estimated delivery date. It may change based on courier availability and your location.",
+                  } : null}
+                  logistics={buyNowShipping && !buyNowShipping.unavailable ? {
+                    label: "Returns & exchange available",
+                    tooltip: shippingDiscountReasonCode === "first_order"
+                      ? "Return and exchange are available. For your first order, delivery and RTO charges will not be deducted."
+                      : `Return and exchange are available. On return, refund may deduct ${formatMoney(buyNowReturnDeliveryDeduction)} delivery and ${formatMoney(buyNowReturnRtoDeduction)} RTO.`,
+                  } : null}
+                  totalLabel="Final amount"
+                  total={buyNowTotal}
+                  formatMoney={formatMoney}
+                  action={{
+                    label: buyNowPlacing ? "Processing..." : "Place Order",
+                    onClick: placeBuyNowOrder,
+                    disabled: buyNowLoading || buyNowShippingLoading || buyNowPlacing || !selectedBuyNowAddress || !buyNowShipping || buyNowShipping?.unavailable,
+                  }}
+                  couponModalOpen={buyNowCouponModalOpen}
+                  setCouponModalOpen={setBuyNowCouponModalOpen}
+                  couponCodeOpen={buyNowCouponPanelOpen}
+                  setCouponCodeOpen={setBuyNowCouponPanelOpen}
+                  couponCelebration={couponCelebration}
+                />
               </section>
                 </>
+              )}
+              </>
               )}
             </div>
           </div>

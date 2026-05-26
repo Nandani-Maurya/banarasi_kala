@@ -1,6 +1,6 @@
 .bk-occasion-section {
   width: 100%;
-  padding: 26px 0 34px;
+  padding: 22px 0 30px;
   overflow: hidden;
   background:
     linear-gradient(rgba(255, 246, 232, 0.72), rgba(255, 246, 232, 0.72)),
@@ -19,7 +19,7 @@
 }
 
 .bk-occasion-heading {
-  margin-bottom: 22px;
+  margin-bottom: 18px;
   text-align: center;
 }
 
@@ -37,7 +37,7 @@
   margin: 0;
   color: #5a160f;
   font-family: "Cinzel", Georgia, "Times New Roman", serif;
-  font-size: clamp(28px, 3.5vw, 52px);
+  font-size: clamp(24px, 3vw, 42px);
   font-style: normal;
   font-weight: 900;
   line-height: 0.96;
@@ -47,29 +47,31 @@
 .bk-occasion-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 18px;
+  gap: 16px;
   align-items: stretch;
 }
 
 .bk-occasion-card {
   position: relative;
-  height: 340px;
+  height: 285px;
   display: block;
   overflow: hidden;
   padding: 0;
   background: #eadccf;
   border: 0;
-  border-radius: 16px;
-  box-shadow: none;
+  border: 1px solid rgba(128, 0, 32, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 14px 28px rgba(88, 39, 13, 0.1);
   cursor: pointer;
   animation: bk-occasion-reveal 0.72s cubic-bezier(0.2, 0.72, 0.2, 1) both;
   animation-delay: var(--bk-occasion-delay, 0ms);
-  transition: transform 0.32s ease, filter 0.32s ease;
+  transition: transform 0.32s ease, filter 0.32s ease, box-shadow 0.32s ease;
 }
 
 .bk-occasion-card:hover {
-  transform: translateY(-5px);
-  filter: saturate(1.04);
+  transform: translateY(-6px) scale(1.01);
+  filter: saturate(1.06);
+  box-shadow: 0 22px 38px rgba(88, 39, 13, 0.16);
 }
 
 .bk-occasion-card img {
@@ -82,30 +84,54 @@
 }
 
 .bk-occasion-card:hover img {
-  transform: scale(1.025);
+  transform: scale(1.04);
 }
 
 .bk-occasion-overlay {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(23, 13, 8, 0) 46%, rgba(23, 13, 8, 0.44) 100%),
-    linear-gradient(90deg, rgba(23, 13, 8, 0.08), rgba(23, 13, 8, 0));
+    linear-gradient(180deg, rgba(23, 13, 8, 0) 42%, rgba(23, 13, 8, 0.58) 100%),
+    radial-gradient(circle at 50% 18%, rgba(255, 235, 188, 0.12), transparent 42%);
   pointer-events: none;
+}
+
+.bk-occasion-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 0%, rgba(255, 241, 211, 0.34) 46%, transparent 68%);
+  opacity: 0;
+  transform: translateX(-120%);
+  transition: transform 0.8s ease, opacity 0.35s ease;
+  pointer-events: none;
+}
+
+.bk-occasion-card:hover::after,
+.bk-occasion-card:focus-visible::after {
+  opacity: 1;
+  transform: translateX(120%);
 }
 
 .bk-occasion-name {
   position: absolute;
-  left: 22px;
-  right: 22px;
-  bottom: 28px;
+  left: 16px;
+  right: 16px;
+  bottom: 18px;
   color: #ffffff;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(20px, 1.55vw, 27px);
+  font-size: clamp(18px, 1.35vw, 24px);
+  font-weight: 700;
   line-height: 1.12;
   text-align: center;
   text-transform: none;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.44);
+  transform: translateY(4px);
+  transition: transform 0.32s ease;
+}
+
+.bk-occasion-card:hover .bk-occasion-name {
+  transform: translateY(0);
 }
 
 .bk-occasion-empty {
@@ -151,12 +177,12 @@
 @keyframes bk-occasion-reveal {
   from {
     opacity: 0;
-    transform: translateY(24px);
+    transform: translateY(18px) scale(0.98);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -183,13 +209,13 @@
   }
 
   .bk-occasion-card {
-    height: 300px;
+    height: 260px;
   }
 }
 
 @media (max-width: 640px) {
   .bk-occasion-section {
-    padding: 24px 0 34px;
+    padding: 22px 0 30px;
   }
 
   .bk-occasion-shell {
@@ -197,27 +223,27 @@
   }
 
   .bk-occasion-heading {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
     padding: 0 10px;
   }
 
   .bk-occasion-heading h2 {
-    font-size: 26px;
+    font-size: 22px;
     line-height: 1.08;
   }
 
   .bk-occasion-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: 10px;
   }
 
   .bk-occasion-card {
-    height: 240px;
-    border-radius: 14px;
+    height: 196px;
+    border-radius: 12px;
   }
 
   .bk-occasion-name {
-    bottom: 22px;
-    font-size: 21px;
+    bottom: 14px;
+    font-size: 18px;
   }
 }

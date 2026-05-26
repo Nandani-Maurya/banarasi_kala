@@ -168,7 +168,7 @@ const Collection = () => {
 
   useEffect(() => {
     fetchProducts(currentPage);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, [filters, currentPage]);
 
   useEffect(() => {
@@ -327,8 +327,35 @@ const Collection = () => {
     );
   };
 
-  const renderFilterSkeleton = () => (
+  const renderPriceFilter = () => (
+    <div className="filter-section collection-price-section">
+      <h3 className="filter-title">Price</h3>
+      <div className="collection-price-filter">
+        <input
+          type="range"
+          min="0"
+          max="200000"
+          step="1000"
+          value={filters.maxPrice}
+          onChange={handlePriceChange}
+        />
+        <div className="collection-price-range">
+          <span>Rs. 0</span>
+          <span>Rs. {Number(filters.maxPrice).toLocaleString("en-IN")}</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderFilterSkeleton = (priceFirst = false) => (
     <div className="filter-skeleton-wrap" aria-label="Loading filters">
+      {priceFirst && (
+        <div className="filter-section filter-price-skeleton">
+          <span className="filter-skeleton-title" />
+          <span className="filter-skeleton-price-track" />
+          <span className="filter-skeleton-price-values" />
+        </div>
+      )}
       {Array.from({ length: 4 }).map((_, sectionIndex) => (
         <div className="filter-section" key={sectionIndex}>
           <span className="filter-skeleton-title" />
@@ -337,6 +364,13 @@ const Collection = () => {
           ))}
         </div>
       ))}
+      {!priceFirst && (
+        <div className="filter-section filter-price-skeleton">
+          <span className="filter-skeleton-title" />
+          <span className="filter-skeleton-price-track" />
+          <span className="filter-skeleton-price-values" />
+        </div>
+      )}
     </div>
   );
 
@@ -349,12 +383,13 @@ const Collection = () => {
     Number(filters.minPrice) > 0 ||
     Number(filters.maxPrice) < 200000;
 
-  const renderFiltersBody = () => (
+  const renderFiltersBody = ({ priceFirst = false } = {}) => (
     <>
       {filtersLoading ? (
-        renderFilterSkeleton()
+        renderFilterSkeleton(priceFirst)
       ) : (
         <>
+          {priceFirst && renderPriceFilter()}
           {renderFilterGroup("variety", "Variety", varieties, "variety")}
           {renderFilterGroup("material", "Fabric", materials, "material")}
           {renderFilterGroup("occasion", "Occasions", occasions, "occasion")}
@@ -363,26 +398,9 @@ const Collection = () => {
               <circle cx="8" cy="8" r="7.5" fill={col.hex_code || "#cccccc"} />
             </svg>
           ))}
+          {!priceFirst && renderPriceFilter()}
         </>
       )}
-
-      <div className="filter-section">
-        <h3 className="filter-title">Price</h3>
-        <div className="collection-price-filter">
-          <input
-            type="range"
-            min="0"
-            max="200000"
-            step="1000"
-            value={filters.maxPrice}
-            onChange={handlePriceChange}
-          />
-          <div className="collection-price-range">
-            <span>Rs. 0</span>
-            <span>Rs. {Number(filters.maxPrice).toLocaleString("en-IN")}</span>
-          </div>
-        </div>
-      </div>
     </>
   );
 
@@ -621,7 +639,7 @@ const Collection = () => {
                   </button>
                 )}
               </div>
-              {renderFiltersBody()}
+              {renderFiltersBody({ priceFirst: true })}
             </div>
 
             <div className="mobile-filter-footer">
