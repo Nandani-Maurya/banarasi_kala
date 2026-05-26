@@ -4,34 +4,29 @@ require('dotenv').config();
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
+  port: 587,        //  Port 587 use karein (Render isko block nahi karta)
+  secure: false,    //  Isko FALSE rakhna hai port 587 ke liye (yeh internally STARTTLS upgrade karega)
   pool: true,
   maxConnections: 5,
+  
+  // Terminal logging temporarily on rakhein check karne ke liye
+  logger: true,
+  debug: true,
 
-  // Terminal me raw SMTP handshake dekhne ke liye debug modes on karein
-  logger: false,
-  debug: false,
-
-  // Force IPv4 with logging
+  // Force IPv4
   lookup: (hostname, options, callback) => {
-    console.log(`[DNS] Resolving hostname: ${hostname} with options:`, options);
-
     dns.lookup(hostname, { family: 4 }, (err, address, family) => {
-      if (err) {
-        console.error(`[DNS ERROR] Failed to resolve ${hostname}:`, err.message);
-      } else {
-        console.log(`[DNS SUCCESS] Resolved ${hostname} to IPv${family} address: ${address}`);
-      }
       callback(err, address, family);
     });
   },
-
+  
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
   tls: {
+    //  Render/Cloud instances ke handshake ke liye zaroori hai
+    ciphers: 'SSLv3',
     rejectUnauthorized: false
   }
 });
