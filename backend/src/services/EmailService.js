@@ -3,20 +3,45 @@ const dns = require('dns');
 require('dotenv').config();
 
 const transporter = nodemailer.createTransport({
-  service: 'gmail', // Standard configuration for Gmail
   host: 'smtp.gmail.com',
   port: 465,
-  secure: true, // TLS/SSL for port 465
-  pool: true,   // Keeps connections open, great for heavy servers like Render
+  secure: true,
+  pool: true,
   maxConnections: 5,
-  maxMessages: 100,
+
+  // Terminal me raw SMTP handshake dekhne ke liye debug modes on karein
+  logger: false,
+  debug: false,
+
+  // Force IPv4 with logging
+  lookup: (hostname, options, callback) => {
+    console.log(`[DNS] Resolving hostname: ${hostname} with options:`, options);
+
+    dns.lookup(hostname, { family: 4 }, (err, address, family) => {
+      if (err) {
+        console.error(`[DNS ERROR] Failed to resolve ${hostname}:`, err.message);
+      } else {
+        console.log(`[DNS SUCCESS] Resolved ${hostname} to IPv${family} address: ${address}`);
+      }
+      callback(err, address, family);
+    });
+  },
+
   auth: {
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS, // Make sure this is a 16-character App Password, NOT your raw password!
+    pass: process.env.EMAIL_PASS,
   },
   tls: {
-    // Docker/Render environments me internal verification failures se bachne ke liye
     rejectUnauthorized: false
+  }
+});
+
+// Verification check on boot (App start hote hi pata chal jayega connect ho raha hai ya nahi)
+transporter.verify((error, success) => {
+  if (error) {
+    console.error('[SMTP VERIFY ERROR] Connection failed:', error.message);
+  } else {
+    console.log('[SMTP VERIFY SUCCESS] Server is ready to take our messages! 🚀');
   }
 });
 
