@@ -43,7 +43,8 @@ const isDelivered = (order) => String(order.status || "").toLowerCase() === "del
 
 const getOrderBreakdown = (order) => {
   const items = order.OrderItems || [];
-  const itemSubtotal = items.reduce(
+  const activeItems = items.filter(item => String(item.status || "").toLowerCase() !== "cancelled");
+  const itemSubtotal = activeItems.reduce(
     (sum, item) => sum + toNumber(item.price) * Math.max(1, toNumber(item.quantity) || 1),
     0,
   );
@@ -51,6 +52,22 @@ const getOrderBreakdown = (order) => {
   const shippingCharge = toNumber(order.shipping_charge);
   const shippingDiscount = toNumber(order.shipping_discount);
   const paymentFee = toNumber(order.payment_fee);
+  const platformFeeAmount = Number(import.meta.env.VITE_PLATFORM_FEE_AMOUNT || 5);
+  const hasCod = String(order.payment_method).toUpperCase() === "COD";
+
+  let codCharge = 0;
+  let platformFee = 0;
+
+  if (paymentFee > 0) {
+    if (hasCod) {
+      codCharge = Math.max(0, paymentFee - platformFeeAmount);
+      platformFee = platformFeeAmount;
+    } else {
+      codCharge = 0;
+      platformFee = paymentFee;
+    }
+  }
+
   const paymentDiscount = toNumber(order.payment_discount);
   const couponDiscount = toNumber(order.discount_amount);
   const walletAmount = toNumber(order.wallet_amount);
@@ -64,6 +81,8 @@ const getOrderBreakdown = (order) => {
     shippingCharge,
     shippingDiscount,
     paymentFee,
+    codCharge,
+    platformFee,
     paymentDiscount,
     couponDiscount,
     walletAmount,
@@ -158,6 +177,7 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
   const statusConfig = getStatus(order.status);
   const orderNumber = getOrderDisplayNumber(order);
   const items = order.OrderItems || [];
+  const activeItems = useMemo(() => items.filter(item => String(item.status || "").toLowerCase() !== "cancelled"), [items]);
   const breakdown = useMemo(() => getOrderBreakdown(order), [order]);
   const orderDate = new Date(order.createdAt).toLocaleDateString("en-IN", {
     day: "numeric",
@@ -280,7 +300,7 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
       <div className="order-products">
         <div className="order-products-title">
           <span>Items</span>
-          <small>{items.length} {items.length === 1 ? "item" : "items"}</small>
+          <small>{activeItems.length} {activeItems.length === 1 ? "item" : "items"}</small>
         </div>
 
         {items.map((item, index) => {
@@ -289,9 +309,13 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
           const lineTotal = toNumber(item.price) * Math.max(1, toNumber(item.quantity) || 1);
           const productName = item.product_name || `Product #${item.product_id}`;
           const productUrl = item.product_slug ? `/product/${item.product_slug}` : null;
+          const isItemCancelled = String(item.status || "").toLowerCase() === "cancelled";
 
           return (
-            <div key={`${item.product_id}-${item.colorId || index}`} className="order-product-item">
+            <div 
+              key={`${item.product_id}-${item.colorId || index}`} 
+              className={`order-product-item ${isItemCancelled ? "item-cancelled" : ""}`}
+            >
               {productUrl ? (
               <Link to={productUrl} className="order-product-media" aria-label={`Open ${productName}`}>
                 {imageUrl ? (
@@ -335,15 +359,22 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
                   <span className="order-color-swatch" style={{ backgroundColor: colorHex }} />
                   <span>{getItemColorLabel(item)}</span>
                 </div>
-                {cancellationAvailable && (
-                  <button 
-                    className="cancel-item-btn" 
-                    type="button" 
-                    onClick={() => handleCancelItemClick(item.id, productName)}
-                  >
+                {isItemCancelled ? (
+                  <span className="item-cancelled-badge">
                     <Icon icon="lucide:x-circle" />
-                    <span>Cancel Item</span>
-                  </button>
+                    Cancelled
+                  </span>
+                ) : (
+                  cancellationAvailable && activeItems.length > 1 && (
+                    <button 
+                      className="cancel-item-btn" 
+                      type="button" 
+                      onClick={() => handleCancelItemClick(item.id, productName)}
+                    >
+                      <Icon icon="lucide:x-circle" />
+                      <span>Cancel Item</span>
+                    </button>
+                  )
                 )}
                 {item.shipping_meta?.refund_rules && (
                   <p className="order-product-refund">
@@ -352,7 +383,7 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
                 )}
               </div>
 
-              <span className="order-line-total">{formatPrice(lineTotal)}</span>
+              <span className={`order-line-total ${isItemCancelled ? "line-through-price" : ""}`}>{formatPrice(lineTotal)}</span>
             </div>
           );
         })}
@@ -379,10 +410,16 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
             <strong>-{formatPrice(breakdown.paymentDiscount)}</strong>
           </div>
         )}
-        {breakdown.paymentFee > 0 && (
+        {breakdown.codCharge > 0 && (
           <div className="breakdown-row">
             <span>COD charge</span>
-            <strong>{formatPrice(breakdown.paymentFee)}</strong>
+            <strong>{formatPrice(breakdown.codCharge)}</strong>
+          </div>
+        )}
+        {breakdown.platformFee > 0 && (
+          <div className="breakdown-row">
+            <span>Platform fee</span>
+            <strong>{formatPrice(breakdown.platformFee)}</strong>
           </div>
         )}
         {breakdown.couponDiscount > 0 && (
@@ -456,10 +493,12 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
         )}
         {!isReturnFlow && !isExchangeFlow && (
           cancellationAvailable ? (
-            <button className="order-action-btn danger" onClick={handleCancelClick} type="button">
-              <Icon icon="lucide:x" />
-              Cancel order
-            </button>
+            activeItems.length === 1 && (
+              <button className="order-action-btn danger" onClick={handleCancelClick} type="button">
+                <Icon icon="lucide:x" />
+                Cancel order
+              </button>
+            )
           ) : (
             !isCancelled(order) && <span className="cancel-window-note">Cancellation available within 24 hours only.</span>
           )

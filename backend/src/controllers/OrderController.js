@@ -49,6 +49,7 @@ const serializeOrder = (order) => {
     image_url: pickOrderItemImage(item.Product, item.colorId || item.color_id),
     product_slug: item.Product?.slug || null,
     shipping_meta: item.shipping_meta || null,
+    status: item.status || 'Active',
   }));
   return json;
 };
@@ -729,16 +730,20 @@ class OrderController {
       // Calculate cancellation values
       const itemPrice = Number(item.price) * Number(item.quantity);
       
-      // Check total remaining items
-      const totalItemsCount = await OrderItem.count({
-        where: { order_id: orderId },
-        transaction: t
+      // Check active (not cancelled) items in this order
+      const activeItems = await OrderItem.findAll({
+        where: {
+          order_id: orderId,
+          status: { [Op.ne]: 'Cancelled' }
+        },
+        transaction: t,
+        lock: t.LOCK.UPDATE
       });
 
       let shiprocketCancel = null;
 
-      // If it was the only item in the order, cancel the whole order
-      if (totalItemsCount <= 1) {
+      // If it was the only active item in the order, cancel the whole order
+      if (activeItems.length <= 1) {
         if (order.shiprocket_order_id) {
           try {
             shiprocketCancel = await ShipRocketService.cancelOrders([order.shiprocket_order_id]);
@@ -766,7 +771,7 @@ class OrderController {
         }, columns);
 
         await order.update(updatePayload, { transaction: t });
-        await item.destroy({ transaction: t });
+        await item.update({ status: 'Cancelled' }, { transaction: t });
       } else {
         // Recalculate and update order totals
         const newSubtotal = Math.max(0, Number(order.subtotal_amount || 0) - itemPrice);
@@ -800,7 +805,7 @@ class OrderController {
         }, columns);
 
         await order.update(updatePayload, { transaction: t });
-        await item.destroy({ transaction: t });
+        await item.update({ status: 'Cancelled' }, { transaction: t });
       }
 
       await t.commit();

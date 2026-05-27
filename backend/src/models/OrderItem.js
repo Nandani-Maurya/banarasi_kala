@@ -40,6 +40,11 @@ const OrderItem = sequelize.define('OrderItem', {
     type: DataTypes.STRING,
     allowNull: true
   },
+  status: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    defaultValue: 'Active'
+  },
   shipping_meta: {
     type: DataTypes.JSONB,
     allowNull: true

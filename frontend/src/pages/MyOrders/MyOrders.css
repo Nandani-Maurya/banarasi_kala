@@ -967,3 +967,33 @@
     width: 100%;
   }
 }
+
+/* Cancelled Item Specific Styles */
+.order-product-item.item-cancelled {
+  opacity: 0.65;
+  filter: grayscale(30%);
+}
+
+.item-cancelled-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  margin-top: 4px;
+  padding: 4px 10px;
+  border: 1px solid rgba(180, 35, 24, 0.22);
+  border-radius: 6px;
+  background: rgba(255, 240, 238, 0.6);
+  color: #b42318;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.item-cancelled-badge svg {
+  font-size: 13px;
+}
+
+.line-through-price {
+  text-decoration: line-through;
+  color: rgba(50, 21, 15, 0.4) !important;
+}
