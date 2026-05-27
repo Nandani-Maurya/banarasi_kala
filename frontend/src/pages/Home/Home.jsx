@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import headerBackground from "../../assets/header_backgroung.png";
 import FabricStrip from "./FabricStrip/FabricStrip";
@@ -14,16 +14,36 @@ const OccasionCollections = lazy(() => import("./OccasionCollections/OccasionCol
 const ReviewsStory = lazy(() => import("./ReviewsStory/ReviewsStory"));
 const FaqSection = lazy(() => import("./FaqSection/FaqSection"));
 
-const HomeSection = ({ children, id, variant = "default" }) => (
+const HomeSection = ({ children, id, variant = "default", active = false }) => (
   <div id={id} className={`home-deferred-section home-deferred-section--${variant}`}>
     <Suspense fallback={<div className="home-section-loader" aria-hidden="true" />}>
-      {children}
+      {active ? children : <div className="home-section-loader" aria-hidden="true" />}
     </Suspense>
   </div>
 );
 
 const Home = () => {
   const location = useLocation();
+  const [visibleSections, setVisibleSections] = useState(location.hash ? 7 : 0);
+
+  // Progressive loading of lazy components when the browser is idle
+  useEffect(() => {
+    if (visibleSections >= 7) return;
+
+    const loadNext = () => {
+      setVisibleSections((prev) => prev + 1);
+    };
+
+    const idleCallback = (window.requestIdleCallback || ((cb) => window.setTimeout(cb, 200)))(loadNext);
+
+    return () => {
+      if (window.cancelIdleCallback) {
+        window.cancelIdleCallback(idleCallback);
+      } else {
+        window.clearTimeout(idleCallback);
+      }
+    };
+  }, [visibleSections]);
 
   useEffect(() => {
     if (location.hash !== "#new-arrivals") return undefined;
@@ -58,23 +78,26 @@ const Home = () => {
         <OfferBand />
         <HeroSlider />
 
-        <HomeSection variant="why">
+        <HomeSection variant="why" active={visibleSections >= 1}>
           <WhyChooseUs />
         </HomeSection>
-        <HomeSection variant="popular">
+        <HomeSection variant="popular" active={visibleSections >= 2}>
           <PopularSarees />
         </HomeSection>
-        <HomeSection variant="browse">
+        <HomeSection variant="browse" active={visibleSections >= 3}>
           <BrowseCircles />
         </HomeSection>
-        <HomeSection id="new-arrivals" variant="arrivals">
+        <HomeSection id="new-arrivals" variant="arrivals" active={visibleSections >= 4}>
           <NewArrivals />
         </HomeSection>
-        <HomeSection variant="occasion">
+        <HomeSection variant="occasion" active={visibleSections >= 5}>
           <OccasionCollections />
         </HomeSection>
-        <HomeSection variant="reviews">
+        <HomeSection variant="reviews" active={visibleSections >= 6}>
           <ReviewsStory />
+        </HomeSection>
+        <HomeSection variant="faq" active={visibleSections >= 7}>
+<ReviewsStory />
         </HomeSection>
         <HomeSection variant="faq">
           <FaqSection />
