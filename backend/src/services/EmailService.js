@@ -46,9 +46,11 @@ class EmailService {
   }
 
   async sendOrderConfirmation(order, items) {
+    const orderNumber = order.order_number || `BKS${String(order.id).padStart(4, "0")}`;
     const itemList = items.map(item => `
       <tr>
         <td style="padding: 10px; border-bottom: 1px solid #eee;">${item.name || 'Saree'}</td>
+        <td style="padding: 10px; border-bottom: 1px solid #eee;">${item.sku || ''}</td>
         <td style="padding: 10px; border-bottom: 1px solid #eee;">${item.quantity}</td>
         <td style="padding: 10px; border-bottom: 1px solid #eee;">₹${item.price}</td>
       </tr>
@@ -57,18 +59,19 @@ class EmailService {
     const mailOptions = {
       from: `"Banaras Heritage" <${process.env.EMAIL_USER}>`,
       to: order.customer_email,
-      subject: `Order Confirmed - #${order.id} | Banaras Heritage`,
+      subject: `Order Confirmed - ${orderNumber} | Banaras Heritage`,
       html: `
         <div style="font-family: 'Playfair Display', serif; color: #3D2817; max-width: 600px; margin: auto; border: 1px solid #D4AF37; padding: 40px; background-color: #FDFCFB;">
           <h1 style="color: #800020; text-align: center; border-bottom: 2px solid #D4AF37; padding-bottom: 20px;">Banaras Heritage</h1>
           <p>Dear ${order.customer_name},</p>
           <p>Thank you for choosing Banaras Heritage. Your order for our handcrafted masterpiece has been confirmed.</p>
           
-          <h3 style="color: #800020; margin-top: 30px;">Order Summary (#${order.id})</h3>
+          <h3 style="color: #800020; margin-top: 30px;">Order Summary (${orderNumber})</h3>
           <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
             <thead style="background-color: #FAF8F6;">
               <tr>
                 <th style="text-align: left; padding: 10px;">Item</th>
+                <th style="text-align: left; padding: 10px;">SKU</th>
                 <th style="text-align: left; padding: 10px;">Qty</th>
                 <th style="text-align: left; padding: 10px;">Price</th>
               </tr>
@@ -78,7 +81,7 @@ class EmailService {
             </tbody>
             <tfoot>
               <tr>
-                <td colspan="2" style="padding: 20px 10px 10px; font-weight: bold; text-align: right;">Total Amount:</td>
+                <td colspan="3" style="padding: 20px 10px 10px; font-weight: bold; text-align: right;">Total Amount:</td>
                 <td style="padding: 20px 10px 10px; font-weight: bold; color: #800020;">₹${order.total_amount}</td>
               </tr>
             </tfoot>
@@ -117,11 +120,12 @@ class EmailService {
       Processing: "Your order is being prepared with care.",
     };
     const message = statusCopy[normalizedStatus] || `Your order status is now ${normalizedStatus}.`;
+    const orderNumber = order.order_number || `BKS${String(order.id).padStart(4, "0")}`;
 
     const mailOptions = {
       from: `"Banaras Heritage" <${process.env.EMAIL_USER}>`,
       to: order.customer_email,
-      subject: `Order #${order.id} ${normalizedStatus} | Banaras Heritage`,
+      subject: `Order ${orderNumber} ${normalizedStatus} | Banaras Heritage`,
       html: `
         <div style="font-family: Arial, sans-serif; color: #3D2817; max-width: 600px; margin: auto; border: 1px solid #ead8b2; padding: 32px; background-color: #fffaf0;">
           <h1 style="color: #800020; margin: 0 0 12px;">Banaras Heritage</h1>
@@ -177,11 +181,12 @@ class EmailService {
 
   async sendOrderStatusUpdate(order, status) {
     if (!order?.customer_email) return;
+    const orderNumber = order.order_number || `BKS${String(order.id).padStart(4, "0")}`;
     const mailOptions = {
       from: `"Banaras Heritage" <${process.env.EMAIL_USER}>`,
       to: order.customer_email,
-      subject: `Order #${order.id} Update: ${status}`,
-      html: `<p>Hi ${order.customer_name || "Customer"}, your order #${order.id} status is now <b>${status}</b>.</p>`,
+      subject: `Order ${orderNumber} Update: ${status}`,
+      html: `<p>Hi ${order.customer_name || "Customer"}, your order ${orderNumber} status is now <b>${status}</b>.</p>`,
     };
     try {
       await transporter.sendMail(mailOptions);

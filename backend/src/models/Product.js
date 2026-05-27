@@ -35,6 +35,11 @@ const Product = sequelize.define(
       allowNull: true,
       unique: true,
     },
+    variant_skus: {
+      type: DataTypes.JSONB,
+      defaultValue: {},
+      allowNull: false,
+    },
     store_front_visibility: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,

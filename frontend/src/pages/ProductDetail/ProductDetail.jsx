@@ -12,11 +12,12 @@ import { getProductStockInfo } from "../../utils/stockStatus";
 import { LocationPickerModal } from "../Profile/Profile";
 import CheckoutReviewSummary from "../../components/CheckoutReviewSummary";
 import CheckoutOrderPanel from "../../components/CheckoutOrderPanel";
+import { formatEstimatedDeliveryDate, getEstimatedDeliveryDate } from "../../utils/deliveryDate";
+import { getVariantSku } from "../../utils/itemCode";
 import "./ProductDetail.css";
 
 const PRODUCT_RATING = "4.8";
 const PRODUCT_REVIEW_COUNT = "124";
-const ORDER_PROCESSING_DAYS = Number(import.meta.env.VITE_ORDER_PROCESSING_DAYS || 4);
 const PACKAGING_WEIGHT_KG = Number(import.meta.env.VITE_PACKAGING_WEIGHT_KG || 0.2);
 const PREFERRED_COURIER_NAME = String(import.meta.env.VITE_PREFERRED_COURIER_NAME || "Xpressbees Surface").toLowerCase();
 const COD_MAX_AMOUNT = Number(import.meta.env.VITE_COD_MAX_AMOUNT || 10000);
@@ -41,33 +42,6 @@ const EMPTY_BUY_NOW_ADDRESS = {
   map_lat: "",
   map_lng: "",
   is_default: true,
-};
-
-const formatDeliveryDate = (date) =>
-  date.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-
-const addDays = (date, days) => {
-  const next = new Date(date);
-  next.setDate(next.getDate() + Number(days || 0));
-  return next;
-};
-
-const getShiprocketEtaDate = (eta) => {
-  if (!eta) return null;
-  const numericDays = String(eta).match(/\d+/)?.[0];
-  const parsedDate = new Date(eta);
-  if (!Number.isNaN(parsedDate.getTime())) return parsedDate;
-  if (numericDays) return addDays(new Date(), Number(numericDays));
-  return null;
-};
-
-const getFinalDeliveryDate = (eta) => {
-  const shiprocketDate = getShiprocketEtaDate(eta);
-  return addDays(shiprocketDate || new Date(), ORDER_PROCESSING_DAYS);
 };
 
 const getEmptyBuyNowAddress = (user) => ({
@@ -285,6 +259,7 @@ const ProductDetail = () => {
   }, [allColors]);
 
   const selectedColor = distinctColors.find((color) => String(color.id) === String(selectedColorId));
+  const selectedSku = getVariantSku(product, selectedColorId, selectedColor?.slug || selectedColor?.name);
   const productStockInfo = getProductStockInfo(product);
   const isProductOutOfStock = productStockInfo.isOutOfStock;
   const selectedStockInfo = getProductStockInfo({
@@ -479,7 +454,7 @@ const ProductDetail = () => {
         if (!cancelled) {
           setBuyNowShipping(selected ? {
             ...selected,
-            deliveryDate: formatDeliveryDate(getFinalDeliveryDate(selected.etd)),
+            deliveryDate: formatEstimatedDeliveryDate(getEstimatedDeliveryDate(selected.etd)),
           } : { unavailable: true, message: "Delivery is not possible at this location right now." });
         }
       } catch (error) {
@@ -777,6 +752,7 @@ const ProductDetail = () => {
     shipping_charge: buyNowShippingRate,
     shipping_discount: buyNowShippingDiscount,
     shipping_discount_reason: shippingDiscountReasonCode,
+    selected_courier_data: buyNowShipping?.raw || null,
     total_amount: buyNowGrossTotal,
     coupon_code: appliedBuyNowCoupon?.code || null,
     wallet_amount: walletUsableAmount,
@@ -790,6 +766,7 @@ const ProductDetail = () => {
       quantity,
       price: Number(product.selling_price || 0),
       colorId: selectedColorId,
+      sku: selectedSku,
     }],
   });
 
@@ -940,7 +917,7 @@ const ProductDetail = () => {
       }
       setDeliveryQuote({
         option: selectedOption,
-        deliveryDate: formatDeliveryDate(getFinalDeliveryDate(selectedOption.etd)),
+        deliveryDate: formatEstimatedDeliveryDate(getEstimatedDeliveryDate(selectedOption.etd)),
       });
     } catch (error) {
       showNotification(error.message || "Unable to check delivery", "warning");
@@ -952,7 +929,7 @@ const ProductDetail = () => {
 
   const specificationRows = product
     ? [
-        ["SKU", product.sku],
+        ["SKU", selectedSku],
         ["Variety", product.Variety?.name],
         ["Material", product.Material?.name],
         ["Fabric", product.Material?.name],
@@ -1461,7 +1438,7 @@ const ProductDetail = () => {
                     key: product.id,
                     image: mainImage,
                     name: productName,
-                    meta: `${selectedColor?.name ? `${selectedColor.name} - ` : ""}Qty ${quantity}`,
+                    meta: `${selectedColor?.name ? `${selectedColor.name} - ` : ""}Qty ${quantity}${selectedSku ? ` - SKU: ${selectedSku}` : ""}`,
                     total: formatMoney(buyNowSubtotal),
                   }],
                   coupons: availableCoupons,
@@ -1636,7 +1613,7 @@ const ProductDetail = () => {
                     key: product.id,
                     image: mainImage,
                     name: productName,
-                    meta: `${selectedColor?.name ? `${selectedColor.name} • ` : ""}Qty ${quantity}`,
+                    meta: `${selectedColor?.name ? `${selectedColor.name} - ` : ""}Qty ${quantity}${selectedSku ? ` - SKU: ${selectedSku}` : ""}`,
                     total: formatMoney(buyNowSubtotal),
                   }]}
                   coupons={availableCoupons}

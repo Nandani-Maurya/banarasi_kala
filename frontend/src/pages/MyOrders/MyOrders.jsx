@@ -4,6 +4,8 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useNotification } from "../../context/NotificationContext";
 import api from "../../utils/api";
+import { formatEstimatedDeliveryDate, getEstimatedDeliveryDate } from "../../utils/deliveryDate";
+import { getOrderDisplayNumber } from "../../utils/itemCode";
 import EmptyStateIcon from "../../components/EmptyStateIcon";
 import "./MyOrders.css";
 
@@ -154,6 +156,7 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
   const [actionLoading, setActionLoading] = useState(false);
 
   const statusConfig = getStatus(order.status);
+  const orderNumber = getOrderDisplayNumber(order);
   const items = order.OrderItems || [];
   const breakdown = useMemo(() => getOrderBreakdown(order), [order]);
   const orderDate = new Date(order.createdAt).toLocaleDateString("en-IN", {
@@ -190,7 +193,7 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
         type: "cancel_order",
         orderId: order.id,
         itemId: null,
-        itemName: `Order #${order.id}`
+        itemName: `Order ${orderNumber}`
       });
     }
   };
@@ -212,7 +215,7 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
         type: "return",
         orderId: order.id,
         itemId: null,
-        itemName: `Order #${order.id}`
+        itemName: `Order ${orderNumber}`
       });
     }
   };
@@ -223,7 +226,7 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
         type: "exchange",
         orderId: order.id,
         itemId: null,
-        itemName: `Order #${order.id}`
+        itemName: `Order ${orderNumber}`
       });
     }
   };
@@ -234,7 +237,7 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
         type: "cancel_return",
         orderId: order.id,
         itemId: null,
-        itemName: `Return for Order #${order.id}`
+        itemName: `Return for Order ${orderNumber}`
       });
     }
   };
@@ -245,13 +248,14 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
         type: "cancel_exchange",
         orderId: order.id,
         itemId: null,
-        itemName: `Exchange for Order #${order.id}`
+        itemName: `Exchange for Order ${orderNumber}`
       });
     }
   };
 
   const activities = tracking?.tracking?.tracking_data?.shipment_track_activities || [];
   const etd = tracking?.tracking?.tracking_data?.etd;
+  const expectedDeliveryDate = etd ? formatEstimatedDeliveryDate(getEstimatedDeliveryDate(etd)) : "";
   const courierName = tracking?.tracking?.tracking_data?.shipment_track?.[0]?.courier_name;
   const awbCode = tracking?.tracking?.tracking_data?.shipment_track?.[0]?.awb_code;
   const hasUsedAfterSale = !!order.return_requested_at || !!order.exchange_requested_at || String(order.status || "").toLowerCase().includes("return") || String(order.status || "").toLowerCase().includes("exchange");
@@ -264,7 +268,7 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
     <article className={`order-card ${isCancelled(order) ? "is-cancelled" : ""}`}>
       <div className="order-card-header">
         <div className="order-meta">
-          <span className="order-number">Order #{order.id}</span>
+          <span className="order-number">Order {orderNumber}</span>
           <span className="order-date">{orderDate}</span>
         </div>
         <div className="order-status-badge" style={{ color: statusConfig.color, backgroundColor: statusConfig.bg }}>
@@ -320,6 +324,12 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
                   <span>Qty {item.quantity}</span>
                   <span className="order-dot" />
                   <span>{formatPrice(item.price)} each</span>
+                  {item.sku && (
+                    <>
+                      <span className="order-dot" />
+                      <span>SKU: {item.sku}</span>
+                    </>
+                  )}
                 </div>
                 <div className="order-product-color">
                   <span className="order-color-swatch" style={{ backgroundColor: colorHex }} />
@@ -470,10 +480,10 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
             </div>
           )}
 
-          {etd && (
+          {expectedDeliveryDate && (
             <div className="etd-row">
               <Icon icon="lucide:calendar-check" />
-              <span>Expected delivery: <strong>{etd}</strong></span>
+              <span>Expected delivery: <strong>{expectedDeliveryDate}</strong></span>
             </div>
           )}
 

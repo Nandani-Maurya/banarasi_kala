@@ -4,6 +4,7 @@ const Variety = require("../models/Variety");
 const Occasion = require("../models/Occasion");
 const Color = require("../models/Color");
 const { Op } = require("sequelize");
+const { formatProductCode, formatVariantItemCode } = require("../utils/codes");
 
 const productIncludes = [
   { model: Material, attributes: ["id", "name", "slug"] },
@@ -12,6 +13,8 @@ const productIncludes = [
 ];
 const HOME_PRODUCT_ATTRIBUTES = [
   "id",
+  "sku",
+  "variant_skus",
   "name",
   "slug",
   "selling_price",
@@ -26,6 +29,8 @@ const HOME_PRODUCT_ATTRIBUTES = [
 ];
 const COLLECTION_PRODUCT_ATTRIBUTES = [
   "id",
+  "sku",
+  "variant_skus",
   "name",
   "slug",
   "short_description",
@@ -116,6 +121,29 @@ const validateColorMedia = (colorStocks = {}, images = []) => {
   });
 };
 
+const buildVariantSkus = async (productId, colorStocks = {}) => {
+  const productCode = formatProductCode(productId);
+  const colorIds = Object.entries(colorStocks)
+    .filter(([, qty]) => toIntOrZero(qty) > 0)
+    .map(([colorId]) => toIntOrZero(colorId))
+    .filter(Boolean);
+  if (!colorIds.length) return {};
+
+  const colors = await Color.findAll({
+    where: { id: { [Op.in]: colorIds } },
+    attributes: ["id", "name", "slug"],
+  });
+  const colorMap = Object.fromEntries(colors.map((color) => {
+    const plain = typeof color.toJSON === "function" ? color.toJSON() : color;
+    return [String(plain.id), plain];
+  }));
+
+  return Object.fromEntries(colorIds.map((colorId) => {
+    const color = colorMap[String(colorId)];
+    return [String(colorId), formatVariantItemCode(productCode, color?.slug || color?.name, colorId)];
+  }));
+};
+
 const normalizeProduct = (product) => {
   const plain = typeof product?.toJSON === "function" ? product.toJSON() : product;
   if (!plain) return plain;
@@ -157,6 +185,7 @@ const toHomeProduct = (product) => {
     images: coverProduct.images,
     is_new_arrival: Boolean(coverProduct.is_new_arrival),
     stock_quantity: coverProduct.stock_quantity,
+    variant_skus: coverProduct.variant_skus || {},
     low_stock_threshold: coverProduct.low_stock_threshold,
     status: coverProduct.status,
     stock_status: getStockStatus(coverProduct.stock_quantity, coverProduct.low_stock_threshold),
@@ -176,6 +205,7 @@ const toCollectionProduct = (product) => {
     images: coverProduct.images,
     is_new_arrival: Boolean(coverProduct.is_new_arrival),
     stock_quantity: coverProduct.stock_quantity,
+    variant_skus: coverProduct.variant_skus || {},
     low_stock_threshold: coverProduct.low_stock_threshold,
     status: coverProduct.status,
     stock_status: getStockStatus(coverProduct.stock_quantity, coverProduct.low_stock_threshold),
@@ -220,6 +250,7 @@ const sanitizeProductPayload = (data = {}) => {
     variety_id: toIntOrNull(data.variety_id),
     occasion_id: toIntOrNull(data.occasion_id),
     color_stocks,
+    variant_skus: data.variant_skus && typeof data.variant_skus === "object" ? data.variant_skus : {},
     images,
     status: ["active", "inactive"].includes(String(data.status)) ? String(data.status) : "active",
     payment_options,
@@ -234,10 +265,7 @@ const sanitizeProductPayload = (data = {}) => {
       .replace(/(^-|-$)+/g, "") + `-${Date.now()}`;
   }
 
-  if (!sanitized.sku || String(sanitized.sku).trim() === "") {
-    const prefix = sanitized.name ? String(sanitized.name).substring(0, 3).toUpperCase() : "PROD";
-    sanitized.sku = `${prefix}-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
-  }
+  sanitized.sku = null;
 
   delete sanitized.price;
   delete sanitized.old_price;
@@ -465,6 +493,7 @@ class ProductService {
         "description",
         "short_description",
         "sku",
+        "variant_skus",
         "selling_price",
         "mrp_price",
         "discount_percent",
@@ -499,7 +528,7 @@ class ProductService {
 
     const colors = await Color.findAll({
       where: { id: { [Op.in]: colorIds.length ? colorIds : [0] } },
-      attributes: ["id", "name", "hex_code"],
+      attributes: ["id", "name", "hex_code", "slug"],
     });
 
     const selectedImages = images
@@ -513,6 +542,7 @@ class ProductService {
         ...plain,
         stock_quantity: toIntOrZero(qty),
         stock_status: getStockStatus(qty, product.low_stock_threshold),
+        sku: product.variant_skus?.[String(plain.id)] || formatVariantItemCode(product.sku, plain.slug || plain.name, plain.id),
       };
     });
 
@@ -552,13 +582,20 @@ class ProductService {
 
   async createProduct(data) {
     const product = await Product.create(sanitizeProductPayload(data));
+    await product.update({
+      sku: formatProductCode(product.id),
+      variant_skus: await buildVariantSkus(product.id, product.color_stocks || {}),
+    });
     return this.getProductById(product.id);
   }
 
   async updateProduct(id, data) {
     const product = await Product.findByPk(id);
     if (!product) throw new Error("Product not found");
-    await product.update(sanitizeProductPayload(data));
+    const payload = sanitizeProductPayload(data);
+    payload.sku = formatProductCode(product.id);
+    payload.variant_skus = await buildVariantSkus(product.id, payload.color_stocks || {});
+    await product.update(payload);
     return this.getProductById(id);
   }
 

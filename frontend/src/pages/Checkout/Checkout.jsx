@@ -10,10 +10,11 @@ import { validateCheckoutForm } from "../../utils/validation";
 import { LocationPickerModal } from "../Profile/Profile";
 import CheckoutOrderPanel from "../../components/CheckoutOrderPanel";
 import { getProductStockInfo } from "../../utils/stockStatus";
+import { formatEstimatedDeliveryDate, getEstimatedDeliveryDate } from "../../utils/deliveryDate";
+import { getVariantSku } from "../../utils/itemCode";
 import "./Checkout.css";
 
 const PACKAGING_WEIGHT_KG = Number(import.meta.env.VITE_PACKAGING_WEIGHT_KG || 0.7);
-const ORDER_PROCESSING_DAYS = Number(import.meta.env.VITE_ORDER_PROCESSING_DAYS || 4);
 const COD_MAX_AMOUNT = Number(import.meta.env.VITE_COD_MAX_AMOUNT || 10000);
 const PREPAID_DISCOUNT_AMOUNT = Number(import.meta.env.VITE_PREPAID_DISCOUNT_AMOUNT || 50);
 const COD_FEE_AMOUNT = Number(import.meta.env.VITE_COD_FEE_AMOUNT || 50);
@@ -54,33 +55,6 @@ const getCheckoutAddressLine = (address = {}) =>
     .filter(Boolean)
     .join(", ");
 
-const formatDeliveryDate = (date) =>
-  date.toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-
-const addDays = (date, days) => {
-  const next = new Date(date);
-  next.setDate(next.getDate() + Number(days || 0));
-  return next;
-};
-
-const getShiprocketEtaDate = (eta) => {
-  if (!eta) return null;
-  const numericDays = String(eta).match(/\d+/)?.[0];
-  const parsedDate = new Date(eta);
-  if (!Number.isNaN(parsedDate.getTime())) return parsedDate;
-  if (numericDays) return addDays(new Date(), Number(numericDays));
-  return null;
-};
-
-const getFinalDeliveryDate = (eta) => {
-  const shiprocketDate = getShiprocketEtaDate(eta);
-  return addDays(shiprocketDate || new Date(), ORDER_PROCESSING_DAYS);
-};
-
 const getCourierRate = (courier = {}) => {
   const rate = Number(courier?.rate ?? courier?.freight_charge ?? courier?.courier_charge);
   return Number.isFinite(rate) && rate >= 0 ? rate : null;
@@ -91,6 +65,8 @@ const selectCheckoutCourier = (couriers = []) =>
     .map((courier) => ({
       rate: getCourierRate(courier),
       etd: courier?.etd || courier?.estimated_delivery_days || null,
+      courier: courier?.courier_name || "Courier",
+      raw: courier,
     }))
     .filter((courier) => courier.rate !== null)
     .sort((left, right) => left.rate - right.rate)[0] || null;
@@ -114,6 +90,7 @@ const Checkout = () => {
   const [loading, setLoading] = useState(false);
   const [shippingCharge, setShippingCharge] = useState(0);
   const [shippingDeliveryDate, setShippingDeliveryDate] = useState(null);
+  const [selectedShippingCourier, setSelectedShippingCourier] = useState(null);
   const [shippingLoading, setShippingLoading] = useState(false);
   const [isFirstOrder, setIsFirstOrder] = useState(false);
   const [addresses, setAddresses] = useState([]);
@@ -400,6 +377,7 @@ const Checkout = () => {
     if (!/^\d{6}$/.test(cleanPincode) || payableCart.length === 0) {
       setShippingCharge(0);
       setShippingDeliveryDate(null);
+      setSelectedShippingCourier(null);
       setShippingLoading(false);
       return;
     }
@@ -423,12 +401,14 @@ const Checkout = () => {
 
         if (!cancelled) {
           setShippingCharge(selectedCourier?.rate || 0);
-          setShippingDeliveryDate(selectedCourier?.etd ? formatDeliveryDate(getFinalDeliveryDate(selectedCourier.etd)) : null);
+          setShippingDeliveryDate(selectedCourier?.etd ? formatEstimatedDeliveryDate(getEstimatedDeliveryDate(selectedCourier.etd)) : null);
+          setSelectedShippingCourier(selectedCourier || null);
         }
       } catch (error) {
         if (!cancelled) {
           setShippingCharge(0);
           setShippingDeliveryDate(null);
+          setSelectedShippingCourier(null);
         }
       } finally {
         if (!cancelled) {
@@ -475,6 +455,7 @@ const Checkout = () => {
         shipping_charge: shippingCharge,
         shipping_discount: shippingDiscount,
         shipping_discount_reason: shippingDiscountReason,
+        selected_courier_data: selectedShippingCourier?.raw || null,
         total_amount: orderGrossTotal,
         coupon_code: appliedCoupon?.code || null,
         discount_amount: effectiveCouponDiscount,
@@ -488,7 +469,8 @@ const Checkout = () => {
           name: item.name,
           quantity: item.quantity,
           price: item.price,
-          colorId: item.colorId
+          colorId: item.colorId,
+          sku: getVariantSku(item, item.colorId, item.selectedColorSlug || item.selectedColorName),
         })),
       };
 
@@ -609,7 +591,7 @@ const Checkout = () => {
                 key: `${item.id}-${item.colorId}-review`,
                 image: item.image_url,
                 name: item.name,
-                meta: `Qty ${item.quantity} x Rs. ${Number(item.price).toLocaleString("en-IN")}`,
+                meta: `Qty ${item.quantity} x Rs. ${Number(item.price).toLocaleString("en-IN")}${getVariantSku(item, item.colorId, item.selectedColorSlug || item.selectedColorName) ? ` - SKU: ${getVariantSku(item, item.colorId, item.selectedColorSlug || item.selectedColorName)}` : ""}`,
                 total: item.checkoutUnavailable ? "Excluded" : `Rs. ${(Number(item.price) * Number(item.quantity || 1)).toLocaleString("en-IN")}`,
                 unavailable: item.checkoutUnavailable,
                 unavailableLabel: item.checkoutStockInfo?.badge || "Unavailable - excluded from total",

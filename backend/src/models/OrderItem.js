@@ -36,6 +36,10 @@ const OrderItem = sequelize.define('OrderItem', {
     type: DataTypes.STRING,
     allowNull: true
   },
+  sku: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
   shipping_meta: {
     type: DataTypes.JSONB,
     allowNull: true

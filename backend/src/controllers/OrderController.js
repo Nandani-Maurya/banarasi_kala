@@ -12,6 +12,7 @@ const WalletService = require('../services/WalletService');
 const { config } = require('../config/env');
 const { Op } = require("sequelize");
 const { AppError } = require('../utils/http');
+const { formatOrderNumber, formatProductCode, formatVariantItemCode } = require('../utils/codes');
 
 const sortProductImages = (images = []) => [...images].sort((a, b) => {
   const left = Number.isFinite(Number(a.display_order)) ? Number(a.display_order) : 999;
@@ -38,6 +39,7 @@ const serializeOrder = (order) => {
   json.OrderItems = (json.OrderItems || []).map((item) => ({
     id: item.id,
     product_id: item.product_id,
+    sku: item.sku || null,
     product_name: item.product_name || item.Product?.name || `Product #${item.product_id}`,
     quantity: item.quantity,
     price: item.price,
@@ -66,6 +68,22 @@ const ensureOrderAccountingColumns = async () => {
 
 const keepExistingColumns = (payload, columns) =>
   Object.fromEntries(Object.entries(payload).filter(([key]) => columns[key]));
+
+const getOrderNumberForToday = async ({ transaction }) => {
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const todayOrders = await Order.count({
+    where: {
+      createdAt: {
+        [Op.gte]: dayStart,
+        [Op.lt]: dayEnd,
+      },
+    },
+    transaction,
+  });
+  return formatOrderNumber(now, todayOrders + 1);
+};
 
 let orderItemColumnsReady = false;
 let orderItemColumnCache = null;
@@ -193,7 +211,7 @@ class OrderController {
       const { 
         customer_name, customer_email, address, city, state, pincode, phone, 
         subtotal_amount, shipping_charge = 0, shipping_discount = 0, payment_fee = 0, payment_discount = 0,
-        shipping_discount_reason = null, total_amount, items, coupon_code, wallet_amount = 0, payment_method = 'Prepaid', payment_status = 'Paid'
+        shipping_discount_reason = null, selected_courier_data = null, total_amount, items, coupon_code, wallet_amount = 0, payment_method = 'Prepaid', payment_status = 'Paid'
       } = req.body;
       if (!Array.isArray(items) || items.length === 0) {
         await t.rollback();
@@ -203,7 +221,7 @@ class OrderController {
       const productIds = [...new Set(items.map((item) => item.id).filter(Boolean))];
       const products = await Product.findAll({
         where: { id: productIds },
-        attributes: ['id', 'name', 'weight', 'stock_quantity', 'color_stocks', 'status'],
+        attributes: ['id', 'name', 'sku', 'variant_skus', 'weight', 'stock_quantity', 'color_stocks', 'status'],
         transaction: t,
         lock: t.LOCK.UPDATE,
       });
@@ -226,6 +244,29 @@ class OrderController {
           transaction: t,
         });
       }
+
+      const colorIds = [...new Set(items.map((item) => item.colorId || item.color_id).filter(Boolean))];
+      const colors = colorIds.length
+        ? await Color.findAll({
+          where: { id: colorIds },
+          attributes: ['id', 'name', 'slug'],
+          transaction: t,
+        })
+        : [];
+      const colorMap = Object.fromEntries(colors.map((color) => [String(color.id), color]));
+      const enrichedItems = items.map((item) => {
+        const productForItem = productMap[item.id];
+        const colorId = item.colorId || item.color_id || null;
+        const color = colorId ? colorMap[String(colorId)] : null;
+        const productCode = productForItem?.sku || formatProductCode(productForItem?.id || item.id);
+        const variantSku = item.sku
+          || productForItem?.variant_skus?.[String(colorId)]
+          || formatVariantItemCode(productCode, color?.slug || color?.name, colorId);
+        return {
+          ...item,
+          sku: variantSku,
+        };
+      });
 
       const authenticatedCustomer = req.userRole === 'customer' && req.user ? req.user : null;
       const customer = authenticatedCustomer
@@ -289,6 +330,7 @@ class OrderController {
         shippingDiscountReason: shipping_discount_reason,
       });
       const orderPayload = keepExistingColumns({
+        order_number: await getOrderNumberForToday({ transaction: t }),
         customer_id: customer?.id || null,
         customer_name: customer_name || customer?.name,
         customer_email: customer?.email || customer_email,
@@ -307,6 +349,7 @@ class OrderController {
         discount_amount,
         wallet_amount: walletDebit,
         payable_amount: final_total,
+        selected_courier_data,
         payment_method,
         payment_status: payment_method === 'COD' ? 'Pending' : payment_status
       }, orderColumns);
@@ -316,13 +359,14 @@ class OrderController {
         transaction: t,
       });
 
-      const orderItems = items.map((item, index) => ({
+      const orderItems = enrichedItems.map((item, index) => ({
         order_id: order.id,
         product_id: item.id,
         colorId: item.colorId || item.color_id || null,
         quantity: item.quantity,
         price: item.price,
         product_name: item.name || item.product_name,
+        sku: item.sku,
         shipping_meta: itemShippingMetas[index] || null,
       })).map((item) => keepExistingColumns(item, orderItemColumns));
 
@@ -351,16 +395,17 @@ class OrderController {
       await t.commit();
 
       // ── Fire & forget: email confirmation ────────────────────────────────────
-      EmailService.sendOrderConfirmation(order, items);
+      EmailService.sendOrderConfirmation(order, enrichedItems);
 
       // ── Fire & forget: push to ShipRocket (never blocks customer response) ──
       (async () => {
         try {
-          const srItems = items.map((item, idx) => ({
+          const srItems = enrichedItems.map((item, idx) => ({
             product_id: item.id,
             quantity: item.quantity,
             price: item.price,
             name: item.name || item.product_name || `Product ${idx + 1}`,
+            sku: item.sku,
           }));
 
           const srResult = await ShipRocketService.createOrder({
@@ -384,7 +429,7 @@ class OrderController {
         }
       })();
 
-      res.status(201).json({ message: 'Order placed successfully', orderId: order.id });
+      res.status(201).json({ message: 'Order placed successfully', orderId: order.id, orderNumber: order.order_number });
     } catch (error) {
       await t.rollback();
       res.status(error.status || 500).json({ message: error.message });
@@ -399,7 +444,7 @@ class OrderController {
           model: OrderItem,
           include: [
             { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
-            { model: Color, attributes: ['id', 'name', 'hex_code'] },
+            { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
           ],
         }],
         order: [['createdAt', 'DESC']],
@@ -421,7 +466,7 @@ class OrderController {
           model: OrderItem,
           include: [
             { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
-            { model: Color, attributes: ['id', 'name', 'hex_code'] },
+            { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
           ],
         }],
         order: [['createdAt', 'DESC']],
@@ -486,7 +531,7 @@ class OrderController {
           model: OrderItem,
           include: [
             { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
-            { model: Color, attributes: ['id', 'name', 'hex_code'] },
+            { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
           ],
         }],
         order: [['createdAt', 'DESC']],
@@ -516,7 +561,7 @@ class OrderController {
           model: OrderItem,
           include: [
             { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
-            { model: Color, attributes: ['id', 'name', 'hex_code'] },
+            { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
           ],
         }],
       });
@@ -598,7 +643,7 @@ class OrderController {
           model: OrderItem,
           include: [
             { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
-            { model: Color, attributes: ['id', 'name', 'hex_code'] },
+            { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
           ],
         }],
       });
@@ -765,7 +810,7 @@ class OrderController {
           model: OrderItem,
           include: [
             { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
-            { model: Color, attributes: ['id', 'name', 'hex_code'] },
+            { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
           ],
         }],
       });

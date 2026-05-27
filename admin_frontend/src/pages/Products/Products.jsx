@@ -574,7 +574,7 @@ export default function Products() {
                           </button>
                           <div>
                             <p className="font-medium text-[#4A3F35] text-sm">{p.name}</p>
-                            <p className="text-[10px] text-gray-400 font-mono">{p.sku}</p>
+                            <p className="text-[10px] text-gray-400 font-mono">SKU: {p.sku}</p>
                             <div className="flex gap-1 mt-1">
                               {p.is_new_arrival && <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-[9px] font-bold rounded">NEW</span>}
                               {p.special_collection && <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-bold rounded">SPECIAL COLLECTION</span>}

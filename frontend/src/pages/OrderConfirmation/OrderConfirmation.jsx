@@ -2,6 +2,7 @@ import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import api from "../../utils/api";
+import { getOrderDisplayNumber } from "../../utils/itemCode";
 import "./OrderConfirmation.css";
 
 const toNumber = (value) => {
@@ -125,6 +126,7 @@ export default function OrderConfirmation() {
   const breakdown = useMemo(() => getBreakdown(order || {}), [order]);
   const timeline = useMemo(() => buildTimeline(order, tracking), [order, tracking]);
   const cancellationAvailable = canCancelOrder(order);
+  const orderNumber = getOrderDisplayNumber(order);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,7 +167,7 @@ export default function OrderConfirmation() {
     setCancelModal({
       isOpen: true,
       orderId: order.id,
-      itemName: `Order #${order.id}`
+      itemName: `Order ${orderNumber}`
     });
     setCancelForm({
       reason: CANCEL_REASONS[0],
@@ -222,7 +224,7 @@ export default function OrderConfirmation() {
         <span className="order-success-icon"><Icon icon="lucide:check" /></span>
         <div>
           <p>Order confirmed</p>
-          <h1>Order #{order.id}</h1>
+          <h1>Order {orderNumber}</h1>
           <span>Placed on {formatDate(order.createdAt)}. A confirmation email has been sent to {order.customer_email}.</span>
         </div>
       </section>
@@ -274,7 +276,7 @@ export default function OrderConfirmation() {
                   )}
                   <div>
                     {productUrl ? <Link to={productUrl} className="confirmation-product-link"><h3>{item.product_name}</h3></Link> : <h3>{item.product_name}</h3>}
-                    <p>{getItemColor(item)} • Qty {item.quantity}</p>
+                    <p>{getItemColor(item)} - Qty {item.quantity}{item.sku ? ` - SKU: ${item.sku}` : ""}</p>
                     <span>{formatPrice(item.price)} each</span>
                     {item.shipping_meta?.refund_rules && (
                       <small>

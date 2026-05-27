@@ -47,6 +47,8 @@ export const CartProvider = ({ children }) => {
               cartItemId: item.id,
               quantity: item.quantity,
               colorId: item.colorId,
+              selectedColorName: item.Color?.name || "",
+              selectedColorSlug: item.Color?.slug || "",
               price,
               image_url
             };
@@ -84,6 +86,8 @@ export const CartProvider = ({ children }) => {
           cartItemId: item.id,
           quantity: item.quantity,
           colorId: item.colorId,
+          selectedColorName: item.Color?.name || "",
+          selectedColorSlug: item.Color?.slug || "",
           price: p.selling_price || p.mrp_price || 0,
           image_url: colorImage?.url || getProductCoverImage(p)
         };
@@ -123,6 +127,8 @@ export const CartProvider = ({ children }) => {
           cartItemId: item.id,
           quantity: item.quantity,
           colorId: item.colorId,
+          selectedColorName: item.Color?.name || "",
+          selectedColorSlug: item.Color?.slug || "",
           price: p.selling_price || p.mrp_price || 0,
           image_url: colorImage?.url || getProductCoverImage(p)
         };

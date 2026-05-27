@@ -11,6 +11,11 @@ const Order = sequelize.define('Order', {
     type: DataTypes.INTEGER,
     allowNull: true
   },
+  order_number: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    unique: true
+  },
   customer_name: {
     type: DataTypes.STRING,
     allowNull: false
@@ -109,6 +114,10 @@ const Order = sequelize.define('Order', {
   },
   shiprocket_awb: {
     type: DataTypes.STRING,
+    allowNull: true
+  },
+  selected_courier_data: {
+    type: DataTypes.JSONB,
     allowNull: true
   },
   cancelled_at: {

@@ -46,5 +46,7 @@ const Cart = sequelize.define(
 );
 
 const Product = require("./Product");
+const Color = require("./Color");
 Cart.belongsTo(Product, { foreignKey: "productId" });
+Cart.belongsTo(Color, { foreignKey: "colorId" });
 module.exports = Cart;

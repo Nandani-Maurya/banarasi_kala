@@ -180,7 +180,7 @@ class ShipRocketService {
     // ShipRocket expects all weight in kg; default each item to 0.5 kg if unknown
     const orderItems = items.map((item, idx) => ({
       name: item.name || item.product_name || `Product ${idx + 1}`,
-      sku: item.product_id ? `SKU-${item.product_id}` : `SKU-${idx}`,
+      sku: item.sku || (item.product_id ? `BKS${String(item.product_id).padStart(5, "0")}` : `BKS${String(idx + 1).padStart(5, "0")}`),
       units: item.quantity,
       selling_price: item.price,
       discount: 0,
@@ -195,7 +195,7 @@ class ShipRocketService {
 
     const isCod = order.payment_method === 'COD';
     const payload = {
-      order_id: `VNS-${order.id}`,
+      order_id: order.order_number || `BKS${String(order.id).padStart(4, "0")}`,
       order_date: orderDate,
       pickup_location: pickupLocation.name,
 
@@ -258,7 +258,7 @@ class ShipRocketService {
 
     const orderItems = items.map((item, idx) => ({
       name: item.name || item.product_name || `Product ${idx + 1}`,
-      sku: item.product_id ? `SKU-${item.product_id}` : `SKU-${idx}`,
+      sku: item.sku || (item.product_id ? `BKS${String(item.product_id).padStart(5, "0")}` : `BKS${String(idx + 1).padStart(5, "0")}`),
       units: item.quantity,
       selling_price: item.price,
       discount: 0,
@@ -272,7 +272,7 @@ class ShipRocketService {
     const orderDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     const payload = {
-      order_id: `RET-VNS-${order.id}`,
+      order_id: `RET-${order.order_number || `BKS${String(order.id).padStart(4, "0")}`}`,
       order_date: orderDate,
       pickup_location: pickupLocation.name,
 

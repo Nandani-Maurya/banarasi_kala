@@ -5,6 +5,7 @@ import { useWishlist } from "../../context/WishlistContext";
 import { useNotification } from "../../context/NotificationContext";
 import EmptyStateIcon from "../../components/EmptyStateIcon";
 import { getProductStockInfo } from "../../utils/stockStatus";
+import { getVariantSku } from "../../utils/itemCode";
 import "./Cart.css";
 
 const Cart = () => {
@@ -60,6 +61,7 @@ const Cart = () => {
               <div className="cart-items w-full lg:w-2/3 space-y-6">
                 {cart.map((item, index) => {
                   const productName = item.name;
+                  const variantSku = getVariantSku(item, item.colorId, item.selectedColorSlug || item.selectedColorName);
 
                 return (
                   (() => {
@@ -76,11 +78,8 @@ const Cart = () => {
                       </Link>
                       <div className="cart-item-meta text-xs text-gray-500 uppercase tracking-widest mb-4 font-semibold">
                         <span>{item.Material?.name || "Pure Silk"}</span>
-                        {item.colorId && <span>Color code: {item.colorId}</span>}
-                        <span>SKU: VNS-{item.id}</span>
-                        {item.Material?.name || "Pure Silk"} • 
-                        {item.colorId && <span className="ml-1 text-[#D4AF37]">Color Code: {item.colorId} •</span>} 
-                        SKU: VNS-{item.id}
+                        {item.selectedColorName && <span>{item.selectedColorName}</span>}
+                        {variantSku && <span>SKU: {variantSku}</span>}
                       </div>
                       {(stockInfo.isOutOfStock || stockInfo.isLowStock) && (
                         <p className={`cart-stock-note ${stockInfo.isOutOfStock ? "out" : "low"}`}>

@@ -287,6 +287,9 @@ const ProductModal = ({
                         <div key={color.id} className={`p-2.5 rounded-xl border transition-all flex flex-col items-center gap-2 ${qty > 0 ? 'bg-[#800020]/5 border-[#800020]/30 shadow-md ring-1 ring-[#800020]/10' : 'bg-white border-gray-100 opacity-60 hover:opacity-100 shadow-sm'}`}>
                           <div className="w-6 h-6 rounded-full border shadow-sm" style={{ backgroundColor: color.hex_code }} title={color.name} />
                           <span className="text-[9px] font-black text-gray-600 truncate w-full text-center uppercase tracking-tighter">{color.name}</span>
+                          {formData.variant_skus?.[colorIdStr] && (
+                            <span className="text-[8px] font-mono text-[#800020] text-center break-all">SKU: {formData.variant_skus[colorIdStr]}</span>
+                          )}
                           
                           <input
                             type="number"

@@ -43,6 +43,7 @@ class ShipRocketController {
         quantity: oi.quantity,
         price: oi.price,
         name: oi.product_name || `Product #${oi.product_id}`,
+        sku: oi.sku,
       }));
 
       // Step 1: Create order on ShipRocket
@@ -287,6 +288,7 @@ class ShipRocketController {
         quantity: oi.quantity,
         price: oi.price,
         name: oi.product_name || `Product #${oi.product_id}`,
+        sku: oi.sku,
       }));
 
       const data = await ShipRocketService.createReturnOrder({ order, items, reason });
@@ -364,6 +366,7 @@ class ShipRocketController {
         quantity: oi.quantity,
         price: oi.price,
         name: oi.product_name || `Product #${oi.product_id}`,
+        sku: oi.sku,
       }));
 
       const data = await ShipRocketService.createReturnOrder({

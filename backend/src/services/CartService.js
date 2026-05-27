@@ -1,9 +1,12 @@
 const Cart = require("../models/Cart");
 const Product = require("../models/Product");
+const Color = require("../models/Color");
 const { AppError } = require("../utils/http");
 
 const CART_PRODUCT_ATTRIBUTES = [
   "id",
+  "sku",
+  "variant_skus",
   "name",
   "slug",
   "selling_price",
@@ -29,6 +32,10 @@ class CartService {
         {
           model: Product,
           attributes: CART_PRODUCT_ATTRIBUTES,
+        },
+        {
+          model: Color,
+          attributes: ["id", "name", "slug", "hex_code"],
         },
       ],
     });

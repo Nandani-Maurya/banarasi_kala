@@ -47,6 +47,10 @@ const connectDB = async () => {
       ALTER TABLE vns_saree.orders ADD COLUMN IF NOT EXISTS shiprocket_exchange_order_id VARCHAR(255);
       ALTER TABLE vns_saree.orders ADD COLUMN IF NOT EXISTS shiprocket_return_awb VARCHAR(255);
       ALTER TABLE vns_saree.orders ADD COLUMN IF NOT EXISTS shiprocket_exchange_awb VARCHAR(255);
+      ALTER TABLE vns_saree.orders ADD COLUMN IF NOT EXISTS selected_courier_data JSONB;
+      ALTER TABLE vns_saree.orders ADD COLUMN IF NOT EXISTS order_number VARCHAR(255);
+      ALTER TABLE vns_saree.order_items ADD COLUMN IF NOT EXISTS sku VARCHAR(255);
+      ALTER TABLE vns_saree.products ADD COLUMN IF NOT EXISTS variant_skus JSONB DEFAULT '{}'::jsonb;
     `).then(() => {
       console.log("Shiprocket reverse logistics database columns ensured successfully.");
     }).catch(err => {
