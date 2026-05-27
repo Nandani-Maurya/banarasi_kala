@@ -47,6 +47,7 @@ const run = async () => {
   changed = await addColumnIfMissing(queryInterface, orderItemsTable, orderItems, "shipping_meta", { type: DataTypes.JSONB, allowNull: true }) || changed;
   changed = await addColumnIfMissing(queryInterface, orderItemsTable, orderItems, "sku", { type: DataTypes.STRING, allowNull: true }) || changed;
   changed = await addColumnIfMissing(queryInterface, productsTable, products, "variant_skus", { type: DataTypes.JSONB, allowNull: false, defaultValue: {} }) || changed;
+  changed = await addColumnIfMissing(queryInterface, productsTable, products, "height", { type: DataTypes.DECIMAL(4, 2), allowNull: true }) || changed;
 
   await sequelize.query(`
     UPDATE ${schema}.products
