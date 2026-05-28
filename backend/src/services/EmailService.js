@@ -55,10 +55,10 @@ class EmailService {
     const mailOptions = {
       from: `"Banarasi Kala" <${config.emailUser}>`,
       to: order.customer_email,
-      subject: `Order Confirmed - ${orderNumber} | Banaras Heritage`,
+      subject: `Order Confirmed - ${orderNumber} | Banarasi Kala`,
       html: `
         <div style="font-family: 'Playfair Display', serif; color: #3D2817; max-width: 600px; margin: auto; border: 1px solid #D4AF37; padding: 40px; background-color: #FDFCFB;">
-          <h1 style="color: #800020; text-align: center; border-bottom: 2px solid #D4AF37; padding-bottom: 20px;">Banaras Heritage</h1>
+          <h1 style="color: #800020; text-align: center; border-bottom: 2px solid #D4AF37; padding-bottom: 20px;">Banarasi Kala</h1>
           <p>Dear ${order.customer_name},</p>
           <p>Thank you for choosing Banarasi Kala. Your order for our handcrafted masterpiece has been confirmed.</p>
           
@@ -92,7 +92,7 @@ class EmailService {
           </div>
           
           <p style="margin-top: 40px; font-style: italic; text-align: center; color: #D4AF37;">A new heritage begins with you.</p>
-          <p style="text-align: center; font-size: 12px; color: #999; margin-top: 20px;">&copy; 2024 Banaras Heritage. All rights reserved.</p>
+          <p style="text-align: center; font-size: 12px; color: #999; margin-top: 20px;">&copy; 2024 Banarasi Kala. All rights reserved.</p>
         </div>
       `,
     };
@@ -121,7 +121,7 @@ class EmailService {
     const mailOptions = {
       from: `"Banarasi Kala" <${config.emailUser}>`,
       to: order.customer_email,
-      subject: `Order ${orderNumber} ${normalizedStatus} | Banaras Heritage`,
+      subject: `Order ${orderNumber} ${normalizedStatus} | Banarasi Kala`,
       html: `
         <div style="font-family: Arial, sans-serif; color: #3D2817; max-width: 600px; margin: auto; border: 1px solid #ead8b2; padding: 32px; background-color: #fffaf0;">
           <h1 style="color: #800020; margin: 0 0 12px;">Banarasi Kala</h1>
@@ -142,14 +142,14 @@ class EmailService {
 
   async sendOTP(email, otp, name) {
     const mailOptions = {
-      from: `"Banaras Heritage" <${config.emailUser}>`,
+      from: `"Banarasi Kala" <${config.emailUser}>`,
       to: email,
-      subject: `Password Reset OTP - Banaras Heritage`,
+      subject: `Your verification code | Banarasi Kala`,
       html: `
         <div style="font-family: 'Playfair Display', serif; color: #3D2817; max-width: 600px; margin: auto; border: 1px solid #D4AF37; padding: 40px; background-color: #FDFCFB;">
-          <h1 style="color: #800020; text-align: center; border-bottom: 2px solid #D4AF37; padding-bottom: 20px;">Banaras Heritage</h1>
+          <h1 style="color: #800020; text-align: center; border-bottom: 2px solid #D4AF37; padding-bottom: 20px;">Banarasi Kala</h1>
           <p>Dear ${name || 'Customer'},</p>
-          <p>We received a request to reset your password. Please use the following 6-digit OTP to verify your identity:</p>
+          <p>Please use this 6-digit OTP to verify your email:</p>
           
           <div style="text-align: center; margin: 40px 0;">
             <span style="font-size: 32px; font-weight: bold; color: #800020; letter-spacing: 10px; border: 2px dashed #D4AF37; padding: 10px 20px; background-color: #FAF8F6;">${otp}</span>
@@ -158,7 +158,7 @@ class EmailService {
           <p style="font-size: 14px; color: #666; text-align: center;">This OTP is valid for 10 minutes. If you did not request this, please ignore this email.</p>
           
           <p style="margin-top: 40px; font-style: italic; text-align: center; color: #D4AF37;">A new heritage begins with you.</p>
-          <p style="text-align: center; font-size: 12px; color: #999; margin-top: 20px;">&copy; 2024 Banaras Heritage. All rights reserved.</p>
+          <p style="text-align: center; font-size: 12px; color: #999; margin-top: 20px;">&copy; 2024 Banarasi Kala. All rights reserved.</p>
         </div>
       `,
     };

@@ -441,7 +441,8 @@
   transform: translate(-50%, -50%);
 }
 
-.auth-phone-verify {
+.auth-phone-verify,
+.auth-verify-field {
   display: grid;
   gap: 7px;
 }
@@ -551,6 +552,12 @@
   font-size: 12px;
   font-weight: 400;
   text-align: center;
+}
+
+.auth-otp-alert {
+  width: 100%;
+  margin: 2px 0 0;
+  text-align: left;
 }
 
 .auth-otp-boxes {

@@ -4,6 +4,8 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import headerBackground from "../../assets/header_backgroung.png";
 import { API_ENDPOINTS } from "../../config/api";
 import { useAuth } from "../../context/AuthContext";
+import { useNotification } from "../../context/NotificationContext";
+import { getApiErrorMessage } from "../../utils/error";
 import { numberEnv } from "../../utils/env";
 import "./Auth.css";
 
@@ -18,7 +20,7 @@ const normalizePhone = (value) => {
 };
 
 const getFriendlyError = (error, fallback = SUPPORT_MESSAGE) => {
-  const message = String(error?.message || error || "");
+  const message = getApiErrorMessage(error, fallback);
   const lower = message.toLowerCase();
   if (lower.includes("already registered")) return message;
   if (lower.includes("invalid email or password")) return "Email/phone or password is incorrect.";
@@ -117,6 +119,7 @@ const Auth = () => {
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpStep, setOtpStep] = useState(null);
   const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState("");
   const [otpSendAttempts, setOtpSendAttempts] = useState({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -131,6 +134,7 @@ const Auth = () => {
   const [signupVerifiedEmail, setSignupVerifiedEmail] = useState("");
 
   const { login, signup, user } = useAuth();
+  const { showNotification } = useNotification();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -154,11 +158,6 @@ const Auth = () => {
   const alertRef = useRef(null);
   const activeOtpDigitCount = EMAIL_OTP_DIGIT_COUNT;
 
-  const showError = (message) => {
-    setSuccess("");
-    setError(message);
-  };
-
   useEffect(() => {
     window.requestAnimationFrame(() => {
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -174,10 +173,12 @@ const Auth = () => {
 
   useEffect(() => {
     if (user) {
+      const mode = new URLSearchParams(location.search).get("mode");
+      if (mode === "forgot" || activeTab === "forgotPassword" || activeTab === "resetPassword") return;
       const from = location.state?.from?.pathname || "/";
       navigate(from, { replace: true });
     }
-  }, [user, navigate, location]);
+  }, [user, navigate, location, activeTab]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -187,6 +188,8 @@ const Auth = () => {
     }
     if (params.get("mode") === "forgot") {
       switchMode("forgotPassword");
+      const email = params.get("email");
+      if (email) setForgotPasswordData((prev) => ({ ...prev, email }));
       return;
     }
     if (params.has("refresh")) switchMode("login");
@@ -224,7 +227,7 @@ const Auth = () => {
     }
     return {
       title: "Welcome Back",
-       subtitle: "Please entre your details",
+      subtitle: "Please enter your details",
     };
   }, [activeTab]);
 
@@ -234,6 +237,7 @@ const Auth = () => {
     setSuccess("");
     setOtpStep(null);
     setOtpCode("");
+    setOtpError("");
     setOtpLoading(false);
     setAnimationKey((key) => key + 1);
   }
@@ -284,6 +288,7 @@ const Auth = () => {
     const attemptsLeft = getOtpAttemptsLeft(action, cleanEmail);
     setError("");
     setSuccess("");
+    setOtpError("");
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       setError("Please enter a valid email.");
       return;
@@ -308,7 +313,9 @@ const Auth = () => {
       setOtpStep({ action, email: cleanEmail });
       setSuccess("OTP sent to your email.");
     } catch (err) {
-      setError(err.message || "Unable to send email OTP.");
+      const message = getFriendlyError(err, "We could not send the OTP right now. Please try again.");
+      if (otpStep) setOtpError(message);
+      else setError(message);
     } finally {
       setOtpLoading(false);
     }
@@ -319,9 +326,10 @@ const Auth = () => {
     const code = String(otpCode || "").replace(/\D/g, "");
     setError("");
     setSuccess("");
+    setOtpError("");
     if (!otpStep) return;
     if (code.length !== activeOtpDigitCount) {
-      setError("Please enter a valid OTP.");
+      setOtpError("Please enter the complete OTP.");
       return;
     }
     try {
@@ -346,7 +354,7 @@ const Auth = () => {
       setOtpCode("");
       setSuccess("Email OTP verified.");
     } catch (err) {
-      setError(err.message || "Invalid OTP.");
+      setOtpError(getFriendlyError(err, "The OTP is incorrect or expired. Please try again."));
     } finally {
       setOtpLoading(false);
     }
@@ -355,6 +363,7 @@ const Auth = () => {
   const handleResendOtp = () => {
     if (!otpStep || otpLoading) return;
     setOtpCode("");
+    setOtpError("");
     startEmailOtp(otpStep.action, otpStep.email, signupData.name);
   };
 
@@ -364,6 +373,7 @@ const Auth = () => {
     setLoading(true);
     try {
       await login(loginData.identifier, loginData.password, loginData.keepLoggedIn);
+      showNotification("Logged in successfully.", "success");
     } catch (err) {
       console.error("[Auth] login failed:", err);
       setError(getFriendlyError(err, "Unable to login right now. Please contact support or try again later."));
@@ -393,6 +403,7 @@ const Auth = () => {
         email: signupData.email.trim().toLowerCase(),
         email_otp_token: signupOtpToken,
       });
+      showNotification("Account created successfully.", "success");
       setSuccess("Account created successfully.");
     } catch (err) {
       console.error("[Auth] signup failed:", err);
@@ -526,7 +537,18 @@ const Auth = () => {
         {activeTab === "signup" && (
           <form className="auth-form auth-form-compact" onSubmit={onSignup}>
             <AuthField icon="lucide:user" label="Full Name" name="name" value={signupData.name} placeholder="Enter your full name" onChange={handleSignupChange} />
-            <AuthField icon="lucide:mail" label="Email Address" name="email" type="email" value={signupData.email} placeholder="Enter your email" onChange={handleSignupChange} />
+            <div className="auth-verify-field">
+              <AuthField icon="lucide:mail" label="Email Address" name="email" type="email" value={signupData.email} placeholder="Enter your email" onChange={handleSignupChange} />
+              <button
+                type="button"
+                className={signupVerifiedEmail === signupData.email.trim().toLowerCase() ? "auth-verify-link is-verified" : "auth-verify-link"}
+                onClick={() => startEmailOtp("signup", signupData.email, signupData.name)}
+                disabled={otpLoading || signupVerifiedEmail === signupData.email.trim().toLowerCase()}
+              >
+                <Icon icon={signupVerifiedEmail === signupData.email.trim().toLowerCase() ? "lucide:badge-check" : "lucide:shield-check"} />
+                {signupVerifiedEmail === signupData.email.trim().toLowerCase() ? "Email verified" : "Verify email"}
+              </button>
+            </div>
             <div className="auth-phone-verify">
               <AuthField
                 icon="lucide:phone"
@@ -539,15 +561,6 @@ const Auth = () => {
                 maxLength={11}
                 leftAddon={<span className="auth-country-code"><span className="auth-flag-india" aria-hidden="true" />+91</span>}
               />
-              <button
-                type="button"
-                className={signupVerifiedEmail === signupData.email.trim().toLowerCase() ? "auth-verify-link is-verified" : "auth-verify-link"}
-                onClick={() => startEmailOtp("signup", signupData.email, signupData.name)}
-                disabled={otpLoading || signupVerifiedEmail === signupData.email.trim().toLowerCase()}
-              >
-                <Icon icon={signupVerifiedEmail === signupData.email.trim().toLowerCase() ? "lucide:badge-check" : "lucide:shield-check"} />
-                {signupVerifiedEmail === signupData.email.trim().toLowerCase() ? "Email verified" : "Verify email"}
-              </button>
             </div>
             <div className="auth-referral-field">
               <AuthField icon="lucide:gift" label="Referral Code (optional)" name="referral_code" value={signupData.referral_code} placeholder="Have a referral code?" onChange={handleSignupChange} required={false} />
@@ -642,6 +655,7 @@ const Auth = () => {
                 onClick={() => {
                   setOtpStep(null);
                   setOtpCode("");
+                  setOtpError("");
                   setOtpLoading(false);
                 }}
                 aria-label="Close OTP"
@@ -660,6 +674,7 @@ const Auth = () => {
                 <p>
                   {getOtpAttemptsLeft(otpStep.action, otpStep.email)} resend attempt(s) left. OTP expires in 15 minutes.
                 </p>
+                {otpError ? <div className="auth-alert auth-alert-error auth-otp-alert">{otpError}</div> : null}
               </div>
               <button type="submit" disabled={loading || otpLoading} className="auth-primary">
                 {loading || otpLoading ? "Verifying..." : "Verify OTP"}
@@ -673,6 +688,7 @@ const Auth = () => {
                   onClick={() => {
                     setOtpStep(null);
                     setOtpCode("");
+                    setOtpError("");
                   }}
                 >
                   Change email

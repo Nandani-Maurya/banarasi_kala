@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useNotification } from "../context/NotificationContext";
 import { useCart } from "../context/CartContext";
 import { useWishlist } from "../context/WishlistContext";
 import { API_ENDPOINTS } from "../config/api";
@@ -19,6 +20,7 @@ const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { showNotification } = useNotification();
   const { getCartCount } = useCart();
   const { getWishlistCount } = useWishlist();
 
@@ -235,6 +237,7 @@ const Header = () => {
 
   const handleLogout = () => {
     logout();
+    showNotification("Logged out successfully.", "success");
     closeMenus();
     navigate("/", { state: { refreshKey: Date.now() } });
   };

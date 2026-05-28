@@ -1,5 +1,15 @@
 const AuthService = require("../services/AuthService");
 
+const toCustomerAuthMessage = (error, fallback) => {
+  const message = String(error?.message || "");
+  if (
+    /sequelize|database|column|relation|syntax|internal|connect|timeout/i.test(message)
+  ) {
+    return fallback;
+  }
+  return message || fallback;
+};
+
 class AuthController {
   async register(req, res) {
     try {
@@ -7,7 +17,10 @@ class AuthController {
       res.status(201).json(result);
     } catch (error) {
       console.error("[AuthController:register]", error.message, error.code || "");
-      res.status(error.code === "OTP_RATE_LIMITED" ? 429 : 400).json({ message: error.message, code: error.code });
+      res.status(error.code === "OTP_RATE_LIMITED" ? 429 : 400).json({
+        message: toCustomerAuthMessage(error, "We could not create your account right now. Please try again."),
+        code: error.code,
+      });
     }
   }
 
@@ -18,7 +31,10 @@ class AuthController {
       res.json(result);
     } catch (error) {
       console.error("[AuthController:login]", error.message, error.code || "");
-      res.status(401).json({ message: error.message, code: error.code });
+      res.status(401).json({
+        message: toCustomerAuthMessage(error, "We could not log you in right now. Please try again."),
+        code: error.code,
+      });
     }
   }
 
@@ -51,7 +67,10 @@ class AuthController {
       res.json(result);
     } catch (error) {
       console.error("[AuthController:forgotPassword]", error.message, error.code || "");
-      res.status(error.code === "OTP_RATE_LIMITED" ? 429 : 400).json({ message: error.message, code: error.code });
+      res.status(error.code === "OTP_RATE_LIMITED" ? 429 : 400).json({
+        message: toCustomerAuthMessage(error, "We could not start password reset right now. Please try again."),
+        code: error.code,
+      });
     }
   }
 
@@ -62,7 +81,9 @@ class AuthController {
       res.json(result);
     } catch (error) {
       console.error("[AuthController:resetPassword]", error.message, error.code || "");
-      res.status(400).json({ message: error.message });
+      res.status(400).json({
+        message: toCustomerAuthMessage(error, "We could not reset your password right now. Please try again."),
+      });
     }
   }
 
@@ -72,7 +93,8 @@ class AuthController {
       const result = await AuthService.sendEmailOtp(email, purpose, name);
       res.json(result);
     } catch (error) {
-      res.status(400).json({ message: error.message });
+      console.error("[AuthController:sendEmailOtp]", error.message, error.code || "");
+      res.status(400).json({ message: "We could not send the OTP right now. Please try again in a few minutes." });
     }
   }
 
@@ -82,7 +104,8 @@ class AuthController {
       const result = await AuthService.verifyEmailOtp(token, otp, purpose);
       res.json(result);
     } catch (error) {
-      res.status(400).json({ message: error.message });
+      console.error("[AuthController:verifyEmailOtp]", error.message, error.code || "");
+      res.status(400).json({ message: "The OTP is incorrect or expired. Please try again." });
     }
   }
 

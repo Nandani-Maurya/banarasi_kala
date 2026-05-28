@@ -968,7 +968,7 @@ export default function Profile() {
           <button type="button" className="profile-quick-card" onClick={goResetPassword}>
             <Icon icon="lucide:shield-check" />
             <strong>Login & Security</strong>
-            <span>Password reset by OTP</span>
+            <span>Reset password by email OTP</span>
           </button>
         </section>
 
