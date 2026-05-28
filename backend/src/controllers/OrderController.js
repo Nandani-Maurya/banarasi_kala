@@ -70,21 +70,6 @@ const ensureOrderAccountingColumns = async () => {
 const keepExistingColumns = (payload, columns) =>
   Object.fromEntries(Object.entries(payload).filter(([key]) => columns[key]));
 
-const getOrderNumberForToday = async ({ transaction }) => {
-  const now = new Date();
-  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const dayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-  const todayOrders = await Order.count({
-    where: {
-      createdAt: {
-        [Op.gte]: dayStart,
-        [Op.lt]: dayEnd,
-      },
-    },
-    transaction,
-  });
-  return formatOrderNumber(now, todayOrders + 1);
-};
 
 let orderItemColumnsReady = false;
 let orderItemColumnCache = null;
@@ -104,7 +89,7 @@ const roundMoney = (value) => Math.round((Number(value) || 0) * 100) / 100;
 const getProductWeightKg = (product) => {
   const rawWeight = Number(product?.weight);
   if (!Number.isFinite(rawWeight) || rawWeight <= 0) return 0.5;
-  return rawWeight > 5 ? rawWeight / 1000 : rawWeight;
+  return rawWeight;
 };
 
 const buildItemShippingMeta = ({
@@ -258,11 +243,7 @@ class OrderController {
       const enrichedItems = items.map((item) => {
         const productForItem = productMap[item.id];
         const colorId = item.colorId || item.color_id || null;
-        const color = colorId ? colorMap[String(colorId)] : null;
-        const productCode = productForItem?.sku || formatProductCode(productForItem?.id || item.id);
-        const variantSku = item.sku
-          || productForItem?.variant_skus?.[String(colorId)]
-          || formatVariantItemCode(productCode, color?.slug || color?.name, colorId);
+        const variantSku = productForItem?.variant_skus?.[String(colorId)] || productForItem?.sku || formatProductCode(productForItem?.id || item.id);
         return {
           ...item,
           sku: variantSku,
@@ -331,7 +312,6 @@ class OrderController {
         shippingDiscountReason: shipping_discount_reason,
       });
       const orderPayload = keepExistingColumns({
-        order_number: await getOrderNumberForToday({ transaction: t }),
         customer_id: customer?.id || null,
         customer_name: customer_name || customer?.name,
         customer_email: customer?.email || customer_email,
@@ -359,6 +339,11 @@ class OrderController {
         fields: Object.keys(orderPayload),
         transaction: t,
       });
+
+      // Generate order_number after insert — uses the DB-assigned id
+      const orderNumber = formatOrderNumber(new Date(), order.id);
+      await order.update({ order_number: orderNumber }, { transaction: t });
+      order.order_number = orderNumber;
 
       const orderItems = enrichedItems.map((item, index) => ({
         order_id: order.id,

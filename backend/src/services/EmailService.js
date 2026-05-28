@@ -46,7 +46,7 @@ class EmailService {
   }
 
   async sendOrderConfirmation(order, items) {
-    const orderNumber = order.order_number || `BKS${String(order.id).padStart(4, "0")}`;
+    const orderNumber = order.order_number;
     const itemList = items.map(item => `
       <tr>
         <td style="padding: 10px; border-bottom: 1px solid #eee;">${item.name || 'Saree'}</td>
@@ -120,7 +120,7 @@ class EmailService {
       Processing: "Your order is being prepared with care.",
     };
     const message = statusCopy[normalizedStatus] || `Your order status is now ${normalizedStatus}.`;
-    const orderNumber = order.order_number || `BKS${String(order.id).padStart(4, "0")}`;
+    const orderNumber = order.order_number;
 
     const mailOptions = {
       from: `"Banaras Heritage" <${process.env.EMAIL_USER}>`,
@@ -176,22 +176,6 @@ class EmailService {
         throw new Error("Email authentication failed. Please check your App Password.");
       }
       throw new Error(`Failed to send OTP email: ${error.message}`);
-    }
-  }
-
-  async sendOrderStatusUpdate(order, status) {
-    if (!order?.customer_email) return;
-    const orderNumber = order.order_number || `BKS${String(order.id).padStart(4, "0")}`;
-    const mailOptions = {
-      from: `"Banaras Heritage" <${process.env.EMAIL_USER}>`,
-      to: order.customer_email,
-      subject: `Order ${orderNumber} Update: ${status}`,
-      html: `<p>Hi ${order.customer_name || "Customer"}, your order ${orderNumber} status is now <b>${status}</b>.</p>`,
-    };
-    try {
-      await transporter.sendMail(mailOptions);
-    } catch (error) {
-      console.error("Order status email failed:", error.message);
     }
   }
 }

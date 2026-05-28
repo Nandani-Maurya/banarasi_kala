@@ -1,31 +1,29 @@
-const PRODUCT_PREFIX = "BKS";
-const ORDER_PREFIX = "BKS";
+const PRODUCT_PREFIX = 'BKS';
+const ORDER_PREFIX = 'BKS';
 
-const padNumber = (value, size) => String(Math.max(0, Number(value) || 0)).padStart(size, "0");
+// BKS00001 → product SKU
+const formatProductCode = (id) => `${PRODUCT_PREFIX}${String(id)}`;
 
-const formatProductCode = (id) => `${PRODUCT_PREFIX}${padNumber(id, 5)}`;
-
-const slugifyCodePart = (value, fallback = "variant") => {
-  const slug = String(value || "")
+const slugifyCodePart = (value, fallback = 'variant') => {
+  const slug = String(value || '')
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)+/g, "");
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)+/g, '');
   return slug || fallback;
 };
 
+// BKS00001-red → variant SKU
 const formatVariantItemCode = (productCode, colorName, colorId = null) =>
-  `${productCode}-${slugifyCodePart(colorName, colorId ? `color-${colorId}` : "variant")}`;
+  `${productCode}-${slugifyCodePart(colorName, colorId ? `color-${colorId}` : 'variant')}`;
 
-const formatDateKey = (date = new Date()) => {
-  const year = date.getFullYear();
-  const month = padNumber(date.getMonth() + 1, 2);
-  const day = padNumber(date.getDate(), 2);
-  return `${year}${month}${day}`;
+// BKS20260528{orderId} — generated AFTER order insert so DB id is available
+const formatOrderNumber = (date, orderId) => {
+  const year  = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day   = String(date.getDate()).padStart(2, '0');
+  return `${ORDER_PREFIX}${year}${month}${day}${orderId}`;
 };
-
-const formatOrderNumber = (date, dailyCount) =>
-  `${ORDER_PREFIX}${formatDateKey(date)}${padNumber(dailyCount, 4)}`;
 
 module.exports = {
   formatProductCode,

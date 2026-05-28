@@ -12,7 +12,7 @@ const BASE_URL = 'https://apiv2.shiprocket.in/v1/external';
 class ShipRocketService {
   constructor() {
     this._token = null;
-    this._tokenExpiry = null; // ms timestamp
+    this._tokenExpiry = null;
     this._pickupLocations = null;
     this._pickupLocationsExpiry = null;
   }
@@ -20,20 +20,15 @@ class ShipRocketService {
   // ─── AUTH ────────────────────────────────────────────────────────────────────
 
   async getToken() {
-    // Return cached token if still valid (with a 5-min buffer)
     if (this._token && this._tokenExpiry && Date.now() < this._tokenExpiry - 5 * 60 * 1000) {
       return this._token;
     }
-
     const response = await axios.post(`${BASE_URL}/auth/login`, {
       email: process.env.SHIPROCKET_EMAIL,
       password: process.env.SHIPROCKET_PASSWORD,
     });
-
     this._token = response.data.token;
-    // ShipRocket tokens are valid for 24 hours
     this._tokenExpiry = Date.now() + 24 * 60 * 60 * 1000;
-
     console.log('[ShipRocket] Auth token refreshed.');
     return this._token;
   }
@@ -46,21 +41,23 @@ class ShipRocketService {
     };
   }
 
+  // ─── PICKUP LOCATION ─────────────────────────────────────────────────────────
+
   _normalizePickupLocation(raw = {}) {
-    const name = raw.pickup_location || raw.pickup_location_name || raw.address_name || raw.name || raw.location_name || raw.title || "";
-    const postcode = raw.pin_code || raw.pin || raw.pincode || raw.postcode || raw.pickup_pincode || raw.zipcode || raw.zip || "";
-    const status = String(raw.status || raw.active || raw.is_active || "").toLowerCase();
+    const name = raw.pickup_location || raw.pickup_location_name || raw.address_name || raw.name || raw.location_name || raw.title || '';
+    const postcode = raw.pin_code || raw.pin || raw.pincode || raw.postcode || raw.pickup_pincode || raw.zipcode || raw.zip || '';
+    const status = String(raw.status || raw.active || raw.is_active || '').toLowerCase();
     return {
-      name: String(name || "").trim(),
-      postcode: String(postcode || "").trim(),
-      address: raw.address || raw.address_1 || raw.address_line_1 || raw.pickup_address || "",
-      address2: raw.address_2 || raw.address2 || raw.landmark || "",
-      city: raw.city || raw.pickup_city || "",
-      state: raw.state || raw.pickup_state || "",
-      email: raw.email || raw.pickup_email || "",
-      phone: raw.phone || raw.pickup_phone || raw.mobile || "",
+      name: String(name || '').trim(),
+      postcode: String(postcode || '').trim(),
+      address: raw.address || raw.address_1 || raw.address_line_1 || raw.pickup_address || '',
+      address2: raw.address_2 || raw.address2 || raw.landmark || '',
+      city: raw.city || raw.pickup_city || '',
+      state: raw.state || raw.pickup_state || '',
+      email: raw.email || raw.pickup_email || '',
+      phone: raw.phone || raw.pickup_phone || raw.mobile || '',
       isDefault: Boolean(raw.is_default || raw.default || raw.default_address),
-      isActive: status ? !["0", "false", "inactive", "disabled"].includes(status) : true,
+      isActive: status ? !['0', 'false', 'inactive', 'disabled'].includes(status) : true,
       raw,
     };
   }
@@ -86,7 +83,6 @@ class ShipRocketService {
     if (!force && this._pickupLocations && this._pickupLocationsExpiry && Date.now() < this._pickupLocationsExpiry) {
       return this._pickupLocations;
     }
-
     const headers = await this._headers();
     const response = await axios.get(`${BASE_URL}/settings/company/pickup`, { headers });
     const locations = this._extractPickupLocations(response.data);
@@ -98,89 +94,46 @@ class ShipRocketService {
   async getActivePickupLocation() {
     const locations = await this.getPickupLocations({ force: true });
     const pickupName = String(config.shiprocketPickupLocation || 'Home').trim().toLowerCase();
-    const selected = locations.find((item) => item.isActive && item.name.toLowerCase() === pickupName)
-      || locations.find((item) => item.name.toLowerCase() === pickupName);
+    const selected =
+      locations.find((item) => item.isActive && item.name.toLowerCase() === pickupName) ||
+      locations.find((item) => item.name.toLowerCase() === pickupName);
 
     if (!selected) {
-      throw new Error(`ShipRocket pickup location "${config.shiprocketPickupLocation || 'Home'}" was not found in your ShipRocket account.`);
+      throw new Error(
+        `ShipRocket pickup location "${config.shiprocketPickupLocation || 'Home'}" was not found in your ShipRocket account.`
+      );
     }
-    if (!selected.postcode) {
-      throw new Error(`ShipRocket pickup location "${selected.name}" does not have a pincode.`);
-    }
+    return selected;
+  }
 
+  // ─── PACKAGE METRICS (env-based box dimensions) ───────────────────────────────
+  // Weight/dimensions use the fixed box size from .env, NOT product DB values.
+  // PACKAGE_WEIGHT_KG × totalQty, PACKAGE_HEIGHT_CM × totalQty (stacking).
+  // Length & Breadth stay fixed (the box never changes width/length).
+
+  _computePackageMetrics(items) {
+    const totalQty = items.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
     return {
-      ...selected,
-      source: 'shiprocket',
+      pkgWeight:  Math.max(parseFloat((config.packageWeightKg  * totalQty).toFixed(2)), 0.1),
+      pkgLength:  config.packageLengthCm,
+      pkgBreadth: config.packageBreadthCm,
+      pkgHeight:  Math.max(config.packageHeightCm * totalQty, 1),
     };
   }
 
-  // ─── ORDER ────────────────────────────────────────────────────────────────────
-  _computePackageMetrics(items, productMap) {
-    let totalWeight = 0;
-    let maxItemLengthCm = 0;
-    let maxItemBreadthCm = 0;
-    let sumItemHeightCm = 0;
-
-    items.forEach((item) => {
-      const quantity = Number(item.quantity) || 1;
-      const product = productMap[item.product_id];
-
-      let itemWeightKg = 0.5;
-      if (product && Number(product.weight) > 0) {
-        const rawWeight = Number(product.weight);
-        itemWeightKg = rawWeight > 5 ? rawWeight / 1000 : rawWeight;
-      }
-      totalWeight += (itemWeightKg + Math.max(0, Number(config.packageWeightKg || 0))) * quantity;
-
-      const rawLength = Number(product?.length);
-      const rawWidth = Number(product?.width);
-      const rawHeight = Number(product?.height);
-      const lengthCm = Number.isFinite(rawLength) && rawLength > 0
-        ? (rawLength <= 10 ? rawLength * 100 : rawLength)
-        : 30;
-      const widthCm = Number.isFinite(rawWidth) && rawWidth > 0
-        ? (rawWidth <= 10 ? rawWidth * 100 : rawWidth)
-        : 20;
-      const heightCm = Number.isFinite(rawHeight) && rawHeight > 0 ? rawHeight : 5;
-
-      maxItemLengthCm = Math.max(maxItemLengthCm, lengthCm);
-      maxItemBreadthCm = Math.max(maxItemBreadthCm, widthCm);
-      sumItemHeightCm += heightCm * quantity;
-    });
-
-    return {
-      pkgLength: Math.max(10, Math.round(maxItemLengthCm || 30)),
-      pkgBreadth: Math.max(10, Math.round(maxItemBreadthCm || 20)),
-      pkgHeight: Math.max(5, Math.round(sumItemHeightCm || 5)),
-      pkgWeight: Math.max(0.1, Number(totalWeight.toFixed(3))),
-    };
-  }
+  // ─── ORDERS ──────────────────────────────────────────────────────────────────
 
   /**
-   * Create a shipment order on ShipRocket.
-   * @param {object} orderData  - VNS Saree Order model instance + items array
-   * @returns ShipRocket order + shipment_id
+   * Create a forward shipment order on ShipRocket.
+   * @param {{ order: object, items: Array }} orderData
    */
   async createOrder(orderData) {
     const { order, items } = orderData;
     const pickupLocation = await this.getActivePickupLocation();
 
-    // Fetch product details for true dimensions & weights
-    const productIds = items.map(item => item.product_id).filter(Boolean);
-    const Product = require('../models/Product');
-    const dbProducts = await Product.findAll({
-      where: { id: productIds },
-      attributes: ["id", "weight", "length", "width"],
-    });
-    const productMap = {};
-    dbProducts.forEach(p => {
-      productMap[p.id] = p;
-    });
-
-    // ShipRocket expects all weight in kg; default each item to 0.5 kg if unknown
     const orderItems = items.map((item, idx) => ({
       name: item.name || item.product_name || `Product ${idx + 1}`,
-      sku: item.sku || (item.product_id ? `BKS${String(item.product_id).padStart(5, "0")}` : `BKS${String(idx + 1).padStart(5, "0")}`),
+      sku: item.sku || `BKS${item.product_id || idx + 1}`,
       units: item.quantity,
       selling_price: item.price,
       discount: 0,
@@ -188,14 +141,14 @@ class ShipRocketService {
       hsn: '',
     }));
 
-    const { pkgLength, pkgBreadth, pkgHeight, pkgWeight } = this._computePackageMetrics(items, productMap);
+    const { pkgLength, pkgBreadth, pkgHeight, pkgWeight } = this._computePackageMetrics(items);
 
     const now = new Date();
     const orderDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     const isCod = order.payment_method === 'COD';
     const payload = {
-      order_id: order.order_number || `BKS${String(order.id).padStart(4, "0")}`,
+      order_id: order.order_number,
       order_date: orderDate,
       pickup_location: pickupLocation.name,
 
@@ -212,8 +165,6 @@ class ShipRocketService {
       billing_is_billing_address: true,
 
       shipping_is_billing: 1,
-
-      // Items
       order_items: orderItems,
 
       payment_method: isCod ? 'COD' : 'Prepaid',
@@ -223,7 +174,7 @@ class ShipRocketService {
       transaction_charges: 0,
       total_discount: Number(order.discount_amount) || 0,
       sub_total: Number(order.total_amount),
-      length: pkgLength,  // cm
+      length: pkgLength,
       breadth: pkgBreadth,
       height: pkgHeight,
       weight: pkgWeight,
@@ -237,28 +188,15 @@ class ShipRocketService {
 
   /**
    * Create a return shipment order on ShipRocket.
-   * @param {object} returnData
-   * @returns ShipRocket return order details
+   * @param {{ order: object, items: Array, reason: string }} returnData
    */
   async createReturnOrder(returnData) {
     const { order, items, reason } = returnData;
     const pickupLocation = await this.getActivePickupLocation();
 
-    // Fetch product details for true dimensions & weights
-    const productIds = items.map(item => item.product_id).filter(Boolean);
-    const Product = require('../models/Product');
-    const dbProducts = await Product.findAll({
-      where: { id: productIds },
-      attributes: ["id", "weight", "length", "width"],
-    });
-    const productMap = {};
-    dbProducts.forEach(p => {
-      productMap[p.id] = p;
-    });
-
     const orderItems = items.map((item, idx) => ({
       name: item.name || item.product_name || `Product ${idx + 1}`,
-      sku: item.sku || (item.product_id ? `BKS${String(item.product_id).padStart(5, "0")}` : `BKS${String(idx + 1).padStart(5, "0")}`),
+      sku: item.sku || `BKS${item.product_id || idx + 1}`,
       units: item.quantity,
       selling_price: item.price,
       discount: 0,
@@ -266,17 +204,16 @@ class ShipRocketService {
       hsn: '',
     }));
 
-    const { pkgLength, pkgBreadth, pkgHeight, pkgWeight } = this._computePackageMetrics(items, productMap);
+    const { pkgLength, pkgBreadth, pkgHeight, pkgWeight } = this._computePackageMetrics(items);
 
     const now = new Date();
     const orderDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     const payload = {
-      order_id: `RET-${order.order_number || `BKS${String(order.id).padStart(4, "0")}`}`,
+      order_id: `RET-${order.order_number}`,
       order_date: orderDate,
       pickup_location: pickupLocation.name,
 
-      // Returns are picked up from the customer
       pickup_customer_name: order.customer_name,
       pickup_last_name: '',
       pickup_address: order.address,
@@ -288,7 +225,6 @@ class ShipRocketService {
       pickup_email: order.customer_email,
       pickup_phone: String(order.phone),
 
-      // Delivered back to the saved ShipRocket pickup address
       shipping_customer_name: pickupLocation.name,
       shipping_last_name: '',
       shipping_address: pickupLocation.address,
@@ -320,11 +256,10 @@ class ShipRocketService {
   // ─── AWB / COURIER ───────────────────────────────────────────────────────────
 
   /**
-   * Recommend best courier for a shipment.
    * @param {string|number} shipmentId
-   * @param {string} pincode  - destination pincode
-   * @param {number} weight - actual weight in kg
-   * @param {boolean} isCod - cash on delivery flag
+   * @param {string} pincode
+   * @param {number} weight  - kg
+   * @param {boolean} isCod
    */
   async getServiceableCouries(shipmentId, pincode, weight = 0.5, isCod = false) {
     const headers = await this._headers();
@@ -356,25 +291,19 @@ class ShipRocketService {
   }
 
   /**
-   * Assign courier and generate AWB for a shipment.
    * @param {string|number} shipmentId
-   * @param {string|number|null} courierId  - leave null to let ShipRocket auto-assign
+   * @param {string|number|null} courierId
    */
   async assignAWB(shipmentId, courierId = null) {
     const headers = await this._headers();
     const payload = { shipment_id: String(shipmentId) };
     if (courierId) payload.courier_id = courierId;
-
     const response = await axios.post(`${BASE_URL}/courier/assign/awb`, payload, { headers });
     return response.data;
   }
 
   // ─── LABEL & MANIFEST ────────────────────────────────────────────────────────
 
-  /**
-   * Generate shipping label for one or more shipments.
-   * @param {Array<string|number>} shipmentIds
-   */
   async generateLabel(shipmentIds) {
     const headers = await this._headers();
     const response = await axios.post(
@@ -382,13 +311,9 @@ class ShipRocketService {
       { shipment_id: shipmentIds },
       { headers }
     );
-    return response.data; // Contains label_url
+    return response.data;
   }
 
-  /**
-   * Generate pickup manifest.
-   * @param {Array<string|number>} shipmentIds
-   */
   async generateManifest(shipmentIds) {
     const headers = await this._headers();
     const response = await axios.post(
@@ -396,25 +321,17 @@ class ShipRocketService {
       { shipment_id: shipmentIds },
       { headers }
     );
-    return response.data; // Contains manifest_url
+    return response.data;
   }
 
   // ─── TRACKING ────────────────────────────────────────────────────────────────
 
-  /**
-   * Track shipment by AWB number.
-   * @param {string} awb
-   */
   async trackByAWB(awb) {
     const headers = await this._headers();
     const response = await axios.get(`${BASE_URL}/courier/track/awb/${awb}`, { headers });
     return response.data;
   }
 
-  /**
-   * Track shipment by ShipRocket order ID.
-   * @param {string|number} shiprocketOrderId
-   */
   async trackByOrderId(shiprocketOrderId) {
     const headers = await this._headers();
     const response = await axios.get(`${BASE_URL}/orders/show/${shiprocketOrderId}`, { headers });
@@ -423,10 +340,6 @@ class ShipRocketService {
 
   // ─── CANCEL ──────────────────────────────────────────────────────────────────
 
-  /**
-   * Cancel ShipRocket orders.
-   * @param {Array<string|number>} shiprocketOrderIds
-   */
   async cancelOrders(shiprocketOrderIds) {
     const headers = await this._headers();
     const response = await axios.post(
@@ -439,10 +352,6 @@ class ShipRocketService {
 
   // ─── PICKUP ──────────────────────────────────────────────────────────────────
 
-  /**
-   * Schedule a pickup for shipments.
-   * @param {Array<string|number>} shipmentIds
-   */
   async schedulePickup(shipmentIds) {
     const headers = await this._headers();
     const response = await axios.post(

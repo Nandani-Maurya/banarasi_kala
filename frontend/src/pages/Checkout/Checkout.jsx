@@ -136,13 +136,8 @@ const Checkout = () => {
   const walletUsableAmount = useWallet ? Math.min(Number(walletBalance || 0), grossAfterCoupon) : 0;
   const total = Math.max(0, grossAfterCoupon - walletUsableAmount);
   const totalWeightKg = payableCart.reduce((sum, item) => {
-    const rawWeight = Number(item.weight);
-    if (!Number.isFinite(rawWeight) || rawWeight <= 0) {
-      return sum + (0.5 * Number(item.quantity || 1));
-    }
-    const weightKg = rawWeight > 5 ? rawWeight / 1000 : rawWeight;
     const qty = Math.max(1, Number(item.quantity || 1));
-    return sum + (weightKg * qty) + (PACKAGING_WEIGHT_KG * qty);
+    return sum + (PACKAGING_WEIGHT_KG * qty);
   }, 0);
 
   const getCouponSavingsText = (coupon) => {
@@ -470,7 +465,6 @@ const Checkout = () => {
           quantity: item.quantity,
           price: item.price,
           colorId: item.colorId,
-          sku: getVariantSku(item, item.colorId, item.selectedColorSlug || item.selectedColorName),
         })),
       };
 

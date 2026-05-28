@@ -580,19 +580,19 @@ const ProductModal = ({
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                 <div>
-                  <label className={labelClasses(!isSelectionComplete)}>Weight (Grams)</label>
-                  <input type="text" name="weight" value={formData.weight} onChange={handleNumberInput} placeholder="e.g., 450" className={inputClasses(!isSelectionComplete)} />
+                  <label className={labelClasses(!isSelectionComplete)}>Weight (Kilograms)</label>
+                  <input type="text" name="weight" value={formData.weight} onChange={handleNumberInput} placeholder="e.g., 0.45" className={inputClasses(!isSelectionComplete)} />
                 </div>
                 <div>
-                  <label className={labelClasses(!isSelectionComplete)}>Length (Meters)</label>
-                  <input type="text" name="length" value={formData.length} onChange={handleNumberInput} placeholder="6.5" className={inputClasses(!isSelectionComplete)} />
+                  <label className={labelClasses(!isSelectionComplete)}>Length (cm)</label>
+                  <input type="text" name="length" value={formData.length} onChange={handleNumberInput} placeholder="e.g., 650" className={inputClasses(!isSelectionComplete)} />
                 </div>
                 <div>
-                  <label className={labelClasses(!isSelectionComplete)}>Width (Meters)</label>
-                  <input type="text" name="width" value={formData.width} onChange={handleNumberInput} placeholder="1.1" className={inputClasses(!isSelectionComplete)} />
+                  <label className={labelClasses(!isSelectionComplete)}>Width (cm)</label>
+                  <input type="text" name="width" value={formData.width} onChange={handleNumberInput} placeholder="e.g., 110" className={inputClasses(!isSelectionComplete)} />
                 </div>
                 <div>
-                  <label className={labelClasses(!isSelectionComplete)}>Height (Centimeters)</label>
+                  <label className={labelClasses(!isSelectionComplete)}>Height (cm)</label>
                   <input type="text" name="height" value={formData.height || ""} onChange={handleNumberInput} placeholder="e.g., 5" className={inputClasses(!isSelectionComplete)} />
                 </div>
               </div>

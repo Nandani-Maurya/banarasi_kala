@@ -18,7 +18,7 @@ import "./ProductDetail.css";
 
 const PRODUCT_RATING = "4.8";
 const PRODUCT_REVIEW_COUNT = "124";
-const PACKAGING_WEIGHT_KG = Number(import.meta.env.VITE_PACKAGING_WEIGHT_KG || 0.2);
+const PACKAGING_WEIGHT_KG = Number(import.meta.env.VITE_PACKAGING_WEIGHT_KG || 0.7);
 const PREFERRED_COURIER_NAME = String(import.meta.env.VITE_PREFERRED_COURIER_NAME || "Xpressbees Surface").toLowerCase();
 const COD_MAX_AMOUNT = Number(import.meta.env.VITE_COD_MAX_AMOUNT || 10000);
 const PREPAID_DISCOUNT_AMOUNT = Number(import.meta.env.VITE_PREPAID_DISCOUNT_AMOUNT || 50);
@@ -440,7 +440,7 @@ const ProductDetail = () => {
       try {
         setBuyNowShippingLoading(true);
         const rawWeight = Number(product?.weight);
-        const productWeightKg = Number.isFinite(rawWeight) && rawWeight > 0 ? (rawWeight > 5 ? rawWeight / 1000 : rawWeight) : 0.5;
+        const productWeightKg = Number.isFinite(rawWeight) && rawWeight > 0 ? rawWeight : 0.5;
         const totalQty = Math.max(1, Number(quantity || 1));
         const totalWeightKg = (productWeightKg * totalQty) + (PACKAGING_WEIGHT_KG * totalQty);
         const response = await fetch(

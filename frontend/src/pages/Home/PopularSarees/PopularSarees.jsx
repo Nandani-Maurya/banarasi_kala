@@ -144,8 +144,8 @@ const PopularSarees = () => {
       ) : (
         <div className="bk-popular-showcase">
           {products.slice(0, 10).map((product, index) => {
-            const sell = Number(product.selling_price || product.price);
-            const mrp = Number(product.mrp_price || product.mrp || 0);
+            const sell = Number(product.selling_price);
+            const mrp = Number(product.mrp_price);
             const disc = calcDiscount(mrp, sell);
             const img = getProductCoverImage(product);
             const cardImages = getProductImages(product);
