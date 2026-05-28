@@ -25,9 +25,8 @@ const CustomerAddressRoutes = require("./routes/CustomerAddressRoutes");
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
-  "https://vns-saree-new.vercel.app",
-  "https://vns-saree-bgbv.vercel.app",
-  "https://banarasi-kala.vercel.app"
+  "https://banarasi-kala.vercel.app",
+  "https://banarasi-kala-jgqe.vercel.app/"
 ];
 
 
