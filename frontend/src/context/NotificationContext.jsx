@@ -13,7 +13,10 @@ export const NotificationProvider = ({ children }) => {
     if (timerRef.current) {
       window.clearTimeout(timerRef.current);
     }
-    setNotification({ message, type });
+    const payload = typeof message === "object" && message !== null
+      ? { ...message, type: message.type || type }
+      : { message, type };
+    setNotification(payload);
     timerRef.current = window.setTimeout(() => {
       setNotification(null);
       timerRef.current = null;
@@ -23,21 +26,21 @@ export const NotificationProvider = ({ children }) => {
   const getToastStyle = (type) => {
     if (type === "success") {
       return {
-        shell: "border-emerald-200 bg-white text-[#24392d] shadow-[0_14px_34px_rgba(20,83,45,0.14)]",
-        icon: "bg-emerald-50 text-emerald-700",
+        shell: "border-white/20 bg-neutral-900/78 text-white shadow-[0_14px_34px_rgba(0,0,0,0.18)] backdrop-blur-md",
+        icon: "bg-white/16 text-white",
         glyph: "lucide:check",
       };
     }
     if (type === "error") {
       return {
-        shell: "border-red-200 bg-white text-[#4a1d1d] shadow-[0_14px_34px_rgba(127,29,29,0.14)]",
-        icon: "bg-red-50 text-red-700",
+        shell: "border-white/20 bg-neutral-900/78 text-white shadow-[0_14px_34px_rgba(0,0,0,0.18)] backdrop-blur-md",
+        icon: "bg-white/16 text-white",
         glyph: "lucide:alert-circle",
       };
     }
     return {
-      shell: "border-amber-200 bg-white text-[#4a3517] shadow-[0_14px_34px_rgba(146,64,14,0.14)]",
-      icon: "bg-amber-50 text-amber-700",
+      shell: "border-white/20 bg-neutral-900/78 text-white shadow-[0_14px_34px_rgba(0,0,0,0.18)] backdrop-blur-md",
+      icon: "bg-white/16 text-white",
       glyph: "lucide:info",
     };
   };
@@ -56,28 +59,21 @@ export const NotificationProvider = ({ children }) => {
             top: "50%",
             transform: "translate(-50%, -50%)",
             zIndex: 10000,
-            width: "min(320px, calc(100vw - 32px))",
+            width: "min(260px, calc(100vw - 32px))",
           }}
         >
-          <div className={`pointer-events-auto w-full rounded-xl border px-3.5 py-3 flex items-start gap-3 transition-all duration-300 ${toastStyle.shell}`}>
-            <div className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full ${toastStyle.icon}`}>
+          <div className={`pointer-events-auto mx-auto w-fit min-w-[190px] max-w-full rounded-xl border px-5 py-4 flex flex-col items-center justify-center gap-2.5 text-center transition-all duration-300 ${toastStyle.shell}`}>
+            <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full ${toastStyle.icon}`}>
               <Icon 
                 icon={toastStyle.glyph}
-                className="text-base"
+                className="text-2xl"
               ></Icon>
             </div>
-            <div className="min-w-0 flex-1 pt-0.5">
-              <span className="block text-sm font-medium leading-snug">
+            <div className="min-w-0">
+              <span className="block text-sm font-semibold leading-snug">
                 {notification.message}
               </span>
             </div>
-            <button 
-              onClick={() => setNotification(null)}
-              className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[#7a6b5c] hover:bg-[#f7efe4] transition-colors"
-              aria-label="Close notification"
-            >
-              <Icon icon="lucide:x" className="text-sm"></Icon>
-            </button>
           </div>
         </div>
       )}

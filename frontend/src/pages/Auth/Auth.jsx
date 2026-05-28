@@ -373,7 +373,7 @@ const Auth = () => {
     setLoading(true);
     try {
       await login(loginData.identifier, loginData.password, loginData.keepLoggedIn);
-      showNotification("Logged in successfully.", "success");
+      showNotification("Login successfully", "success");
     } catch (err) {
       console.error("[Auth] login failed:", err);
       setError(getFriendlyError(err, "Unable to login right now. Please contact support or try again later."));
@@ -403,7 +403,7 @@ const Auth = () => {
         email: signupData.email.trim().toLowerCase(),
         email_otp_token: signupOtpToken,
       });
-      showNotification("Account created successfully.", "success");
+      showNotification("Account created successfully", "success");
       setSuccess("Account created successfully.");
     } catch (err) {
       console.error("[Auth] signup failed:", err);

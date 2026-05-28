@@ -237,7 +237,7 @@ const Header = () => {
 
   const handleLogout = () => {
     logout();
-    showNotification("Logged out successfully.", "success");
+    showNotification("Logout successfully", "success");
     closeMenus();
     navigate("/", { state: { refreshKey: Date.now() } });
   };
