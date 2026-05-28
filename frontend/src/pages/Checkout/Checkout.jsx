@@ -12,6 +12,7 @@ import CheckoutOrderPanel from "../../components/CheckoutOrderPanel";
 import { getProductStockInfo } from "../../utils/stockStatus";
 import { formatEstimatedDeliveryDate, getEstimatedDeliveryDate } from "../../utils/deliveryDate";
 import { getVariantSku } from "../../utils/itemCode";
+import { selectBestCourier } from "../../utils/courierSelection";
 import "./Checkout.css";
 
 const PACKAGING_WEIGHT_KG = Number(import.meta.env.VITE_PACKAGING_WEIGHT_KG || 0.7);
@@ -54,22 +55,6 @@ const getCheckoutAddressLine = (address = {}) =>
   [address.house_building, address.area_street, address.landmark, address.city, address.state, address.pincode]
     .filter(Boolean)
     .join(", ");
-
-const getCourierRate = (courier = {}) => {
-  const rate = Number(courier?.rate ?? courier?.freight_charge ?? courier?.courier_charge);
-  return Number.isFinite(rate) && rate >= 0 ? rate : null;
-};
-
-const selectCheckoutCourier = (couriers = []) =>
-  couriers
-    .map((courier) => ({
-      rate: getCourierRate(courier),
-      etd: courier?.etd || courier?.estimated_delivery_days || null,
-      courier: courier?.courier_name || "Courier",
-      raw: courier,
-    }))
-    .filter((courier) => courier.rate !== null)
-    .sort((left, right) => left.rate - right.rate)[0] || null;
 
 const Checkout = () => {
   const { cart, clearCart } = useCart();
@@ -392,7 +377,10 @@ const Checkout = () => {
 
         const data = await response.json();
         const couriers = data?.data?.available_courier_companies || [];
-        const selectedCourier = selectCheckoutCourier(couriers);
+        const selectedCourier = selectBestCourier(couriers, {
+          weightKg: effectiveWeight,
+          requireCod: activePayment === "cod" && subtotal <= COD_MAX_AMOUNT,
+        });
 
         if (!cancelled) {
           setShippingCharge(selectedCourier?.rate || 0);

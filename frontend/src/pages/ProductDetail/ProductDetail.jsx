@@ -14,17 +14,16 @@ import CheckoutReviewSummary from "../../components/CheckoutReviewSummary";
 import CheckoutOrderPanel from "../../components/CheckoutOrderPanel";
 import { formatEstimatedDeliveryDate, getEstimatedDeliveryDate } from "../../utils/deliveryDate";
 import { getVariantSku } from "../../utils/itemCode";
+import { selectBestCourier } from "../../utils/courierSelection";
 import "./ProductDetail.css";
 
 const PRODUCT_RATING = "4.8";
 const PRODUCT_REVIEW_COUNT = "124";
 const PACKAGING_WEIGHT_KG = Number(import.meta.env.VITE_PACKAGING_WEIGHT_KG || 0.7);
-const PREFERRED_COURIER_NAME = String(import.meta.env.VITE_PREFERRED_COURIER_NAME || "Xpressbees Surface").toLowerCase();
 const COD_MAX_AMOUNT = Number(import.meta.env.VITE_COD_MAX_AMOUNT || 10000);
 const PREPAID_DISCOUNT_AMOUNT = Number(import.meta.env.VITE_PREPAID_DISCOUNT_AMOUNT || 50);
 const COD_FEE_AMOUNT = Number(import.meta.env.VITE_COD_FEE_AMOUNT || 50);
 const PLATFORM_FEE_AMOUNT = Number(import.meta.env.VITE_PLATFORM_FEE_AMOUNT || 5);
-const COURIER_SELECTION_MODE = String(import.meta.env.VITE_COURIER_SELECTION_MODE || "preferred_or_cheapest").toLowerCase();
 const EMPTY_BUY_NOW_ADDRESS = {
   label: "Home",
   name: "",
@@ -61,34 +60,6 @@ const getAddressLine = (address = {}) =>
   [address.house_building, address.area_street, address.landmark, address.city, address.state, address.pincode]
     .filter(Boolean)
     .join(", ");
-
-const normalizeCourierName = (name) => String(name || "").trim().toLowerCase();
-
-const getCourierRate = (courier = {}) => {
-  const rate = Number(courier?.rate ?? courier?.freight_charge ?? courier?.courier_charge);
-  return Number.isFinite(rate) && rate >= 0 ? rate : null;
-};
-
-const getServiceableCourierOptions = (couriers = []) =>
-  couriers
-    .map((courier) => ({
-      rate: getCourierRate(courier),
-      etd: courier?.etd || courier?.estimated_delivery_days || null,
-      courier: courier?.courier_name || "Courier",
-      raw: courier,
-    }))
-    .filter((courier) => courier.rate !== null)
-    .sort((left, right) => left.rate - right.rate);
-
-const selectCheckoutCourier = (couriers = []) => {
-  const options = getServiceableCourierOptions(couriers);
-  if (!options.length) return null;
-
-  const preferred = options.find((option) => normalizeCourierName(option.courier).includes(PREFERRED_COURIER_NAME));
-  if (COURIER_SELECTION_MODE === "cheapest") return options[0];
-
-  return preferred || options[0];
-};
 
 const ProductDetail = () => {
   const { slug } = useParams();
@@ -449,7 +420,10 @@ const ProductDetail = () => {
         const data = await response.json();
         if (!response.ok) throw new Error(data?.message || "Unable to check delivery");
 
-        const selected = selectCheckoutCourier(data?.data?.available_courier_companies || []);
+        const selected = selectBestCourier(data?.data?.available_courier_companies || [], {
+          weightKg: Math.max(0.1, Number(totalWeightKg.toFixed(3))),
+          requireCod: buyNowPayment === "cod" && buyNowSubtotal <= COD_MAX_AMOUNT,
+        });
 
         if (!cancelled) {
           setBuyNowShipping(selected ? {
@@ -910,7 +884,10 @@ const ProductDetail = () => {
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || "Unable to check delivery");
 
-      const selectedOption = selectCheckoutCourier(data?.data?.available_courier_companies || []);
+      const selectedOption = selectBestCourier(data?.data?.available_courier_companies || [], {
+        weightKg: Math.max(0.1, Number(totalWeightKg.toFixed(3))),
+        requireCod: canUseCod,
+      });
       if (!selectedOption) {
         setDeliveryQuote({ unavailable: true });
         return;
