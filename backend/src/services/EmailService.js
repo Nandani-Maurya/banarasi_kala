@@ -4,21 +4,17 @@ const { config } = require('../config/env');
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
-  port: 587,        //  Port 587 use karein (Render isko block nahi karta)
-  secure: false,    //  Isko FALSE rakhna hai port 587 ke liye (yeh internally STARTTLS upgrade karega)
+  port: 465,        //  Port 465 use karein (Render isko block nahi karta)
+  secure: true,     //  Isko TRUE rakhna hai port 465 ke liye (yeh internally SSL/TLS upgrade karega)
   pool: true,
   maxConnections: 5,
+  family: 4,
   
   // Terminal logging temporarily on rakhein check karne ke liye
   logger: true,
   debug: true,
 
-  // Force IPv4
-  lookup: (hostname, options, callback) => {
-    dns.lookup(hostname, { family: 4 }, (err, address, family) => {
-      callback(err, address, family);
-    });
-  },
+
   
   auth: {
     user: config.emailUser,
