@@ -6,6 +6,7 @@ import { useNotification } from "../../context/NotificationContext";
 import api from "../../utils/api";
 import { formatEstimatedDeliveryDate, getEstimatedDeliveryDate } from "../../utils/deliveryDate";
 import { getOrderDisplayNumber } from "../../utils/itemCode";
+import { numberEnv } from "../../utils/env";
 import EmptyStateIcon from "../../components/EmptyStateIcon";
 import "./MyOrders.css";
 
@@ -52,7 +53,7 @@ const getOrderBreakdown = (order) => {
   const shippingCharge = toNumber(order.shipping_charge);
   const shippingDiscount = toNumber(order.shipping_discount);
   const paymentFee = toNumber(order.payment_fee);
-  const platformFeeAmount = Number(import.meta.env.VITE_PLATFORM_FEE_AMOUNT || 5);
+  const platformFeeAmount = numberEnv("VITE_PLATFORM_FEE_AMOUNT");
   const hasCod = String(order.payment_method).toUpperCase() === "COD";
 
   let codCharge = 0;

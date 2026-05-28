@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const Customer = require("../models/Customer");
 const Admin = require("../models/Admin");
+const { config } = require("../config/env");
 
 const authMiddleware = async (req, res, next) => {
   try {
@@ -10,10 +11,10 @@ const authMiddleware = async (req, res, next) => {
     }
 
     const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+    const decoded = jwt.verify(token, config.jwtSecret);
+
     let user = null;
-    let role = decoded.role || "customer";
+    const role = decoded.role || "customer";
 
     if (role === "admin") {
       user = await Admin.findByPk(decoded.id);
@@ -25,11 +26,10 @@ const authMiddleware = async (req, res, next) => {
       return res.status(401).json({ message: "User not found" });
     }
 
-    // Attach user and role to request
     req.user = user;
     req.userRole = role;
-    req.customer = user; // For backward compatibility
-    
+    req.customer = user;
+
     next();
   } catch (error) {
     console.error("Auth Middleware Error:", error.message);
@@ -45,7 +45,7 @@ const optionalAuthMiddleware = async (req, res, next) => {
     }
 
     const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, config.jwtSecret);
     const role = decoded.role || "customer";
     const user = role === "admin"
       ? await Admin.findByPk(decoded.id)
@@ -63,10 +63,10 @@ const optionalAuthMiddleware = async (req, res, next) => {
 };
 
 const adminMiddleware = (req, res, next) => {
-  if (req.userRole === 'admin' || (req.user && req.user.role === 'admin')) {
+  if (req.userRole === "admin" || (req.user && req.user.role === "admin")) {
     next();
   } else {
-    res.status(403).json({ success: false, message: 'Access denied. Admin only.' });
+    res.status(403).json({ success: false, message: "Access denied. Admin only." });
   }
 };
 

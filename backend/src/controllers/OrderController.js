@@ -102,11 +102,11 @@ const buildItemShippingMeta = ({
 }) => {
   const quantity = Math.max(1, Number(item.quantity || 1));
   const productWeightKg = getProductWeightKg(product);
-  const boxWeightKg = Math.max(0, Number(config.packageWeightKg || 0));
+  const boxWeightKg = Math.max(0, Number(config.packageWeightKg));
   const effectiveShippingPaid = Math.max(0, allocatedShipping - allocatedShippingDiscount);
   const isFirstOrderFreeShipping = shippingDiscountReason === 'first_order';
   const returnDeliveryDeduction = isFirstOrderFreeShipping ? 0 : allocatedShipping;
-  const rtoCharge = isFirstOrderFreeShipping ? 0 : roundMoney(allocatedShipping * Math.max(0, Number(config.rtoChargeMultiplier || 1)));
+  const rtoCharge = isFirstOrderFreeShipping ? 0 : roundMoney(allocatedShipping * Math.max(0, Number(config.rtoChargeMultiplier)));
 
   return {
     product_weight_kg: roundMoney(productWeightKg),
@@ -136,7 +136,7 @@ const allocateItemShipping = ({ items, productMap, shippingCharge, shippingDisco
     const quantity = Math.max(1, Number(item.quantity || 1));
     const product = productMap[item.id];
     const productWeightKg = getProductWeightKg(product);
-    const allocationWeight = (productWeightKg + Math.max(0, Number(config.packageWeightKg || 0))) * quantity;
+    const allocationWeight = (productWeightKg + Math.max(0, Number(config.packageWeightKg))) * quantity;
     return { item, product, allocationWeight };
   });
   const totalWeight = lines.reduce((sum, line) => sum + line.allocationWeight, 0) || lines.length || 1;

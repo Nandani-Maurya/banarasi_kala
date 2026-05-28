@@ -22,21 +22,12 @@ const ReferralRoutes = require("./routes/ReferralRoutes");
 const CustomerRoutes = require("./routes/CustomerRoutes");
 const CustomerAddressRoutes = require("./routes/CustomerAddressRoutes");
 
-const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "https://banarasi-kala.vercel.app",
-  "https://banarasi-kala-jgqe.vercel.app"
-];
-
-
 const app = express();
 
-// app.use(cors({ origin: parseCorsOrigins(), credentials: true }));
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || config.corsOrigins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));

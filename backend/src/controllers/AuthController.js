@@ -55,17 +55,6 @@ class AuthController {
     }
   }
 
-  async verifyOTP(req, res) {
-    try {
-      const { phone, msg91_access_token } = req.body;
-      const result = await AuthService.verifyResetPhone(phone, msg91_access_token);
-      res.json(result);
-    } catch (error) {
-      console.error("[AuthController:verifyOTP]", error.message, error.code || "");
-      res.status(error.code === "OTP_RATE_LIMITED" ? 429 : 400).json({ message: error.message, code: error.code });
-    }
-  }
-
   async resetPassword(req, res) {
     try {
       const { email, email_otp_token, newPassword } = req.body;

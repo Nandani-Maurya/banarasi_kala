@@ -1,6 +1,6 @@
 const nodemailer = require('nodemailer');
 const dns = require('dns');
-require('dotenv').config();
+const { config } = require('../config/env');
 
 const transporter = nodemailer.createTransport({
   host: 'smtp.gmail.com',
@@ -21,8 +21,8 @@ const transporter = nodemailer.createTransport({
   },
   
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    user: config.emailUser,
+    pass: config.emailPass,
   },
   tls: {
     //  Render/Cloud instances ke handshake ke liye zaroori hai
@@ -57,14 +57,14 @@ class EmailService {
     `).join('');
 
     const mailOptions = {
-      from: `"Banaras Heritage" <${process.env.EMAIL_USER}>`,
+      from: `"Banarasi Kala" <${config.emailUser}>`,
       to: order.customer_email,
       subject: `Order Confirmed - ${orderNumber} | Banaras Heritage`,
       html: `
         <div style="font-family: 'Playfair Display', serif; color: #3D2817; max-width: 600px; margin: auto; border: 1px solid #D4AF37; padding: 40px; background-color: #FDFCFB;">
           <h1 style="color: #800020; text-align: center; border-bottom: 2px solid #D4AF37; padding-bottom: 20px;">Banaras Heritage</h1>
           <p>Dear ${order.customer_name},</p>
-          <p>Thank you for choosing Banaras Heritage. Your order for our handcrafted masterpiece has been confirmed.</p>
+          <p>Thank you for choosing Banarasi Kala. Your order for our handcrafted masterpiece has been confirmed.</p>
           
           <h3 style="color: #800020; margin-top: 30px;">Order Summary (${orderNumber})</h3>
           <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
@@ -123,12 +123,12 @@ class EmailService {
     const orderNumber = order.order_number;
 
     const mailOptions = {
-      from: `"Banaras Heritage" <${process.env.EMAIL_USER}>`,
+      from: `"Banarasi Kala" <${config.emailUser}>`,
       to: order.customer_email,
       subject: `Order ${orderNumber} ${normalizedStatus} | Banaras Heritage`,
       html: `
         <div style="font-family: Arial, sans-serif; color: #3D2817; max-width: 600px; margin: auto; border: 1px solid #ead8b2; padding: 32px; background-color: #fffaf0;">
-          <h1 style="color: #800020; margin: 0 0 12px;">Banaras Heritage</h1>
+          <h1 style="color: #800020; margin: 0 0 12px;">Banarasi Kala</h1>
           <p style="font-size: 16px;">Dear ${order.customer_name || "Customer"},</p>
           <p style="font-size: 15px; line-height: 1.6;">${message}</p>
           <div style="margin: 24px 0; padding: 18px; border-radius: 10px; background: #ffffff; border: 1px solid #ead8b2;">
@@ -146,7 +146,7 @@ class EmailService {
 
   async sendOTP(email, otp, name) {
     const mailOptions = {
-      from: `"Banaras Heritage" <${process.env.EMAIL_USER}>`,
+      from: `"Banaras Heritage" <${config.emailUser}>`,
       to: email,
       subject: `Password Reset OTP - Banaras Heritage`,
       html: `

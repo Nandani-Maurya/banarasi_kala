@@ -2,54 +2,78 @@ const path = require("path");
 const dotenv = require("dotenv");
 
 dotenv.config({
-  path: process.env.ENV_FILE || path.resolve(__dirname, "../../.env"),
+  path: process.env.ENV_FILE ? path.resolve(process.env.ENV_FILE) : path.resolve(__dirname, "../../.env"),
 });
 
-const normalize = (value, fallback = "") => String(value || fallback).trim();
-
-const parseBoolean = (value, fallback = false) => {
-  if (value === undefined || value === null || value === "") return fallback;
-  return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+const readEnv = (key) => {
+  const value = process.env[key];
+  if (value === undefined || value === null || String(value).trim() === "") {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+  return String(value).trim();
 };
 
-const rawAppMode = normalize(process.env.APP_MODE, "dev").toLowerCase();
-const appMode = rawAppMode === "prod" ? "prod" : "dev";
-const nodeEnv = appMode === "prod" ? "production" : "development";
-const databaseUrl = normalize(process.env.DATABASE_URL);
+const readNumberEnv = (key) => {
+  const value = Number(readEnv(key));
+  if (!Number.isFinite(value)) {
+    throw new Error(`Environment variable ${key} must be a valid number.`);
+  }
+  return value;
+};
 
+const appMode = readEnv("APP_MODE").toLowerCase();
+if (!["production", "development"].includes(appMode)) {
+  throw new Error("APP_MODE must be either production or development.");
+}
+
+const nodeEnv = appMode;
 process.env.NODE_ENV = nodeEnv;
+
+const readCsvEnv = (key) =>
+  readEnv(key)
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
 
 const config = {
   nodeEnv,
   appMode,
-  isDevelopment: appMode === "dev",
-  isProduction: appMode === "prod",
-  port: Number(process.env.PORT || 5003),
-  databaseUrl,
-  dbSchema: normalize(process.env.DB_SCHEMA, "vns_saree"),
-  // Purani line ko hata kar yeh likhein:
-  corsOrigins: process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(",").map(url => url.trim())
-    : ["https://banarasi-kala.vercel.app","https://banarasi-kala-jgqe.vercel.app", "http://localhost:3000", "http://localhost:5173"],
-  welcomeBonus: Number(process.env.WELCOME_BONUS || 50),
-  referralSignupBonus: Number(process.env.REFERRAL_SIGNUP_BONUS || 100),
-  referralOrderBonus: Number(process.env.REFERRAL_ORDER_BONUS || 50),
-  referralOrderDelayDays: Number(process.env.REFERRAL_ORDER_DELAY_DAYS || 7),
-  referralMilestoneCount: Number(process.env.REFERRAL_MILESTONE_COUNT || 3),
-  referralMilestoneBonus: Number(process.env.REFERRAL_MILESTONE_BONUS || 1000),
-  codMaxAmount: Number(process.env.COD_MAX_AMOUNT || 10000),
-  freeShippingMinAmount: Number(process.env.FREE_SHIPPING_MIN_AMOUNT || 10000),
-  prepaidDiscountAmount: Number(process.env.PREPAID_DISCOUNT_AMOUNT || 50),
-  codFeeAmount: Number(process.env.COD_FEE_AMOUNT || 50),
-  packageWeightKg: Number(process.env.PACKAGE_WEIGHT_KG || 0.7),
-  packageLengthCm: Number(process.env.PACKAGE_LENGTH_CM || 16),
-  packageBreadthCm: Number(process.env.PACKAGE_BREADTH_CM || 11),
-  packageHeightCm: Number(process.env.PACKAGE_HEIGHT_CM || 3),
-  rtoChargeMultiplier: Number(process.env.RTO_CHARGE_MULTIPLIER || 1),
-  shiprocketPickupLocation: normalize(process.env.SHIPROCKET_PICKUP_LOCATION, "Home"),
-  shiprocketWebhookSecret: normalize(process.env.SHIPROCKET_WEBHOOK_SECRET),
-  msg91AuthKey: normalize(process.env.MSG91_AUTHKEY),
-  requireMsg91Otp: appMode === "prod" || parseBoolean(process.env.REQUIRE_MSG91_OTP, false),
+  isDevelopment: appMode === "development",
+  isProduction: appMode === "production",
+  port: readNumberEnv("PORT"),
+  databaseUrl: readEnv("DATABASE_URL"),
+  dbSchema: readEnv("DB_SCHEMA"),
+  corsOrigins: readCsvEnv("CORS_ORIGINS"),
+  jwtSecret: readEnv("JWT_SECRET"),
+  refreshTokenSecret: readEnv("REFRESH_TOKEN_SECRET"),
+  jwtExpiresIn: readEnv("JWT_EXPIRES_IN"),
+  refreshTokenExpiresIn: readEnv("REFRESH_TOKEN_EXPIRES_IN"),
+  cloudinaryCloudName: readEnv("CLOUDINARY_CLOUD_NAME"),
+  cloudinaryApiKey: readEnv("CLOUDINARY_API_KEY"),
+  cloudinaryApiSecret: readEnv("CLOUDINARY_API_SECRET"),
+  razorpayKeyId: readEnv("RAZORPAY_KEY_ID"),
+  razorpayKeySecret: readEnv("RAZORPAY_KEY_SECRET"),
+  emailUser: readEnv("EMAIL_USER"),
+  emailPass: readEnv("EMAIL_PASS"),
+  shiprocketEmail: readEnv("SHIPROCKET_EMAIL"),
+  shiprocketPassword: readEnv("SHIPROCKET_PASSWORD"),
+  shiprocketPickupLocation: readEnv("SHIPROCKET_PICKUP_LOCATION"),
+  shiprocketWebhookSecret: readEnv("SHIPROCKET_WEBHOOK_SECRET"),
+  shiprocketGatewayApiKey: readEnv("SHIPROCKET_GATEWAY_API_KEY"),
+  shiprocketGatewayApiSecret: readEnv("SHIPROCKET_GATEWAY_API_SECRET"),
+  welcomeBonus: readNumberEnv("WELCOME_BONUS"),
+  referralSignupBonus: readNumberEnv("REFERRAL_SIGNUP_BONUS"),
+  referralOrderDelayDays: readNumberEnv("REFERRAL_ORDER_DELAY_DAYS"),
+  referralMilestoneCount: readNumberEnv("REFERRAL_MILESTONE_COUNT"),
+  referralMilestoneBonus: readNumberEnv("REFERRAL_MILESTONE_BONUS"),
+  codMaxAmount: readNumberEnv("COD_MAX_AMOUNT"),
+  prepaidDiscountAmount: readNumberEnv("PREPAID_DISCOUNT_AMOUNT"),
+  codFeeAmount: readNumberEnv("COD_FEE_AMOUNT"),
+  packageWeightKg: readNumberEnv("PACKAGE_WEIGHT_KG"),
+  packageLengthCm: readNumberEnv("PACKAGE_LENGTH_CM"),
+  packageBreadthCm: readNumberEnv("PACKAGE_BREADTH_CM"),
+  packageHeightCm: readNumberEnv("PACKAGE_HEIGHT_CM"),
+  rtoChargeMultiplier: readNumberEnv("RTO_CHARGE_MULTIPLIER"),
 };
 
-module.exports = { config, parseBoolean };
+module.exports = { config };

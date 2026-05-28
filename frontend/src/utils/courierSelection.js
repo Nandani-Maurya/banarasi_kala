@@ -1,4 +1,4 @@
-const DEFAULT_PREFERRED_COURIER = "Xpressbees Surface";
+import { requiredEnv } from "./env";
 
 const toNumber = (value, fallback = null) => {
   const next = Number(value);
@@ -112,7 +112,7 @@ const scoreCourier = (option, preferredName = "") => {
 };
 
 export const selectBestCourier = (couriers = [], {
-  preferredName = import.meta.env.VITE_PREFERRED_COURIER_NAME || DEFAULT_PREFERRED_COURIER,
+  preferredName = requiredEnv("VITE_PREFERRED_COURIER_NAME"),
   weightKg = null,
   requireCod = false,
 } = {}) => {

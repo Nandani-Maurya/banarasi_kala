@@ -1,9 +1,10 @@
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
+const { config } = require('../config/env');
 
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_your_key_id',
-  key_secret: process.env.RAZORPAY_KEY_SECRET || 'your_key_secret',
+  key_id: config.razorpayKeyId,
+  key_secret: config.razorpayKeySecret,
 });
 
 class RazorpayController {
@@ -29,7 +30,7 @@ class RazorpayController {
 
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
     const expectedSign = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || 'your_key_secret')
+      .createHmac("sha256", config.razorpayKeySecret)
       .update(sign.toString())
       .digest("hex");
 

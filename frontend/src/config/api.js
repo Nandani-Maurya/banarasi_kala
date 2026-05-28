@@ -1,5 +1,6 @@
-// API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5003';
+import { requiredEnv } from "../utils/env";
+
+const API_BASE_URL = requiredEnv("VITE_API_URL");
 
 export const API_ENDPOINTS = {
   base: API_BASE_URL,

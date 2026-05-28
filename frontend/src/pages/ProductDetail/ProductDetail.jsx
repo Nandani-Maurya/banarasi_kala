@@ -15,15 +15,16 @@ import CheckoutOrderPanel from "../../components/CheckoutOrderPanel";
 import { formatEstimatedDeliveryDate, getEstimatedDeliveryDate } from "../../utils/deliveryDate";
 import { getVariantSku } from "../../utils/itemCode";
 import { selectBestCourier } from "../../utils/courierSelection";
+import { numberEnv, requiredEnv } from "../../utils/env";
 import "./ProductDetail.css";
 
 const PRODUCT_RATING = "4.8";
 const PRODUCT_REVIEW_COUNT = "124";
-const PACKAGING_WEIGHT_KG = Number(import.meta.env.VITE_PACKAGING_WEIGHT_KG || 0.7);
-const COD_MAX_AMOUNT = Number(import.meta.env.VITE_COD_MAX_AMOUNT || 10000);
-const PREPAID_DISCOUNT_AMOUNT = Number(import.meta.env.VITE_PREPAID_DISCOUNT_AMOUNT || 50);
-const COD_FEE_AMOUNT = Number(import.meta.env.VITE_COD_FEE_AMOUNT || 50);
-const PLATFORM_FEE_AMOUNT = Number(import.meta.env.VITE_PLATFORM_FEE_AMOUNT || 5);
+const PACKAGING_WEIGHT_KG = numberEnv("VITE_PACKAGING_WEIGHT_KG");
+const COD_MAX_AMOUNT = numberEnv("VITE_COD_MAX_AMOUNT");
+const PREPAID_DISCOUNT_AMOUNT = numberEnv("VITE_PREPAID_DISCOUNT_AMOUNT");
+const COD_FEE_AMOUNT = numberEnv("VITE_COD_FEE_AMOUNT");
+const PLATFORM_FEE_AMOUNT = numberEnv("VITE_PLATFORM_FEE_AMOUNT");
 const EMPTY_BUY_NOW_ADDRESS = {
   label: "Home",
   name: "",
@@ -798,7 +799,7 @@ const ProductDetail = () => {
       if (!orderResponse.ok) throw new Error(razorpayOrder.message || "Unable to start payment.");
 
       const razorpay = new window.Razorpay({
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+        key: requiredEnv("VITE_RAZORPAY_KEY_ID"),
         amount: razorpayOrder.amount,
         currency: "INR",
         name: "Banarasi Kala",

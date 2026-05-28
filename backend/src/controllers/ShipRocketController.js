@@ -3,6 +3,7 @@ const ShipRocketService = require('../services/ShipRocketService');
 const Order = require('../models/Order');
 const OrderItem = require('../models/OrderItem');
 const EmailService = require('../services/EmailService');
+const WalletService = require('../services/WalletService');
 const { config } = require('../config/env');
 
 const mapShiprocketStatus = (value = '') => {
@@ -313,6 +314,10 @@ class ShipRocketController {
         refund_note: refundNote,
         shiprocket_return_order_id: data.order_id ? String(data.order_id) : null
       });
+      await WalletService.cancelPendingReferralCreditsForOrder(
+        order.id,
+        'Customer requested return within the reward hold period.',
+      );
 
       return res.status(200).json({
         message: 'Return order created on ShipRocket successfully',
@@ -403,14 +408,12 @@ class ShipRocketController {
   async webhook(req, res) {
     console.log("Webhook received");
     try {
-      if (config.shiprocketWebhookSecret) {
-        const providedSecret = 
-          req.headers['x-api-key'] || 
-          req.headers['x-webhook-secret'] || 
-          req.headers['x-shiprocket-webhook-secret'];
-        if (String(providedSecret || '') !== config.shiprocketWebhookSecret) {
-          return res.status(401).json({ message: 'Invalid webhook secret' });
-        }
+      const providedSecret =
+        req.headers['x-api-key'] ||
+        req.headers['x-webhook-secret'] ||
+        req.headers['x-shiprocket-webhook-secret'];
+      if (String(providedSecret || '') !== config.shiprocketWebhookSecret) {
+        return res.status(401).json({ message: 'Invalid webhook secret' });
       }
       const payload = req.body || {};
       const awb = payload.awb || payload.awb_code || payload.awb_number || payload.shipment?.awb || payload.shipment_track?.awb_code;

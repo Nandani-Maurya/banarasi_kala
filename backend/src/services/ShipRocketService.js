@@ -24,8 +24,8 @@ class ShipRocketService {
       return this._token;
     }
     const response = await axios.post(`${BASE_URL}/auth/login`, {
-      email: process.env.SHIPROCKET_EMAIL,
-      password: process.env.SHIPROCKET_PASSWORD,
+      email: config.shiprocketEmail,
+      password: config.shiprocketPassword,
     });
     this._token = response.data.token;
     this._tokenExpiry = Date.now() + 24 * 60 * 60 * 1000;
@@ -93,14 +93,14 @@ class ShipRocketService {
 
   async getActivePickupLocation() {
     const locations = await this.getPickupLocations({ force: true });
-    const pickupName = String(config.shiprocketPickupLocation || 'Home').trim().toLowerCase();
+    const pickupName = config.shiprocketPickupLocation.trim().toLowerCase();
     const selected =
       locations.find((item) => item.isActive && item.name.toLowerCase() === pickupName) ||
       locations.find((item) => item.name.toLowerCase() === pickupName);
 
     if (!selected) {
       throw new Error(
-        `ShipRocket pickup location "${config.shiprocketPickupLocation || 'Home'}" was not found in your ShipRocket account.`
+        `ShipRocket pickup location "${config.shiprocketPickupLocation}" was not found in your ShipRocket account.`
       );
     }
     return selected;

@@ -1,4 +1,6 @@
-const ORDER_PROCESSING_DAYS = Number(import.meta.env.VITE_ORDER_PROCESSING_DAYS || 4);
+import { numberEnv } from "./env";
+
+const ORDER_PROCESSING_DAYS = numberEnv("VITE_ORDER_PROCESSING_DAYS");
 
 export const addDays = (date, days) => {
   const next = new Date(date);

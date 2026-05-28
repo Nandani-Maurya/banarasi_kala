@@ -5,21 +5,23 @@ const Admin = require("../models/Admin");
 const { Op } = require("sequelize");
 const WalletService = require("./WalletService");
 const { config } = require("../config/env");
-const Msg91Service = require("./Msg91Service");
 const EmailService = require("./EmailService");
 
 const generateReferralCode = () =>
   `VNS${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
 
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
-const normalizePhone = (value) => Msg91Service.normalizePhone(value);
+const normalizePhone = (value) => {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.length > 10 ? digits.slice(-10) : digits.replace(/^0+/, "");
+};
 const possiblePhoneValues = (phone) => {
   const normalized = normalizePhone(phone);
   return [...new Set([normalized, `0${normalized}`, `91${normalized}`, `+91${normalized}`].filter(Boolean))];
 };
 const otpStore = new Map();
 const OTP_TTL_MS = 10 * 60 * 1000;
-const OTP_PURPOSES = new Set(["signup", "login", "forgot_password"]);
+const OTP_PURPOSES = new Set(["signup", "forgot_password"]);
 
 class AuthService {
   async createOtpSession({ email, purpose, name }) {
@@ -27,7 +29,7 @@ class AuthService {
     if (!normalizedEmail) throw new Error("Email is required.");
     if (!OTP_PURPOSES.has(purpose)) throw new Error("Invalid OTP purpose.");
     const otp = EmailService.generateOtp();
-    const token = jwt.sign({ email: normalizedEmail, purpose, nonce: Date.now() }, process.env.JWT_SECRET, { expiresIn: "15m" });
+    const token = jwt.sign({ email: normalizedEmail, purpose, nonce: Date.now() }, config.jwtSecret, { expiresIn: "15m" });
     otpStore.set(token, { email: normalizedEmail, purpose, otp, expiresAt: Date.now() + OTP_TTL_MS, verified: false });
     await EmailService.sendOTP(normalizedEmail, otp, name || "Customer");
     return { token, email: normalizedEmail, expiresInSeconds: 600 };
@@ -165,7 +167,7 @@ class AuthService {
     if (!token) throw new Error("No token provided");
 
     try {
-      const decoded = jwt.verify(token, process.env.REFRESH_TOKEN_SECRET);
+      const decoded = jwt.verify(token, config.refreshTokenSecret);
       
       let user = await Customer.findByPk(decoded.id);
       let role = "customer";
@@ -188,14 +190,14 @@ class AuthService {
   async generateTokens(user, role = "customer") {
     const accessToken = jwt.sign(
       { id: user.id, role: role },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || "15m" }
+      config.jwtSecret,
+      { expiresIn: config.jwtExpiresIn }
     );
 
     const refreshToken = jwt.sign(
       { id: user.id, role: role },
-      process.env.REFRESH_TOKEN_SECRET,
-      { expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || "7d" }
+      config.refreshTokenSecret,
+      { expiresIn: config.refreshTokenExpiresIn }
     );
 
     user.refresh_token = refreshToken;
@@ -231,28 +233,6 @@ class AuthService {
     };
   }
 
-  async verifyResetPhone(phone, msg91AccessToken) {
-    const cleanPhone = normalizePhone(phone);
-    const user = await Customer.findOne({ where: { phone: { [Op.in]: possiblePhoneValues(cleanPhone) } } });
-    if (!user) throw new Error("No account found with this phone number.");
-    await Msg91Service.verifyAccessToken({ accessToken: msg91AccessToken, phone: cleanPhone });
-    return { message: "Phone verified. You can set a new password." };
-  }
-
-  async resetPasswordWithMsg91(phone, msg91AccessToken, newPassword) {
-    const cleanPhone = normalizePhone(phone);
-    const user = await Customer.findOne({ where: { phone: { [Op.in]: possiblePhoneValues(cleanPhone) } } });
-    if (!user) throw new Error("No account found with this phone number.");
-    if (!newPassword || String(newPassword).length < 6) throw new Error("Password must be at least 6 characters.");
-    await Msg91Service.verifyAccessToken({ accessToken: msg91AccessToken, phone: cleanPhone });
-
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
-    await user.save();
-
-    return { message: "Password reset successfully" };
-  }
-
   async sendEmailOtp(email, purpose, name) {
     return await this.createOtpSession({ email, purpose, name });
   }
@@ -260,17 +240,6 @@ class AuthService {
   async verifyEmailOtp(token, otp, purpose) {
     const record = this.verifyOtpSession({ token, otp, purpose });
     return { message: "OTP verified successfully.", email: record.email };
-  }
-
-  async loginWithOtp(identifier, password, emailOtpToken) {
-    const user = await this.login(identifier, password);
-    const email = normalizeEmail(user.customer?.email || user.user?.email);
-    const otpRecord = otpStore.get(emailOtpToken);
-    if (!otpRecord || !otpRecord.verified || otpRecord.purpose !== "login" || otpRecord.email !== email) {
-      throw new Error("Email OTP verification is required for login.");
-    }
-    otpStore.delete(emailOtpToken);
-    return user;
   }
 
   async resetPasswordWithEmailOtp(email, emailOtpToken, newPassword) {

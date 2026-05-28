@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import api from "../../utils/api";
+import { requiredEnv } from "../../utils/env";
 import "./Profile.css";
 
 const SUPPORT_ERROR_MESSAGE = "Something went wrong. Please contact support or try again later.";
@@ -60,7 +61,7 @@ const emptyAddress = {
 };
 
 const ADDRESS_LABEL_OPTIONS = ["Home", "Work", "Other"];
-const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || "";
+const MAPBOX_TOKEN = requiredEnv("VITE_MAPBOX_ACCESS_TOKEN");
 const MAPBOX_GL_SCRIPT = "https://api.mapbox.com/mapbox-gl-js/v3.10.0/mapbox-gl.js";
 const MAPBOX_GL_CSS = "https://api.mapbox.com/mapbox-gl-js/v3.10.0/mapbox-gl.css";
 const DEFAULT_LOCATION = {

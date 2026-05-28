@@ -3,7 +3,7 @@ const { config } = require('../config/env');
 const redact = (value) => {
   if (!value || typeof value !== 'object') return value;
   const clone = { ...value };
-  const sensitive = ['password', 'newPassword', 'token', 'refreshToken', 'accessToken', 'msg91_access_token'];
+  const sensitive = ['password', 'newPassword', 'token', 'refreshToken', 'accessToken'];
   sensitive.forEach((key) => {
     if (clone[key] !== undefined) clone[key] = '[REDACTED]';
   });

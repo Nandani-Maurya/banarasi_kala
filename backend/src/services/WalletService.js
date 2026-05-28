@@ -1,7 +1,24 @@
 const { Op } = require("sequelize");
 const Customer = require("../models/Customer");
 const WalletTransaction = require("../models/WalletTransaction");
+const Order = require("../models/Order");
 const { sequelize } = require("../config/db");
+
+const REFERRAL_MILESTONE_BONUS = "REFERRAL_MILESTONE_BONUS";
+
+const isOrderStillRewardEligible = (order) =>
+  order &&
+  order.delivered_at &&
+  !order.return_requested_at &&
+  !order.cancelled_at &&
+  !String(order.status || "").toLowerCase().includes("return") &&
+  !String(order.status || "").toLowerCase().includes("cancel");
+
+const getCancellationMeta = (meta, reason) => ({
+  ...(meta || {}),
+  cancelled_reason: reason,
+  cancelled_at: new Date().toISOString(),
+});
 
 class WalletService {
   async creditNow({ customerId, amount, type, dedupeKey, meta = null }) {
@@ -59,6 +76,28 @@ class WalletService {
     });
   }
 
+  async cancelPendingReferralCreditsForOrder(orderId, reason = "Order is no longer referral eligible.") {
+    return sequelize.transaction(async (t) => {
+      const pending = await WalletTransaction.findAll({
+        where: {
+          type: REFERRAL_MILESTONE_BONUS,
+          status: "pending",
+        },
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+
+      const matching = pending.filter((tx) => String(tx.meta?.triggering_order_id || "") === String(orderId));
+      for (const tx of matching) {
+        tx.status = "cancelled";
+        tx.meta = getCancellationMeta(tx.meta, reason);
+        await tx.save({ transaction: t });
+      }
+
+      return { cancelled: matching.length };
+    });
+  }
+
   async processDuePendingCredits({ limit = 200 } = {}) {
     const now = new Date();
     const pending = await WalletTransaction.findAll({
@@ -80,6 +119,23 @@ class WalletService {
         });
 
         if (!locked || locked.status !== "pending") return;
+
+        if (locked.type === REFERRAL_MILESTONE_BONUS) {
+          const triggeringOrderId = locked.meta?.triggering_order_id;
+          const order = triggeringOrderId
+            ? await Order.findByPk(triggeringOrderId, { transaction: t, lock: t.LOCK.UPDATE })
+            : null;
+
+          if (!isOrderStillRewardEligible(order)) {
+            locked.status = "cancelled";
+            locked.meta = getCancellationMeta(
+              locked.meta,
+              "Triggering order was cancelled, returned, or is no longer delivered.",
+            );
+            await locked.save({ transaction: t });
+            return;
+          }
+        }
 
         await Customer.increment(
           { wallet_balance: locked.amount },
