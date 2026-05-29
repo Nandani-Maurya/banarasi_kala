@@ -51,8 +51,6 @@ const config = {
   cloudinaryCloudName: readEnv("CLOUDINARY_CLOUD_NAME"),
   cloudinaryApiKey: readEnv("CLOUDINARY_API_KEY"),
   cloudinaryApiSecret: readEnv("CLOUDINARY_API_SECRET"),
-  razorpayKeyId: readEnv("RAZORPAY_KEY_ID"),
-  razorpayKeySecret: readEnv("RAZORPAY_KEY_SECRET"),
   emailUser: readEnv("EMAIL_USER"),
   emailPass: readEnv("EMAIL_PASS"),
   shiprocketEmail: readEnv("SHIPROCKET_EMAIL"),
@@ -67,13 +65,12 @@ const config = {
   referralMilestoneCount: readNumberEnv("REFERRAL_MILESTONE_COUNT"),
   referralMilestoneBonus: readNumberEnv("REFERRAL_MILESTONE_BONUS"),
   codMaxAmount: readNumberEnv("COD_MAX_AMOUNT"),
-  prepaidDiscountAmount: readNumberEnv("PREPAID_DISCOUNT_AMOUNT"),
   codFeeAmount: readNumberEnv("COD_FEE_AMOUNT"),
+  platformFeeAmount: readNumberEnv("PLATFORM_FEE_AMOUNT"),
   packageWeightKg: readNumberEnv("PACKAGE_WEIGHT_KG"),
   packageLengthCm: readNumberEnv("PACKAGE_LENGTH_CM"),
   packageBreadthCm: readNumberEnv("PACKAGE_BREADTH_CM"),
   packageHeightCm: readNumberEnv("PACKAGE_HEIGHT_CM"),
-  rtoChargeMultiplier: readNumberEnv("RTO_CHARGE_MULTIPLIER"),
 };
 
 module.exports = { config };

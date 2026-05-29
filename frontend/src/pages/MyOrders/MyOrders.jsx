@@ -88,8 +88,8 @@ const getOrderBreakdown = (order) => {
     couponDiscount,
     walletAmount,
     payable,
-    paymentMethod: order.payment_method || "Prepaid",
-    paymentStatus: order.payment_status || (String(order.payment_method).toUpperCase() === "COD" ? "Pending" : "Paid"),
+    paymentMethod: order.payment_method || "COD",
+    paymentStatus: order.payment_status || (String(order.payment_method || "COD").toUpperCase() === "COD" ? "Pending" : "Paid"),
   };
 };
 
@@ -379,7 +379,7 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
                 )}
                 {item.shipping_meta?.refund_rules && (
                   <p className="order-product-refund">
-                    Return: {formatPrice(item.shipping_meta.refund_rules.return_delivery_deduction)} delivery + {formatPrice(item.shipping_meta.refund_rules.return_rto_deduction)} RTO deduction. Exchange: no deduction.
+                    Return: {formatPrice(item.shipping_meta.refund_rules.return_delivery_deduction)} delivery charge deduction. Exchange: no deduction.
                   </p>
                 )}
               </div>
@@ -407,7 +407,7 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
         )}
         {breakdown.paymentDiscount > 0 && (
           <div className="breakdown-row is-saving">
-            <span>Prepaid payment discount</span>
+            <span>Payment discount</span>
             <strong>-{formatPrice(breakdown.paymentDiscount)}</strong>
           </div>
         )}

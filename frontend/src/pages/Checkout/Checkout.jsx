@@ -13,12 +13,11 @@ import { getProductStockInfo } from "../../utils/stockStatus";
 import { formatEstimatedDeliveryDate, getEstimatedDeliveryDate } from "../../utils/deliveryDate";
 import { getVariantSku } from "../../utils/itemCode";
 import { selectBestCourier } from "../../utils/courierSelection";
-import { numberEnv, requiredEnv } from "../../utils/env";
+import { numberEnv } from "../../utils/env";
 import "./Checkout.css";
 
 const PACKAGING_WEIGHT_KG = numberEnv("VITE_PACKAGING_WEIGHT_KG");
 const COD_MAX_AMOUNT = numberEnv("VITE_COD_MAX_AMOUNT");
-const PREPAID_DISCOUNT_AMOUNT = numberEnv("VITE_PREPAID_DISCOUNT_AMOUNT");
 const COD_FEE_AMOUNT = numberEnv("VITE_COD_FEE_AMOUNT");
 const PLATFORM_FEE_AMOUNT = numberEnv("VITE_PLATFORM_FEE_AMOUNT");
 const EMPTY_CHECKOUT_ADDRESS = {
@@ -70,9 +69,7 @@ const Checkout = () => {
   const payableCart = checkoutCart.filter((item) => !item.checkoutUnavailable);
   const unavailableCart = checkoutCart.filter((item) => item.checkoutUnavailable);
   const subtotal = payableCart.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
-  const isProductCodAllowed = payableCart.length > 0 && payableCart.every(item => Array.isArray(item.payment_options) && item.payment_options.includes("cod"));
-  const isCodAllowed = isProductCodAllowed && subtotal <= COD_MAX_AMOUNT;
-  const [activePayment, setActivePayment] = useState("online");
+  const isCodAllowed = payableCart.length > 0 && subtotal <= COD_MAX_AMOUNT;
   const [loading, setLoading] = useState(false);
   const [shippingCharge, setShippingCharge] = useState(0);
   const [shippingDeliveryDate, setShippingDeliveryDate] = useState(null);
@@ -112,11 +109,10 @@ const Checkout = () => {
   const shippingDiscount = shippingDiscountReason ? shippingCharge : 0;
   const finalShippingCharge = Math.max(0, shippingCharge - shippingDiscount);
   const returnDeliveryDeduction = shippingDiscountReason === "first_order" ? 0 : shippingCharge;
-  const returnRtoDeduction = shippingDiscountReason === "first_order" ? 0 : shippingCharge;
-  const paymentFee = payableCart.length > 0 && activePayment === "cod" ? COD_FEE_AMOUNT : 0;
+  const paymentFee = payableCart.length > 0 ? COD_FEE_AMOUNT : 0;
   const platformFee = payableCart.length > 0 ? PLATFORM_FEE_AMOUNT : 0;
-  const prepaidDiscount = payableCart.length > 0 && activePayment === "online" ? Math.min(PREPAID_DISCOUNT_AMOUNT, subtotal + finalShippingCharge) : 0;
-  const orderGrossTotal = Math.max(0, subtotal + finalShippingCharge + paymentFee + platformFee - prepaidDiscount);
+  const paymentDiscount = 0;
+  const orderGrossTotal = Math.max(0, subtotal + finalShippingCharge + paymentFee + platformFee - paymentDiscount);
   const effectiveCouponDiscount = Math.min(couponDiscount, orderGrossTotal);
   const grossAfterCoupon = Math.max(0, orderGrossTotal - effectiveCouponDiscount);
   const walletUsableAmount = useWallet ? Math.min(Number(walletBalance || 0), grossAfterCoupon) : 0;
@@ -179,12 +175,6 @@ const Checkout = () => {
       cancelled = true;
     };
   }, [user?.id]);
-
-  useEffect(() => {
-    if (activePayment === "cod" && !isCodAllowed) {
-      setActivePayment("online");
-    }
-  }, [activePayment, isCodAllowed]);
 
   const selectAddress = (address) => {
     setSelectedAddressId(String(address.id));
@@ -320,8 +310,8 @@ const Checkout = () => {
       showNotification(`Please fix: ${Object.values(errors).join(" | ")}`, "warning");
       return;
     }
-    if (activePayment === "cod" && !isCodAllowed) {
-      showNotification(`COD is available only up to Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")} and only for COD-enabled products.`, "warning");
+    if (!isCodAllowed) {
+      showNotification(`COD is available only up to Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}.`, "warning");
       return;
     }
     setCheckoutStep("review");
@@ -369,7 +359,7 @@ const Checkout = () => {
         setShippingLoading(true);
         const effectiveWeight = Math.max(0.1, Number(totalWeightKg.toFixed(3)));
         const response = await fetch(
-          `${API_ENDPOINTS.shiprocket}/serviceability?pincode=${encodeURIComponent(cleanPincode)}&weight=${effectiveWeight}&is_cod=${activePayment === "cod" ? 1 : 0}`
+          `${API_ENDPOINTS.shiprocket}/serviceability?pincode=${encodeURIComponent(cleanPincode)}&weight=${effectiveWeight}&is_cod=1`
         );
 
         if (!response.ok) {
@@ -380,7 +370,7 @@ const Checkout = () => {
         const couriers = data?.data?.available_courier_companies || [];
         const selectedCourier = selectBestCourier(couriers, {
           weightKg: effectiveWeight,
-          requireCod: activePayment === "cod" && subtotal <= COD_MAX_AMOUNT,
+          requireCod: isCodAllowed,
         });
 
         if (!cancelled) {
@@ -405,7 +395,7 @@ const Checkout = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [formData.pincode, payableCart.length, totalWeightKg, activePayment]);
+  }, [formData.pincode, payableCart.length, totalWeightKg, isCodAllowed]);
 
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
@@ -422,8 +412,8 @@ const Checkout = () => {
         setLoading(false);
         return;
       }
-      if (activePayment === "cod" && !isCodAllowed) {
-        showNotification(`COD is available only up to Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")} and only for COD-enabled products.`, "warning");
+      if (!isCodAllowed) {
+        showNotification(`COD is available only up to Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}.`, "warning");
         setLoading(false);
         return;
       }
@@ -445,9 +435,9 @@ const Checkout = () => {
         discount_amount: effectiveCouponDiscount,
         wallet_amount: walletUsableAmount,
         payment_fee: paymentFee + platformFee,
-        payment_discount: prepaidDiscount,
-        payment_method: activePayment === 'cod' ? 'COD' : 'Prepaid',
-        payment_status: activePayment === 'cod' ? 'Pending' : 'Paid',
+        payment_discount: paymentDiscount,
+        payment_method: 'COD',
+        payment_status: 'Pending',
         items: payableCart.map((item) => ({
           id: item.id,
           name: item.name,
@@ -457,63 +447,12 @@ const Checkout = () => {
         })),
       };
 
-      if (activePayment === "cod") {
-        // Direct order creation for Cash on Delivery (bypassing Razorpay)
-        try {
-          const dbRes = await api.post("/api/orders", finalOrderData);
-          clearCart();
-          navigate(`/order-confirmation?orderId=${dbRes.data.orderId}`);
-        } catch (error) {
-          showNotification(error?.response?.data?.message || "Failed to place COD order.", "error");
-        }
-      } else {
-        // Online Payment via Razorpay
-        const orderResponse = await fetch(API_ENDPOINTS.razorpay.createOrder, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ amount: total }),
-        });
-        const rzpOrder = await orderResponse.json();
-
-        const options = {
-          key: requiredEnv("VITE_RAZORPAY_KEY_ID"),
-          amount: rzpOrder.amount,
-          currency: "INR",
-          name: "Banaras Heritage",
-          description: "Heritage Saree Purchase",
-          order_id: rzpOrder.id,
-          handler: async function (response) {
-            const verifyRes = await fetch(API_ENDPOINTS.razorpay.verifyPayment, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-              }),
-            });
-            const verifyData = await verifyRes.json();
-
-            if (verifyData.success) {
-              try {
-                const dbRes = await api.post("/api/orders", finalOrderData);
-                clearCart();
-                navigate(`/order-confirmation?orderId=${dbRes.data.orderId}`);
-              } catch (error) {
-                showNotification(error?.response?.data?.message || "Unable to save paid order.", "error");
-              }
-            }
-          },
-          prefill: { name: formData.fullName, email: formData.email, contact: formData.phone },
-          theme: { color: "#800020" },
-        };
-
-        const rzp1 = new window.Razorpay(options);
-        rzp1.open();
-      }
+      const dbRes = await api.post("/api/orders", finalOrderData);
+      clearCart();
+      navigate(`/order-confirmation?orderId=${dbRes.data.orderId}`);
     } catch (err) {
       console.error(err);
-      showNotification("Error initiating payment or order.", "error");
+      showNotification(err?.response?.data?.message || "We could not place your order. Please try again.", "error");
     } finally {
       setLoading(false);
     }
@@ -545,27 +484,15 @@ const Checkout = () => {
               user={user}
               paymentOptions={[
                 {
-                  id: "online",
-                  icon: "lucide:shield-check",
-                  title: "Online Payment",
-                  description: `Pay securely using Razorpay. Rs. ${PREPAID_DISCOUNT_AMOUNT.toLocaleString("en-IN")} extra off`,
-                  active: activePayment === "online",
-                  onSelect: () => setActivePayment("online"),
-                },
-                {
                   id: "cod",
                   icon: "lucide:banknote",
                   title: "Cash on Delivery",
-                  description: isCodAllowed ? `Rs. ${COD_FEE_AMOUNT.toLocaleString("en-IN")} COD charge` : subtotal > COD_MAX_AMOUNT ? `Not available above Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}` : "Unavailable for some items",
-                  active: activePayment === "cod",
+                  description: isCodAllowed ? `Rs. ${COD_FEE_AMOUNT.toLocaleString("en-IN")} COD charge` : `Not available above Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}`,
+                  active: true,
                   disabled: !isCodAllowed,
                   onSelect: () => {
-                    if (isCodAllowed) {
-                      setActivePayment("cod");
-                    } else if (subtotal > COD_MAX_AMOUNT) {
+                    if (!isCodAllowed) {
                       showNotification(`COD is available only up to Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}.`, "warning");
-                    } else {
-                      showNotification("Some products in your cart do not support Cash on Delivery.", "warning");
                     }
                   },
                 },
@@ -585,8 +512,8 @@ const Checkout = () => {
                 phone: formData.phone,
               }}
               reviewPayment={{
-                title: activePayment === "cod" ? "Cash on Delivery" : "Online Payment",
-                description: activePayment === "cod" ? "Pay when your order is delivered." : "Pay securely using Razorpay.",
+                title: "Cash on Delivery",
+                description: "Pay when your order is delivered.",
               }}
               onEditDetails={() => setCheckoutStep("details")}
               summaryProps={{
@@ -617,7 +544,6 @@ const Checkout = () => {
                   ...(unavailableCart.length > 0 ? [{ label: "Unavailable items", value: `${unavailableCart.length} excluded`, tone: "accent" }] : []),
                   ...(appliedCoupon ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-Rs. ${effectiveCouponDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
                   { label: "Free delivery charge", value: shippingLoading ? "Calculating..." : shippingCharge > 0 ? <><s>Rs. {shippingCharge.toLocaleString("en-IN")}</s> Free</> : "Free", tone: "success" },
-                  ...(prepaidDiscount > 0 ? [{ label: "Prepaid payment discount", value: `-Rs. ${prepaidDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
                   ...(paymentFee > 0 ? [{ label: "COD charge", value: `Rs. ${paymentFee.toLocaleString("en-IN")}`, tone: "accent" }] : []),
                   { label: "Platform fee", value: `Rs. ${platformFee.toLocaleString("en-IN")}` },
                   ...(walletUsableAmount > 0 ? [{ label: "Wallet used", value: `-Rs. ${walletUsableAmount.toLocaleString("en-IN")}`, tone: "success" }] : []),
@@ -625,8 +551,8 @@ const Checkout = () => {
                 logistics: shippingCharge > 0 ? {
                   label: "Returns & exchange available",
                   tooltip: shippingDiscountReason === "first_order"
-                    ? "Return and exchange are available. For your first order, delivery and RTO charges will not be deducted."
-                    : `Return and exchange are available. On return, refund may deduct Rs. ${returnDeliveryDeduction.toLocaleString("en-IN")} delivery and Rs. ${returnRtoDeduction.toLocaleString("en-IN")} RTO.`,
+                    ? "Return and exchange are available. For your first order, delivery charge will not be deducted."
+                    : `Return and exchange are available. On return, refund may deduct Rs. ${returnDeliveryDeduction.toLocaleString("en-IN")} delivery charge.`,
                 } : null,
                 deliveryPromise: shippingDeliveryDate ? {
                   title: `Arriving ${shippingDeliveryDate}`,
@@ -639,7 +565,7 @@ const Checkout = () => {
                 action: {
                   label: checkoutStep === "details"
                     ? (shippingLoading ? "Checking delivery..." : "Continue")
-                    : (loading ? "Processing..." : activePayment === "cod" ? "Place COD Order" : "Pay & Place Order"),
+                    : (loading ? "Processing..." : "Place COD Order"),
                   onClick: checkoutStep === "details" ? proceedToReview : handlePlaceOrder,
                   disabled: checkoutStep === "details" ? (shippingLoading || payableCart.length === 0) : (loading || payableCart.length === 0),
                 },
@@ -709,31 +635,17 @@ const Checkout = () => {
                 <div className="buy-now-payment-grid">
                   <button
                     type="button"
-                    className={activePayment === "online" ? "active" : ""}
-                    onClick={() => setActivePayment("online")}
-                  >
-                    <Icon icon="lucide:shield-check" />
-                    <span>Online Payment</span>
-                    <small>Pay securely using Razorpay. Rs. {PREPAID_DISCOUNT_AMOUNT.toLocaleString("en-IN")} extra off</small>
-                  </button>
-
-                  <button
-                    type="button"
                     disabled={!isCodAllowed}
-                    className={activePayment === "cod" ? "active" : ""}
+                    className="active"
                     onClick={() => {
-                      if (isCodAllowed) {
-                        setActivePayment("cod");
-                      } else if (subtotal > COD_MAX_AMOUNT) {
+                      if (!isCodAllowed) {
                         showNotification(`COD is available only up to Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}.`, "warning");
-                      } else {
-                        showNotification("Some products in your cart do not support Cash on Delivery.", "warning");
                       }
                     }}
                   >
                     <Icon icon="lucide:banknote" />
                     <span>Cash on Delivery</span>
-                    <small>{isCodAllowed ? `Rs. ${COD_FEE_AMOUNT.toLocaleString("en-IN")} COD charge` : subtotal > COD_MAX_AMOUNT ? `Not available above Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}` : "Unavailable for some items"}</small>
+                    <small>{isCodAllowed ? `Rs. ${COD_FEE_AMOUNT.toLocaleString("en-IN")} COD charge` : `Not available above Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}`}</small>
                   </button>
                 </div>
               </section>
@@ -771,8 +683,8 @@ const Checkout = () => {
                   </div>
                   <div className="checkout-review-panel">
                     <span>Payment</span>
-                    <strong>{activePayment === "cod" ? "Cash on Delivery" : "Online Payment"}</strong>
-                    <p>{activePayment === "cod" ? "Pay when your order is delivered." : "Pay securely with Razorpay."}</p>
+                    <strong>Cash on Delivery</strong>
+                    <p>Pay when your order is delivered.</p>
                   </div>
                 </div>
               </section>
@@ -807,7 +719,6 @@ const Checkout = () => {
                       { label: "Subtotal", value: `Rs. ${subtotal.toLocaleString("en-IN")}` },
                       ...(appliedCoupon ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-Rs. ${effectiveCouponDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
                       { label: "Free delivery charge", value: shippingLoading ? "Calculating..." : shippingCharge > 0 ? <><s>Rs. {shippingCharge.toLocaleString("en-IN")}</s> Free</> : "Free", tone: "success" },
-                      ...(prepaidDiscount > 0 ? [{ label: "Prepaid payment discount", value: `-Rs. ${prepaidDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
                       ...(paymentFee > 0 ? [{ label: "COD charge", value: `Rs. ${paymentFee.toLocaleString("en-IN")}`, tone: "accent" }] : []),
                       { label: "Platform fee", value: `Rs. ${platformFee.toLocaleString("en-IN")}` },
                       ...(walletUsableAmount > 0 ? [{ label: "Wallet used", value: `-Rs. ${walletUsableAmount.toLocaleString("en-IN")}`, tone: "success" }] : []),
@@ -815,8 +726,8 @@ const Checkout = () => {
                     logistics={shippingCharge > 0 ? {
                       label: "Returns & exchange available",
                       tooltip: shippingDiscountReason === "first_order"
-                        ? "Return and exchange are available. For your first order, delivery and RTO charges will not be deducted."
-                        : `Return and exchange are available. On return, refund may deduct Rs. ${returnDeliveryDeduction.toLocaleString("en-IN")} delivery and Rs. ${returnRtoDeduction.toLocaleString("en-IN")} RTO.`,
+                        ? "Return and exchange are available. For your first order, delivery charge will not be deducted."
+                        : `Return and exchange are available. On return, refund may deduct Rs. ${returnDeliveryDeduction.toLocaleString("en-IN")} delivery charge.`,
                     } : null}
                     totalLabel="Total Payable"
                     total={total}
@@ -824,7 +735,7 @@ const Checkout = () => {
                     action={{
                       label: checkoutStep === "details"
                         ? (shippingLoading ? "Checking delivery..." : "Continue")
-                        : (loading ? "Processing..." : activePayment === "cod" ? "Place COD Order" : "Pay & Place Order"),
+                        : (loading ? "Processing..." : "Place COD Order"),
                       onClick: checkoutStep === "details" ? proceedToReview : handlePlaceOrder,
                       disabled: checkoutStep === "details" ? shippingLoading : loading,
                     }}
@@ -910,12 +821,6 @@ const Checkout = () => {
                       <span>FREE DELIVERY CHARGE</span>
                       <span>{shippingLoading ? "CALCULATING..." : shippingCharge > 0 ? <><s>Rs. {shippingCharge.toLocaleString("en-IN")}</s> Free</> : "FREE"}</span>
                     </div>
-                    {prepaidDiscount > 0 && (
-                      <div className="flex justify-between items-center text-xs text-emerald-600 font-bold">
-                        <span>PREPAID DISCOUNT</span>
-                        <span>-Rs. {prepaidDiscount.toLocaleString("en-IN")}</span>
-                      </div>
-                    )}
                     {paymentFee > 0 && (
                       <div className="flex justify-between items-center text-xs text-[#800020] font-bold">
                         <span>COD FEE</span>
@@ -941,8 +846,8 @@ const Checkout = () => {
                           aria-label="Return and exchange information"
                           data-tooltip={
                             shippingDiscountReason === "first_order"
-                              ? "Return and exchange are available. For your first order, delivery and RTO charges will not be deducted."
-                              : `Return and exchange are available. On return, refund may deduct Rs. ${returnDeliveryDeduction.toLocaleString("en-IN")} delivery and Rs. ${returnRtoDeduction.toLocaleString("en-IN")} RTO.`
+                              ? "Return and exchange are available. For your first order, delivery charge will not be deducted."
+                              : `Return and exchange are available. On return, refund may deduct Rs. ${returnDeliveryDeduction.toLocaleString("en-IN")} delivery charge.`
                           }
                         >
                           <Icon icon="lucide:info" />
@@ -967,7 +872,7 @@ const Checkout = () => {
                       </button>
                     ) : (
                       <button onClick={handlePlaceOrder} disabled={loading} className="checkout-primary-btn w-full">
-                        {loading ? "Processing..." : activePayment === "cod" ? "Place COD Order" : "Pay & Place Order"}
+                        {loading ? "Processing..." : "Place COD Order"}
                       </button>
                     )}
                   </div>

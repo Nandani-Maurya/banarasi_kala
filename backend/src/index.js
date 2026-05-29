@@ -11,7 +11,6 @@ const OccasionRoutes = require("./routes/OccasionRoutes");
 const CouponRoutes = require("./routes/CouponRoutes");
 const ProductRoutes = require("./routes/ProductRoutes");
 const OrderRoutes = require("./routes/OrderRoutes");
-const RazorpayRoutes = require("./routes/RazorpayRoutes");
 const AuthRoutes = require("./routes/AuthRoutes");
 const CartRoutes = require("./routes/CartRoutes");
 const WishlistRoutes = require("./routes/WishlistRoutes");
@@ -70,9 +69,7 @@ app.use("/api/coupons", CouponRoutes);
 app.use("/api/feedback", FeedbackRoutes);
 
 // Checkout APIs.
-// Public from the backend perspective; checkout pages control customer access
-// in the frontend and payment verification happens through Razorpay callbacks.
-app.use("/api/razorpay", RazorpayRoutes);
+// Public from the backend perspective; checkout pages control customer access in the frontend.
 app.use("/api/orders", OrderRoutes);
 
 // Shipping APIs (admin-initiated).

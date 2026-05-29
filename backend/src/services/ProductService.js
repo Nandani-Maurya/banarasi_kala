@@ -225,7 +225,7 @@ const sanitizeProductPayload = (data = {}) => {
   const color_stocks = data.color_stocks && typeof data.color_stocks === "object" ? data.color_stocks : {};
   const images = normalizeImages(data.images || [], data.cover_color_id);
   const totalStock = Object.values(color_stocks).reduce((sum, qty) => sum + toIntOrZero(qty), 0);
-  const payment_options = normalizeStringArray(data.payment_options, ["prepaid", "cod"]);
+  const payment_options = normalizeStringArray(data.payment_options, ["cod"]);
   const service_options = normalizeStringArray(data.service_options, ["return", "exchange"]);
 
   validateColorMedia(color_stocks, images);

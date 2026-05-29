@@ -508,7 +508,6 @@ const ProductModal = ({
                   <p className="text-[10px] text-gray-400 font-bold mb-3">Choose what customer can use for this product.</p>
                   <div className="grid grid-cols-2 gap-3">
                     {[
-                      { value: "prepaid", label: "Prepaid", help: "Online payment" },
                       { value: "cod", label: "COD", help: "Cash on delivery" },
                     ].map((option) => (
                       <label key={option.value} className={`p-3 rounded-xl border cursor-pointer transition-all ${formData.payment_options?.includes(option.value) ? "bg-[#800020]/5 border-[#800020]/40 ring-1 ring-[#800020]/10" : "bg-white border-gray-100"}`}>

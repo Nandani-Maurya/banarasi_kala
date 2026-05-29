@@ -102,7 +102,7 @@ const Order = sequelize.define('Order', {
   },
   payment_method: {
     type: DataTypes.STRING,
-    defaultValue: 'Prepaid'
+    defaultValue: 'COD'
   },
   payment_status: {
     type: DataTypes.STRING,

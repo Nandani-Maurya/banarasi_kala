@@ -106,7 +106,6 @@ const buildItemShippingMeta = ({
   const effectiveShippingPaid = Math.max(0, allocatedShipping - allocatedShippingDiscount);
   const isFirstOrderFreeShipping = shippingDiscountReason === 'first_order';
   const returnDeliveryDeduction = isFirstOrderFreeShipping ? 0 : allocatedShipping;
-  const rtoCharge = isFirstOrderFreeShipping ? 0 : roundMoney(allocatedShipping * Math.max(0, Number(config.rtoChargeMultiplier)));
 
   return {
     product_weight_kg: roundMoney(productWeightKg),
@@ -116,17 +115,14 @@ const buildItemShippingMeta = ({
     delivery_charge: roundMoney(allocatedShipping),
     delivery_discount: roundMoney(allocatedShippingDiscount),
     delivery_paid: roundMoney(effectiveShippingPaid),
-    rto_charge_estimate: rtoCharge,
     refund_rules: {
       free_shipping_reason: shippingDiscountReason || null,
       exchange_delivery_deduction: 0,
-      exchange_rto_deduction: 0,
       return_delivery_deduction: roundMoney(returnDeliveryDeduction),
-      return_rto_deduction: rtoCharge,
-      return_total_logistics_deduction: roundMoney(returnDeliveryDeduction + rtoCharge),
+      return_total_logistics_deduction: roundMoney(returnDeliveryDeduction),
       note: isFirstOrderFreeShipping
-        ? 'First-order free shipping: delivery and RTO are not deducted on return.'
-        : 'Return refund deducts forward delivery and RTO logistics charges. Exchange has no logistics deduction.',
+        ? 'First-order free shipping: delivery is not deducted on return.'
+        : 'Return refund deducts the forward delivery charge. Exchange has no logistics deduction.',
     },
   };
 };
@@ -196,8 +192,8 @@ class OrderController {
     try {
       const { 
         customer_name, customer_email, address, city, state, pincode, phone, 
-        subtotal_amount, shipping_charge = 0, shipping_discount = 0, payment_fee = 0, payment_discount = 0,
-        shipping_discount_reason = null, selected_courier_data = null, total_amount, items, coupon_code, wallet_amount = 0, payment_method = 'Prepaid', payment_status = 'Paid'
+        subtotal_amount, shipping_charge = 0, shipping_discount_reason = null,
+        selected_courier_data = null, items, coupon_code, wallet_amount = 0
       } = req.body;
       if (!Array.isArray(items) || items.length === 0) {
         await t.rollback();
@@ -257,12 +253,15 @@ class OrderController {
       let discount_amount = 0;
       const itemSubtotal = Number(subtotal_amount || items.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 1)), 0));
       const actualShippingCharge = Math.max(0, Number(shipping_charge || 0));
-      const actualShippingDiscount = Math.max(0, Math.min(actualShippingCharge, Number(shipping_discount || 0)));
-      const actualPaymentFee = Math.max(0, Number(payment_fee || 0));
-      const actualPaymentDiscount = Math.max(0, Number(payment_discount || 0));
-      let final_total = Number(total_amount || 0);
+      const actualShippingDiscount = actualShippingCharge;
+      const effectiveShippingDiscountReason = actualShippingCharge > 0 ? (shipping_discount_reason || 'free_delivery') : null;
+      const actualPaymentFee = Math.max(0, Number(config.codFeeAmount || 0) + Number(config.platformFeeAmount || 0));
+      const actualPaymentDiscount = 0;
+      const normalizedPaymentMethod = 'COD';
+      const normalizedPaymentStatus = 'Pending';
+      let final_total = Math.max(0, itemSubtotal + actualShippingCharge - actualShippingDiscount + actualPaymentFee - actualPaymentDiscount);
 
-      if (String(payment_method).toUpperCase() === 'COD' && itemSubtotal > config.codMaxAmount) {
+      if (itemSubtotal > config.codMaxAmount) {
         await t.rollback();
         return res.status(400).json({ message: `COD is available only up to Rs. ${config.codMaxAmount}.` });
       }
@@ -309,7 +308,7 @@ class OrderController {
         productMap,
         shippingCharge: actualShippingCharge,
         shippingDiscount: actualShippingDiscount,
-        shippingDiscountReason: shipping_discount_reason,
+        shippingDiscountReason: effectiveShippingDiscountReason,
       });
       const orderPayload = keepExistingColumns({
         customer_id: customer?.id || null,
@@ -331,8 +330,8 @@ class OrderController {
         wallet_amount: walletDebit,
         payable_amount: final_total,
         selected_courier_data,
-        payment_method,
-        payment_status: payment_method === 'COD' ? 'Pending' : payment_status
+        payment_method: normalizedPaymentMethod,
+        payment_status: normalizedPaymentStatus
       }, orderColumns);
 
       const order = await Order.create(orderPayload, {
@@ -603,10 +602,10 @@ class OrderController {
       }
 
       const { reason } = req.body;
-      const paymentMethod = String(order.payment_method || 'Prepaid');
+      const paymentMethod = String(order.payment_method || 'COD');
       const paidAmount = Number(order.payable_amount ?? order.total_amount ?? 0);
       let refundNote = paymentMethod.toUpperCase() === 'COD'
-        ? 'COD order cancelled. No prepaid refund is needed.'
+        ? 'COD order cancelled. No online payment refund is needed.'
         : `Refund of Rs. ${paidAmount.toLocaleString('en-IN')} will be processed in 1-2 days.`;
       if (reason && reason.trim()) {
         refundNote += ` | Reason: ${reason.trim()}`;
@@ -737,10 +736,10 @@ class OrderController {
           }
         }
 
-        const paymentMethod = String(order.payment_method || 'Prepaid');
+        const paymentMethod = String(order.payment_method || 'COD');
         const paidAmount = Number(order.payable_amount ?? order.total_amount ?? 0);
         let refundNote = paymentMethod.toUpperCase() === 'COD'
-          ? 'COD order cancelled. No prepaid refund is needed.'
+          ? 'COD order cancelled. No online payment refund is needed.'
           : `Refund of Rs. ${paidAmount.toLocaleString('en-IN')} will be processed in 1-2 days.`;
         if (reason && reason.trim()) {
           refundNote += ` | Reason: ${reason.trim()}`;
@@ -763,7 +762,7 @@ class OrderController {
         const newTotal = Math.max(0, Number(order.total_amount || 0) - itemPrice);
         const newPayable = Math.max(0, Number(order.payable_amount || 0) - itemPrice);
 
-        const paymentMethod = String(order.payment_method || 'Prepaid');
+        const paymentMethod = String(order.payment_method || 'COD');
         let refundNote = paymentMethod.toUpperCase() === 'COD'
           ? `Item '${item.product_name}' cancelled. Remaining COD collection adjusted to Rs. ${newPayable.toLocaleString('en-IN')}.`
           : `Refund of Rs. ${itemPrice.toLocaleString('en-IN')} for cancelled item '${item.product_name}' will be processed in 1-2 days.`;

@@ -15,14 +15,13 @@ import CheckoutOrderPanel from "../../components/CheckoutOrderPanel";
 import { formatEstimatedDeliveryDate, getEstimatedDeliveryDate } from "../../utils/deliveryDate";
 import { getVariantSku } from "../../utils/itemCode";
 import { selectBestCourier } from "../../utils/courierSelection";
-import { numberEnv, requiredEnv } from "../../utils/env";
+import { numberEnv } from "../../utils/env";
 import "./ProductDetail.css";
 
 const PRODUCT_RATING = "4.8";
 const PRODUCT_REVIEW_COUNT = "124";
 const PACKAGING_WEIGHT_KG = numberEnv("VITE_PACKAGING_WEIGHT_KG");
 const COD_MAX_AMOUNT = numberEnv("VITE_COD_MAX_AMOUNT");
-const PREPAID_DISCOUNT_AMOUNT = numberEnv("VITE_PREPAID_DISCOUNT_AMOUNT");
 const COD_FEE_AMOUNT = numberEnv("VITE_COD_FEE_AMOUNT");
 const PLATFORM_FEE_AMOUNT = numberEnv("VITE_PLATFORM_FEE_AMOUNT");
 const EMPTY_BUY_NOW_ADDRESS = {
@@ -92,7 +91,6 @@ const ProductDetail = () => {
   const [buyNowStep, setBuyNowStep] = useState("details");
   const [buyNowLoading, setBuyNowLoading] = useState(false);
   const [buyNowPlacing, setBuyNowPlacing] = useState(false);
-  const [buyNowPayment, setBuyNowPayment] = useState("prepaid");
   const [buyNowAddresses, setBuyNowAddresses] = useState([]);
   const [selectedBuyNowAddressId, setSelectedBuyNowAddressId] = useState("");
   const [buyNowAddressForm, setBuyNowAddressForm] = useState(getEmptyBuyNowAddress(user));
@@ -273,7 +271,6 @@ const ProductDetail = () => {
   const productName = product?.name || "";
   const buyNowSubtotal = Number(product?.selling_price || 0) * Math.max(1, Number(quantity || 1));
   const selectedBuyNowAddress = buyNowAddresses.find((address) => String(address.id) === String(selectedBuyNowAddressId));
-  const canUsePrepaid = true;
   const canUseCod = buyNowSubtotal <= COD_MAX_AMOUNT;
   const buyNowShippingRate = Number(buyNowShipping?.rate || 0);
   const qualifiesForFreeShipping = buyNowShippingRate > 0;
@@ -284,11 +281,10 @@ const ProductDetail = () => {
   const buyNowShippingDiscount = qualifiesForFreeShipping ? buyNowShippingRate : 0;
   const buyNowFinalShipping = Math.max(0, buyNowShippingRate - buyNowShippingDiscount);
   const buyNowReturnDeliveryDeduction = shippingDiscountReasonCode === "first_order" ? 0 : buyNowShippingRate;
-  const buyNowReturnRtoDeduction = shippingDiscountReasonCode === "first_order" ? 0 : buyNowShippingRate;
-  const buyNowPaymentFee = buyNowPayment === "cod" ? COD_FEE_AMOUNT : 0;
+  const buyNowPaymentFee = COD_FEE_AMOUNT;
   const buyNowPlatformFee = PLATFORM_FEE_AMOUNT;
-  const buyNowPrepaidDiscount = buyNowPayment === "prepaid" ? Math.min(PREPAID_DISCOUNT_AMOUNT, buyNowSubtotal + buyNowFinalShipping) : 0;
-  const buyNowGrossTotal = Math.max(0, buyNowSubtotal + buyNowFinalShipping + buyNowPaymentFee + buyNowPlatformFee - buyNowPrepaidDiscount);
+  const buyNowPaymentDiscount = 0;
+  const buyNowGrossTotal = Math.max(0, buyNowSubtotal + buyNowFinalShipping + buyNowPaymentFee + buyNowPlatformFee - buyNowPaymentDiscount);
   const buyNowCouponDiscount = Math.min(Number(appliedBuyNowCoupon?.discount || 0), buyNowGrossTotal);
   const walletUsableAmount = useWallet ? Math.min(Number(walletBalance || 0), Math.max(0, buyNowGrossTotal - buyNowCouponDiscount)) : 0;
   const buyNowTotal = Math.max(0, buyNowGrossTotal - buyNowCouponDiscount - walletUsableAmount);
@@ -416,14 +412,14 @@ const ProductDetail = () => {
         const totalQty = Math.max(1, Number(quantity || 1));
         const totalWeightKg = (productWeightKg * totalQty) + (PACKAGING_WEIGHT_KG * totalQty);
         const response = await fetch(
-          `${API_ENDPOINTS.shiprocket}/serviceability?pincode=${encodeURIComponent(cleanPincode)}&weight=${Math.max(0.1, Number(totalWeightKg.toFixed(3)))}&is_cod=${buyNowPayment === "cod" ? 1 : 0}`,
+          `${API_ENDPOINTS.shiprocket}/serviceability?pincode=${encodeURIComponent(cleanPincode)}&weight=${Math.max(0.1, Number(totalWeightKg.toFixed(3)))}&is_cod=1`,
         );
         const data = await response.json();
         if (!response.ok) throw new Error(data?.message || "Unable to check delivery");
 
         const selected = selectBestCourier(data?.data?.available_courier_companies || [], {
           weightKg: Math.max(0.1, Number(totalWeightKg.toFixed(3))),
-          requireCod: buyNowPayment === "cod" && buyNowSubtotal <= COD_MAX_AMOUNT,
+          requireCod: canUseCod,
         });
 
         if (!cancelled) {
@@ -445,7 +441,7 @@ const ProductDetail = () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [buyNowOpen, selectedBuyNowAddress?.pincode, buyNowPayment, quantity, product?.weight, isSelectedOutOfStock]);
+  }, [buyNowOpen, selectedBuyNowAddress?.pincode, canUseCod, quantity, product?.weight, isSelectedOutOfStock]);
 
   useEffect(() => {
     if (!couponCelebration) return undefined;
@@ -558,7 +554,6 @@ const ProductDetail = () => {
       return;
     }
 
-    setBuyNowPayment("prepaid");
     setBuyNowStep("details");
     setAppliedBuyNowCoupon(null);
     setCouponCode("");
@@ -646,7 +641,7 @@ const ProductDetail = () => {
       showNotification("Delivery is unavailable for this address right now.", "warning");
       return;
     }
-    if (buyNowPayment === "cod" && !canUseCod) {
+    if (!canUseCod) {
       showNotification(`COD is available only up to ${formatMoney(COD_MAX_AMOUNT)}.`, "warning");
       return;
     }
@@ -732,9 +727,9 @@ const ProductDetail = () => {
     coupon_code: appliedBuyNowCoupon?.code || null,
     wallet_amount: walletUsableAmount,
     payment_fee: buyNowPaymentFee + buyNowPlatformFee,
-    payment_discount: buyNowPrepaidDiscount,
-    payment_method: buyNowPayment === "cod" ? "COD" : "Prepaid",
-    payment_status: buyNowPayment === "cod" ? "Pending" : "Paid",
+    payment_discount: buyNowPaymentDiscount,
+    payment_method: "COD",
+    payment_status: "Pending",
     items: [{
       id: product.id,
       name: product.name,
@@ -767,73 +762,17 @@ const ProductDetail = () => {
       showNotification("Delivery is unavailable for this address right now.", "warning");
       return;
     }
-    if (buyNowPayment === "cod" && !canUseCod) {
+    if (!canUseCod) {
       showNotification(`COD is available only up to ${formatMoney(COD_MAX_AMOUNT)}.`, "warning");
-      return;
-    }
-    if (buyNowPayment === "prepaid" && !canUsePrepaid) {
-      showNotification("Prepaid payment is not available for this product.", "warning");
       return;
     }
 
     const orderData = buildBuyNowOrder();
     setBuyNowPlacing(true);
     try {
-      if (buyNowPayment === "cod" || buyNowTotal <= 0) {
-        const created = await createBuyNowOrder(orderData);
-        showNotification("Order placed successfully.", "success");
-        navigate(`/order-confirmation?orderId=${created.orderId}`);
-        return;
-      }
-
-      if (!window.Razorpay) {
-        throw new Error("Payment gateway is still loading. Please try again.");
-      }
-
-      const orderResponse = await fetch(API_ENDPOINTS.razorpay.createOrder, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: buyNowTotal }),
-      });
-      const razorpayOrder = await orderResponse.json();
-      if (!orderResponse.ok) throw new Error(razorpayOrder.message || "Unable to start payment.");
-
-      const razorpay = new window.Razorpay({
-        key: requiredEnv("VITE_RAZORPAY_KEY_ID"),
-        amount: razorpayOrder.amount,
-        currency: "INR",
-        name: "Banarasi Kala",
-        description: `${product.name} purchase`,
-        order_id: razorpayOrder.id,
-        prefill: {
-          name: orderData.customer_name,
-          email: orderData.customer_email,
-          contact: orderData.phone,
-        },
-        theme: { color: "#800020" },
-        handler: async (response) => {
-          try {
-            const verifyRes = await fetch(API_ENDPOINTS.razorpay.verifyPayment, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(response),
-            });
-            const verifyData = await verifyRes.json();
-            if (!verifyRes.ok || !verifyData.success) throw new Error(verifyData.message || "Payment verification failed.");
-            const created = await createBuyNowOrder(orderData);
-            showNotification("Order placed successfully.", "success");
-            navigate(`/order-confirmation?orderId=${created.orderId}`);
-          } catch (error) {
-            showNotification(error.message || "Unable to place paid order.", "error");
-          } finally {
-            setBuyNowPlacing(false);
-          }
-        },
-        modal: {
-          ondismiss: () => setBuyNowPlacing(false),
-        },
-      });
-      razorpay.open();
+      const created = await createBuyNowOrder(orderData);
+      showNotification("Order placed successfully.", "success");
+      navigate(`/order-confirmation?orderId=${created.orderId}`);
     } catch (error) {
       showNotification(error.message || "Unable to place order.", "error");
       setBuyNowPlacing(false);
@@ -922,12 +861,11 @@ const ProductDetail = () => {
 
   const shippingRows = product
     ? [
-        ["Prepaid", "Online payment available."],
-        ["Prepaid benefit", `${formatMoney(PREPAID_DISCOUNT_AMOUNT)} extra discount on prepaid payment.`],
+        ["Payment", "Cash on Delivery is available for eligible orders."],
         ["COD", `Cash on Delivery is available when product value is ${formatMoney(COD_MAX_AMOUNT)} or below. COD charge is ${formatMoney(COD_FEE_AMOUNT)}.`],
         ["Shipping", "Delivery charge is calculated by pincode and shown as a free delivery discount at payment review."],
-        ["Return", "Easy return is available. First-order free shipping returns do not deduct delivery/RTO. Other returns deduct forward delivery and RTO logistics charges."],
-        ["Exchange", "Easy exchange is available once with no delivery/RTO deduction. After one exchange, return or another exchange is not available for that item."],
+        ["Return", "Easy return is available. First-order returns do not deduct delivery charge. Other returns deduct the forward delivery charge."],
+        ["Exchange", "Easy exchange is available once with no delivery deduction. After one exchange, return or another exchange is not available for that item."],
         ["Taxes", "Price is inclusive of all taxes."],
       ].filter(Boolean)
     : [];
@@ -1373,22 +1311,15 @@ const ProductDetail = () => {
                 emptyAddressText="Add a delivery address to continue checkout."
                 paymentOptions={[
                   {
-                    id: "prepaid",
-                    icon: "lucide:shield-check",
-                    title: "Online Payment",
-                    description: `Pay securely using Razorpay. ${formatMoney(PREPAID_DISCOUNT_AMOUNT)} extra off`,
-                    active: buyNowPayment === "prepaid",
-                    disabled: !canUsePrepaid,
-                    onSelect: () => setBuyNowPayment("prepaid"),
-                  },
-                  {
                     id: "cod",
                     icon: "lucide:banknote",
                     title: "Cash on Delivery",
                     description: canUseCod ? `${formatMoney(COD_FEE_AMOUNT)} COD charge` : `Not available above ${formatMoney(COD_MAX_AMOUNT)}`,
-                    active: buyNowPayment === "cod",
+                    active: true,
                     disabled: !canUseCod,
-                    onSelect: () => setBuyNowPayment("cod"),
+                    onSelect: () => {
+                      if (!canUseCod) showNotification(`COD is available only up to ${formatMoney(COD_MAX_AMOUNT)}.`, "warning");
+                    },
                   },
                 ]}
                 deliveryError={buyNowShipping?.unavailable ? (buyNowShipping.message || "Delivery is not possible at this location right now.") : null}
@@ -1405,8 +1336,8 @@ const ProductDetail = () => {
                   phone: selectedBuyNowAddress?.phone || user?.phone,
                 }}
                 reviewPayment={{
-                  title: buyNowPayment === "cod" ? "Cash on Delivery" : "Online Payment",
-                  description: buyNowPayment === "cod" ? "Pay when your order is delivered." : "Pay securely using Razorpay.",
+                  title: "Cash on Delivery",
+                  description: "Pay when your order is delivered.",
                 }}
                 onEditDetails={() => setBuyNowStep("details")}
                 showSummary={buyNowStep === "payment"}
@@ -1433,7 +1364,6 @@ const ProductDetail = () => {
                   rows: [
                     { label: "Product total", value: formatMoney(buyNowSubtotal) },
                     { label: "Free delivery charge", value: buyNowShippingLoading ? "Checking..." : buyNowShipping?.unavailable ? "Unavailable" : <><s>{formatMoney(buyNowShippingRate)}</s> Free</>, tone: "success" },
-                    ...(buyNowPrepaidDiscount > 0 ? [{ label: "Prepaid payment discount", value: `-${formatMoney(buyNowPrepaidDiscount)}`, tone: "success" }] : []),
                     ...(buyNowPaymentFee > 0 ? [{ label: "COD charge", value: formatMoney(buyNowPaymentFee), tone: "accent" }] : []),
                     { label: "Platform fee", value: formatMoney(buyNowPlatformFee) },
                     ...(buyNowCouponDiscount > 0 ? [{ label: "Coupon discount", value: `-${formatMoney(buyNowCouponDiscount)}`, tone: "success" }] : []),
@@ -1447,8 +1377,8 @@ const ProductDetail = () => {
                   logistics: buyNowShipping && !buyNowShipping.unavailable ? {
                     label: "Returns & exchange available",
                     tooltip: shippingDiscountReasonCode === "first_order"
-                      ? "Return and exchange are available. For your first order, delivery and RTO charges will not be deducted."
-                      : `Return and exchange are available. On return, refund may deduct ${formatMoney(buyNowReturnDeliveryDeduction)} delivery and ${formatMoney(buyNowReturnRtoDeduction)} RTO.`,
+                      ? "Return and exchange are available. For your first order, delivery charge will not be deducted."
+                      : `Return and exchange are available. On return, refund may deduct ${formatMoney(buyNowReturnDeliveryDeduction)} delivery charge.`,
                   } : null,
                   totalLabel: "Final amount",
                   total: buyNowTotal,
@@ -1524,18 +1454,10 @@ const ProductDetail = () => {
                 <div className="buy-now-payment-grid">
                   <button
                     type="button"
-                    className={buyNowPayment === "prepaid" ? "active" : ""}
-                    onClick={() => setBuyNowPayment("prepaid")}
-                    disabled={!canUsePrepaid}
-                  >
-                    <Icon icon="lucide:credit-card" />
-                    <span>Prepaid Razorpay</span>
-                    <small>{formatMoney(PREPAID_DISCOUNT_AMOUNT)} extra off</small>
-                  </button>
-                  <button
-                    type="button"
-                    className={buyNowPayment === "cod" ? "active" : ""}
-                    onClick={() => setBuyNowPayment("cod")}
+                    className="active"
+                    onClick={() => {
+                      if (!canUseCod) showNotification(`COD is available only up to ${formatMoney(COD_MAX_AMOUNT)}.`, "warning");
+                    }}
                     disabled={!canUseCod}
                   >
                     <Icon icon="lucide:banknote" />
@@ -1579,8 +1501,8 @@ const ProductDetail = () => {
                 </div>
                 <div className="buy-now-review-card">
                   <span>Payment method</span>
-                  <strong>{buyNowPayment === "cod" ? "Cash on Delivery" : "Prepaid Razorpay"}</strong>
-                  <p>{buyNowPayment === "cod" ? "Pay when your order is delivered." : "Pay securely online."}</p>
+                  <strong>Cash on Delivery</strong>
+                  <p>Pay when your order is delivered.</p>
                 </div>
               </section>
 
@@ -1608,7 +1530,6 @@ const ProductDetail = () => {
                   rows={[
                     { label: "Product total", value: formatMoney(buyNowSubtotal) },
                     { label: "Free delivery charge", value: buyNowShippingLoading ? "Checking..." : buyNowShipping?.unavailable ? "Unavailable" : <><s>{formatMoney(buyNowShippingRate)}</s> Free</>, tone: "success" },
-                    ...(buyNowPrepaidDiscount > 0 ? [{ label: "Prepaid payment discount", value: `-${formatMoney(buyNowPrepaidDiscount)}`, tone: "success" }] : []),
                     ...(buyNowPaymentFee > 0 ? [{ label: "COD charge", value: formatMoney(buyNowPaymentFee), tone: "accent" }] : []),
                     { label: "Platform fee", value: formatMoney(buyNowPlatformFee) },
                     ...(buyNowCouponDiscount > 0 ? [{ label: "Coupon discount", value: `-${formatMoney(buyNowCouponDiscount)}`, tone: "success" }] : []),
@@ -1622,8 +1543,8 @@ const ProductDetail = () => {
                   logistics={buyNowShipping && !buyNowShipping.unavailable ? {
                     label: "Returns & exchange available",
                     tooltip: shippingDiscountReasonCode === "first_order"
-                      ? "Return and exchange are available. For your first order, delivery and RTO charges will not be deducted."
-                      : `Return and exchange are available. On return, refund may deduct ${formatMoney(buyNowReturnDeliveryDeduction)} delivery and ${formatMoney(buyNowReturnRtoDeduction)} RTO.`,
+                      ? "Return and exchange are available. For your first order, delivery charge will not be deducted."
+                      : `Return and exchange are available. On return, refund may deduct ${formatMoney(buyNowReturnDeliveryDeduction)} delivery charge.`,
                   } : null}
                   totalLabel="Final amount"
                   total={buyNowTotal}

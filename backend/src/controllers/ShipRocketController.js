@@ -297,15 +297,13 @@ class ShipRocketController {
       // Update local order status
       const logisticsDeduction = order.OrderItems.reduce((sum, item) => {
         const rules = item.shipping_meta?.refund_rules || {};
-        return sum
-          + Number(rules.return_delivery_deduction || 0)
-          + Number(rules.return_rto_deduction || 0);
+        return sum + Number(rules.return_delivery_deduction || 0);
       }, 0);
       const paidAmount = Number(order.payable_amount ?? order.total_amount ?? 0);
       const estimatedRefund = Math.max(0, paidAmount - logisticsDeduction);
       const refundNote = logisticsDeduction > 0
-        ? `Return initiated. Estimated refund Rs. ${estimatedRefund.toLocaleString('en-IN')} after Rs. ${logisticsDeduction.toLocaleString('en-IN')} delivery/RTO logistics deduction.`
-        : `Return initiated. Estimated refund Rs. ${estimatedRefund.toLocaleString('en-IN')}; no delivery/RTO deduction applies.`;
+        ? `Return initiated. Estimated refund Rs. ${estimatedRefund.toLocaleString('en-IN')} after Rs. ${logisticsDeduction.toLocaleString('en-IN')} delivery charge deduction.`
+        : `Return initiated. Estimated refund Rs. ${estimatedRefund.toLocaleString('en-IN')}; no delivery charge deduction applies.`;
 
       await order.update({
         status: `Return Initiated${reason ? `: ${String(reason).slice(0, 120)}` : ''}`,
@@ -379,7 +377,7 @@ class ShipRocketController {
         items,
         reason: `Exchange requested${reason ? `: ${reason}` : ''}`,
       });
-      const note = 'Exchange initiated. No delivery or RTO logistics deduction applies for one approved exchange.';
+      const note = 'Exchange initiated. No delivery deduction applies for one approved exchange.';
 
       await order.update({
         status: `Exchange Initiated${reason ? `: ${String(reason).slice(0, 120)}` : ''}`,

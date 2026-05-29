@@ -142,7 +142,7 @@ const Product = sequelize.define(
     },
     payment_options: {
       type: DataTypes.JSONB,
-      defaultValue: ["prepaid"],
+      defaultValue: ["cod"],
       allowNull: false,
     },
     service_options: {

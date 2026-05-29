@@ -280,7 +280,7 @@ export default function OrderConfirmation() {
                     <span>{formatPrice(item.price)} each</span>
                     {item.shipping_meta?.refund_rules && (
                       <small>
-                        Return logistics: {formatPrice(item.shipping_meta.refund_rules.return_delivery_deduction)} delivery + {formatPrice(item.shipping_meta.refund_rules.return_rto_deduction)} RTO. Exchange: no deduction.
+                        Return deduction: {formatPrice(item.shipping_meta.refund_rules.return_delivery_deduction)} delivery charge. Exchange: no deduction.
                       </small>
                     )}
                   </div>
@@ -298,14 +298,14 @@ export default function OrderConfirmation() {
             <div className="summary-row"><span>Product total</span><strong>{formatPrice(breakdown.subtotal)}</strong></div>
             <div className="summary-row"><span>Delivery charge</span><strong>{formatPrice(breakdown.shippingCharge)}</strong></div>
             {breakdown.shippingDiscount > 0 && <div className="summary-row is-saving"><span>Free shipping</span><strong>-{formatPrice(breakdown.shippingDiscount)}</strong></div>}
-            {breakdown.paymentDiscount > 0 && <div className="summary-row is-saving"><span>Prepaid discount</span><strong>-{formatPrice(breakdown.paymentDiscount)}</strong></div>}
+            {breakdown.paymentDiscount > 0 && <div className="summary-row is-saving"><span>Payment discount</span><strong>-{formatPrice(breakdown.paymentDiscount)}</strong></div>}
             {breakdown.paymentFee > 0 && <div className="summary-row"><span>COD charge</span><strong>{formatPrice(breakdown.paymentFee)}</strong></div>}
             {breakdown.couponDiscount > 0 && <div className="summary-row is-saving"><span>Coupon{order.coupon_code ? ` (${order.coupon_code})` : ""}</span><strong>-{formatPrice(breakdown.couponDiscount)}</strong></div>}
             {breakdown.walletAmount > 0 && <div className="summary-row is-saving"><span>Wallet used</span><strong>-{formatPrice(breakdown.walletAmount)}</strong></div>}
             <div className="summary-row is-final"><span>Final amount</span><strong>{formatPrice(breakdown.payable)}</strong></div>
             <div className="payment-tags">
-              <span>{order.payment_method || "Prepaid"}</span>
-              <span>{order.payment_status || "Paid"}</span>
+              <span>{order.payment_method || "COD"}</span>
+              <span>{order.payment_status || "Pending"}</span>
             </div>
           </section>
 

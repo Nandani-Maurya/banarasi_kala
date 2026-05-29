@@ -8,7 +8,7 @@ export default function Payments() {
         <div className="flex gap-4">
           <span className="px-4 py-2 bg-green-50 text-green-700 rounded-lg text-xs font-bold border border-green-100 flex items-center gap-2 shadow-sm">
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span> 
-            Razorpay Active
+            Payment gateway disabled
           </span>
         </div>
       </div>

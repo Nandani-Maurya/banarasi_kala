@@ -11,7 +11,7 @@ const FAQ_ITEMS = [
   ["My payment failed but money was deducted. What should I do?", "If your payment was deducted but the order was not confirmed, the amount is usually refunded automatically within 5-7 business days."],
   ["Can I return or exchange my saree?", "Yes, eligible products can be returned or exchanged as per our Return & Exchange Policy."],
   ["Do you accept bulk or wholesale orders?", "Yes, we accept bulk and wedding collection orders. Please contact us for special pricing."],
-  ["Are online payments secure?", "Yes, all transactions are encrypted and securely processed through Razorpay."],
+  ["How can I pay for my order?", "Cash on Delivery is available for eligible orders. Online payment will be added soon."],
 ];
 
 const FaqSection = () => {
