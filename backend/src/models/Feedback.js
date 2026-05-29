@@ -18,6 +18,18 @@ const Feedback = sequelize.define('Feedback', {
       key: 'id'
     }
   },
+  order_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
+  order_item_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
+  product_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
   rating: {
     type: DataTypes.INTEGER,
     allowNull: false,
@@ -29,6 +41,15 @@ const Feedback = sequelize.define('Feedback', {
   comment: {
     type: DataTypes.TEXT,
     allowNull: false
+  },
+  title: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  images: {
+    type: DataTypes.JSONB,
+    allowNull: true,
+    defaultValue: []
   },
   is_approved: {
     type: DataTypes.BOOLEAN,
@@ -43,6 +64,12 @@ const Feedback = sequelize.define('Feedback', {
 
 // Associations
 const Customer = require('./Customer');
+const Product = require('./Product');
+const Order = require('./Order');
+const OrderItem = require('./OrderItem');
 Feedback.belongsTo(Customer, { foreignKey: 'customer_id' });
+Feedback.belongsTo(Product, { foreignKey: 'product_id' });
+Feedback.belongsTo(Order, { foreignKey: 'order_id' });
+Feedback.belongsTo(OrderItem, { foreignKey: 'order_item_id' });
 
 module.exports = Feedback;

@@ -102,11 +102,47 @@ const Order = sequelize.define('Order', {
   },
   payment_method: {
     type: DataTypes.STRING,
-    defaultValue: 'COD'
+    defaultValue: 'Prepaid'
   },
   payment_status: {
     type: DataTypes.STRING,
     defaultValue: 'Paid'
+  },
+  payment_gateway: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  gateway_order_id: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  gateway_payment_id: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  gateway_signature: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  gateway_amount_paise: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
+  gateway_currency: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  payment_verified_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  payment_gateway_response: {
+    type: DataTypes.JSONB,
+    allowNull: true
+  },
+  payment_failure_reason: {
+    type: DataTypes.TEXT,
+    allowNull: true
   },
   shiprocket_order_id: {
     type: DataTypes.STRING,
@@ -120,9 +156,56 @@ const Order = sequelize.define('Order', {
     type: DataTypes.JSONB,
     allowNull: true
   },
+  is_rto: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  rto_count: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
+  },
+  is_redispatched: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  redispatch_count: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
+  },
+  original_order_id: {
+    type: DataTypes.BIGINT,
+    allowNull: true
+  },
+  redispatch_payment_amount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    defaultValue: 0
+  },
+  customer_cod_blocked: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
+  },
+  cod_blocked_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  cod_block_reason: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
   cancelled_at: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+  refund_amount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    defaultValue: 0
   },
   refund_status: {
     type: DataTypes.STRING,

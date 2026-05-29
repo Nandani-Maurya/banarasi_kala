@@ -360,6 +360,11 @@
   animation: modal-slide-up 280ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.feedback-detail-modal {
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
 .cancel-modal-close {
   position: absolute;
   top: 20px;
@@ -425,6 +430,8 @@
 }
 
 .cancel-modal-form select,
+.cancel-modal-form input[type="text"],
+.cancel-modal-form input[type="file"],
 .cancel-modal-form textarea {
   width: 100%;
   padding: 12px 14px;
@@ -438,6 +445,7 @@
 }
 
 .cancel-modal-form select:focus,
+.cancel-modal-form input[type="text"]:focus,
 .cancel-modal-form textarea:focus {
   outline: 0;
   border-color: #7b001b;
@@ -494,6 +502,47 @@
   background: #911c13;
   box-shadow: 0 8px 20px rgba(180, 35, 24, 0.18);
   transform: translateY(-0.5px);
+}
+
+.modal-action-btn.primary {
+  background: #7b001b;
+  color: #f5c94d;
+  border: 1px solid transparent;
+}
+
+.confirmation-feedback-btn {
+  width: fit-content;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid #9b1746;
+  border-radius: 999px;
+  background: #fffdf8;
+  color: #9b1746;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.confirmation-feedback-note {
+  color: #087a55 !important;
+}
+
+.confirmation-rating-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.confirmation-rating-picker button {
+  border: 0;
+  background: transparent;
+  color: rgba(50, 21, 15, 0.32);
+  font-size: 30px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.confirmation-rating-picker button.active {
+  color: #008767;
 }
 
 .modal-action-btn:disabled {

@@ -21,6 +21,10 @@ export const API_ENDPOINTS = {
   cancelOrder: (orderId) => `${API_BASE_URL}/api/orders/${orderId}/cancel`,
   shiprocket: `${API_BASE_URL}/api/shiprocket`,
   createReturn: `${API_BASE_URL}/api/shiprocket/create-return`,
+  razorpay: {
+    createOrder: `${API_BASE_URL}/api/razorpay/create-order`,
+    verifyPayment: `${API_BASE_URL}/api/razorpay/verify-payment`,
+  },
 };
 
 export default API_ENDPOINTS;

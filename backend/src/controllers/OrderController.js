@@ -4,8 +4,10 @@ const Product = require('../models/Product');
 const Color = require('../models/Color');
 const Customer = require('../models/Customer');
 const WalletTransaction = require('../models/WalletTransaction');
+const Feedback = require('../models/Feedback');
 const { sequelize } = require('../config/db');
 const { DataTypes } = require('sequelize');
+const crypto = require('crypto');
 const EmailService = require('../services/EmailService');
 const ShipRocketService = require('../services/ShipRocketService');
 const WalletService = require('../services/WalletService');
@@ -13,6 +15,13 @@ const { config } = require('../config/env');
 const { Op } = require("sequelize");
 const { AppError } = require('../utils/http');
 const { formatOrderNumber, formatProductCode, formatVariantItemCode } = require('../utils/codes');
+const {
+  ORDER_LIFECYCLE_COLUMNS,
+  COD_BLOCK_MESSAGE,
+  ensureOrderLifecycleColumns,
+  isCodBlockedForContact,
+} = require('../utils/orderLifecycle');
+const { ensureFeedbackColumns } = require('../utils/feedbackSchema');
 
 const sortProductImages = (images = []) => [...images].sort((a, b) => {
   const left = Number.isFinite(Number(a.display_order)) ? Number(a.display_order) : 999;
@@ -34,8 +43,14 @@ const pickOrderItemImage = (product, colorId) => {
   return selected?.url || selected?.image_url || "";
 };
 
-const serializeOrder = (order) => {
+const serializeOrder = (order, feedbackRows = []) => {
   const json = order.toJSON();
+  const rows = Array.isArray(feedbackRows)
+    ? feedbackRows.map((item) => (typeof item?.toJSON === 'function' ? item.toJSON() : item))
+    : [];
+  const feedbackByItem = new Map(
+    rows.map((item) => [`${item.order_id}:${item.order_item_id}:${item.product_id}`, item]),
+  );
   json.OrderItems = (json.OrderItems || []).map((item) => ({
     id: item.id,
     product_id: item.product_id,
@@ -50,6 +65,7 @@ const serializeOrder = (order) => {
     product_slug: item.Product?.slug || null,
     shipping_meta: item.shipping_meta || null,
     status: item.status || 'Active',
+    feedback: feedbackByItem.get(`${json.id}:${item.id}:${item.product_id}`) || null,
   }));
   return json;
 };
@@ -57,11 +73,31 @@ const serializeOrder = (order) => {
 let orderAccountingColumnsReady = false;
 let orderColumnCache = null;
 
+const REQUIRED_ORDER_COLUMNS = {
+  payment_gateway: { type: DataTypes.STRING, allowNull: true },
+  gateway_order_id: { type: DataTypes.STRING, allowNull: true },
+  gateway_payment_id: { type: DataTypes.STRING, allowNull: true },
+  gateway_signature: { type: DataTypes.TEXT, allowNull: true },
+  gateway_amount_paise: { type: DataTypes.INTEGER, allowNull: true },
+  gateway_currency: { type: DataTypes.STRING, allowNull: true },
+  payment_verified_at: { type: DataTypes.DATE, allowNull: true },
+  payment_gateway_response: { type: DataTypes.JSONB, allowNull: true },
+  payment_failure_reason: { type: DataTypes.TEXT, allowNull: true },
+  ...ORDER_LIFECYCLE_COLUMNS,
+};
+
 const ensureOrderAccountingColumns = async () => {
+  await ensureOrderLifecycleColumns();
   const queryInterface = sequelize.getQueryInterface();
   const table = { tableName: 'orders', schema: config.dbSchema };
   if (orderAccountingColumnsReady && orderColumnCache) return orderColumnCache;
-  const columns = await queryInterface.describeTable(table);
+  let columns = await queryInterface.describeTable(table);
+  for (const [column, definition] of Object.entries(REQUIRED_ORDER_COLUMNS)) {
+    if (!columns[column]) {
+      await queryInterface.addColumn(table, column, definition);
+    }
+  }
+  columns = await queryInterface.describeTable(table);
   orderColumnCache = columns;
   orderAccountingColumnsReady = true;
   return columns;
@@ -85,6 +121,16 @@ const ensureOrderItemAccountingColumns = async () => {
 };
 
 const roundMoney = (value) => Math.round((Number(value) || 0) * 100) / 100;
+const toPaise = (value) => Math.round(roundMoney(value) * 100);
+
+const verifyRazorpayPayment = ({ orderId, paymentId, signature }) => {
+  if (!orderId || !paymentId || !signature) return false;
+  const expectedSignature = crypto
+    .createHmac('sha256', config.razorpayKeySecret)
+    .update(`${orderId}|${paymentId}`)
+    .digest('hex');
+  return expectedSignature === signature;
+};
 
 const getProductWeightKg = (product) => {
   const rawWeight = Number(product?.weight);
@@ -190,10 +236,15 @@ class OrderController {
   async createOrder(req, res) {
     const t = await sequelize.transaction();
     try {
+      await ensureOrderLifecycleColumns();
       const { 
         customer_name, customer_email, address, city, state, pincode, phone, 
         subtotal_amount, shipping_charge = 0, shipping_discount_reason = null,
-        selected_courier_data = null, items, coupon_code, wallet_amount = 0
+        selected_courier_data = null, items, coupon_code, wallet_amount = 0,
+        payment_method = 'Prepaid', payment_status = 'Paid',
+        payment_gateway = null, gateway_order_id = null, gateway_payment_id = null,
+        gateway_signature = null, gateway_amount_paise = null, gateway_currency = 'INR',
+        payment_gateway_response = null
       } = req.body;
       if (!Array.isArray(items) || items.length === 0) {
         await t.rollback();
@@ -255,15 +306,39 @@ class OrderController {
       const actualShippingCharge = Math.max(0, Number(shipping_charge || 0));
       const actualShippingDiscount = actualShippingCharge;
       const effectiveShippingDiscountReason = actualShippingCharge > 0 ? (shipping_discount_reason || 'free_delivery') : null;
-      const actualPaymentFee = Math.max(0, Number(config.codFeeAmount || 0) + Number(config.platformFeeAmount || 0));
-      const actualPaymentDiscount = 0;
-      const normalizedPaymentMethod = 'COD';
-      const normalizedPaymentStatus = 'Pending';
+      const normalizedPaymentMethod = String(payment_method || 'Prepaid').toUpperCase() === 'COD' ? 'COD' : 'Prepaid';
+      const normalizedPaymentStatus = normalizedPaymentMethod === 'COD' ? 'Pending' : (payment_status || 'Paid');
+      const actualPaymentFee = Math.max(
+        0,
+        Number(config.platformFeeAmount || 0) + (normalizedPaymentMethod === 'COD' ? Number(config.codFeeAmount || 0) : 0),
+      );
+      const actualPaymentDiscount = normalizedPaymentMethod === 'Prepaid'
+        ? Math.min(Number(config.prepaidDiscountAmount || 0), itemSubtotal)
+        : 0;
       let final_total = Math.max(0, itemSubtotal + actualShippingCharge - actualShippingDiscount + actualPaymentFee - actualPaymentDiscount);
+      const normalizedGateway = normalizedPaymentMethod === 'Prepaid'
+        ? String(payment_gateway || 'razorpay').trim().toLowerCase()
+        : null;
+      let paymentVerifiedAt = null;
+      let paymentFailureReason = null;
 
-      if (itemSubtotal > config.codMaxAmount) {
+      if (normalizedPaymentMethod === 'COD' && itemSubtotal > config.codMaxAmount) {
         await t.rollback();
         return res.status(400).json({ message: `COD is available only up to Rs. ${config.codMaxAmount}.` });
+      }
+
+      if (normalizedPaymentMethod === 'COD') {
+        const codBlocked = await isCodBlockedForContact({
+          customerId: customer?.id,
+          email: customer?.email || customer_email,
+          phone,
+          transaction: t,
+        });
+
+        if (codBlocked) {
+          await t.rollback();
+          return res.status(403).json({ message: COD_BLOCK_MESSAGE });
+        }
       }
 
       if (coupon_code) {
@@ -301,6 +376,36 @@ class OrderController {
         }
       }
 
+      const expectedGatewayAmountPaise = toPaise(final_total);
+
+      if (normalizedPaymentMethod === 'Prepaid') {
+        if (normalizedGateway !== 'razorpay') {
+          await t.rollback();
+          return res.status(400).json({ message: 'Online payment provider is not supported.' });
+        }
+
+        const signatureValid = verifyRazorpayPayment({
+          orderId: gateway_order_id,
+          paymentId: gateway_payment_id,
+          signature: gateway_signature,
+        });
+
+        if (!signatureValid) {
+          await t.rollback();
+          return res.status(400).json({ message: 'Payment could not be verified. Please try again.' });
+        }
+
+        if (gateway_amount_paise !== null && gateway_amount_paise !== undefined) {
+          const paidAmountPaise = Number(gateway_amount_paise);
+          if (!Number.isFinite(paidAmountPaise) || paidAmountPaise !== expectedGatewayAmountPaise) {
+            await t.rollback();
+            return res.status(400).json({ message: 'Payment amount does not match this order.' });
+          }
+        }
+
+        paymentVerifiedAt = new Date();
+      }
+
       const orderColumns = await ensureOrderAccountingColumns();
       const orderItemColumns = await ensureOrderItemAccountingColumns();
       const itemShippingMetas = allocateItemShipping({
@@ -331,7 +436,26 @@ class OrderController {
         payable_amount: final_total,
         selected_courier_data,
         payment_method: normalizedPaymentMethod,
-        payment_status: normalizedPaymentStatus
+        payment_status: normalizedPaymentStatus,
+        payment_gateway: normalizedGateway,
+        gateway_order_id: normalizedPaymentMethod === 'Prepaid' ? gateway_order_id : null,
+        gateway_payment_id: normalizedPaymentMethod === 'Prepaid' ? gateway_payment_id : null,
+        gateway_signature: normalizedPaymentMethod === 'Prepaid' ? gateway_signature : null,
+        gateway_amount_paise: normalizedPaymentMethod === 'Prepaid' ? expectedGatewayAmountPaise : null,
+        gateway_currency: normalizedPaymentMethod === 'Prepaid' ? String(gateway_currency || 'INR').toUpperCase() : null,
+        payment_verified_at: paymentVerifiedAt,
+        payment_gateway_response: normalizedPaymentMethod === 'Prepaid' ? payment_gateway_response : null,
+        payment_failure_reason: paymentFailureReason,
+        is_rto: false,
+        rto_count: 0,
+        is_redispatched: false,
+        redispatch_count: 0,
+        original_order_id: null,
+        redispatch_payment_amount: 0,
+        customer_cod_blocked: false,
+        cod_blocked_at: null,
+        cod_block_reason: null,
+        refund_amount: 0,
       }, orderColumns);
 
       const order = await Order.create(orderPayload, {
@@ -400,7 +524,12 @@ class OrderController {
 
           const updatePayload = {};
           if (srResult?.order_id) updatePayload.shiprocket_order_id = String(srResult.order_id);
-          if (srResult?.awb_code) updatePayload.shiprocket_awb = String(srResult.awb_code);
+          if (srResult?.awb_code) {
+            updatePayload.shiprocket_awb = String(srResult.awb_code);
+            updatePayload.status = 'AWB Assigned';
+          } else {
+            updatePayload.status = 'Processing';
+          }
           const currentColumns = await ensureOrderAccountingColumns();
           const safeUpdatePayload = keepExistingColumns(updatePayload, currentColumns);
           if (Object.keys(safeUpdatePayload).length > 0) {
@@ -434,7 +563,14 @@ class OrderController {
         }],
         order: [['createdAt', 'DESC']],
       });
-      res.status(200).json(orders.map(serializeOrder));
+      const orderIds = orders.map((order) => order.id);
+      const feedbacks = orderIds.length
+        ? await Feedback.findAll({
+          where: { customer_id: req.user.id, order_id: orderIds },
+          attributes: ['id', 'order_id', 'order_item_id', 'product_id', 'rating', 'comment', 'title', 'images', 'is_approved'],
+        })
+        : [];
+      res.status(200).json(orders.map((order) => serializeOrder(order, feedbacks.map((item) => item.toJSON()))));
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
@@ -501,6 +637,7 @@ class OrderController {
   async getCurrentCustomerOrders(req, res) {
     try {
       await ensureOrderAccountingColumns();
+      await ensureFeedbackColumns();
       if (!req.user?.id || req.userRole === 'admin') {
         return res.status(401).json({ message: 'Customer authentication required' });
       }
@@ -530,6 +667,7 @@ class OrderController {
   async getCustomerOrderById(req, res) {
     try {
       await ensureOrderAccountingColumns();
+      await ensureFeedbackColumns();
       if (!req.user?.id || req.userRole === 'admin') {
         return res.status(401).json({ message: 'Customer authentication required' });
       }
@@ -552,7 +690,11 @@ class OrderController {
       });
 
       if (!order) return res.status(404).json({ message: 'Order not found' });
-      return res.status(200).json(serializeOrder(order));
+      const feedbacks = await Feedback.findAll({
+        where: { customer_id: req.user.id, order_id: order.id },
+        attributes: ['id', 'order_id', 'order_item_id', 'product_id', 'rating', 'comment', 'title', 'images', 'is_approved'],
+      });
+      return res.status(200).json(serializeOrder(order, feedbacks.map((item) => item.toJSON())));
     } catch (error) {
       return res.status(500).json({ message: error.message });
     }

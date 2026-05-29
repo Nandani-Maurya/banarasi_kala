@@ -114,6 +114,12 @@ class EmailService {
       Delivered: "Your order has been delivered. We hope it brings a little Banaras into your day.",
       Cancelled: "Your order has been cancelled.",
       Processing: "Your order is being prepared with care.",
+      "AWB Assigned": "Your shipment tracking number has been assigned.",
+      Undelivered: "The courier could not complete the delivery attempt. We will keep you updated.",
+      "RTO Initiated": "Your shipment is being returned to seller after an unsuccessful delivery attempt.",
+      "RTO In Transit": "Your shipment is on its way back to seller.",
+      "RTO Delivered": "Your order has returned to seller. Please check My Orders for refund or re-dispatch details.",
+      "Seller Cancelled": "Your order has been cancelled due to unsuccessful delivery. Please place a new order if you still wish to purchase the product.",
     };
     const message = statusCopy[normalizedStatus] || `Your order status is now ${normalizedStatus}.`;
     const orderNumber = order.order_number;

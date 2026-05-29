@@ -13,11 +13,13 @@ import { getProductStockInfo } from "../../utils/stockStatus";
 import { formatEstimatedDeliveryDate, getEstimatedDeliveryDate } from "../../utils/deliveryDate";
 import { getVariantSku } from "../../utils/itemCode";
 import { selectBestCourier } from "../../utils/courierSelection";
-import { numberEnv } from "../../utils/env";
+import { numberEnv, requiredEnv } from "../../utils/env";
+import { buildRazorpayPrefill } from "../../utils/razorpay";
 import "./Checkout.css";
 
 const PACKAGING_WEIGHT_KG = numberEnv("VITE_PACKAGING_WEIGHT_KG");
 const COD_MAX_AMOUNT = numberEnv("VITE_COD_MAX_AMOUNT");
+const PREPAID_DISCOUNT_AMOUNT = numberEnv("VITE_PREPAID_DISCOUNT_AMOUNT");
 const COD_FEE_AMOUNT = numberEnv("VITE_COD_FEE_AMOUNT");
 const PLATFORM_FEE_AMOUNT = numberEnv("VITE_PLATFORM_FEE_AMOUNT");
 const EMPTY_CHECKOUT_ADDRESS = {
@@ -69,7 +71,9 @@ const Checkout = () => {
   const payableCart = checkoutCart.filter((item) => !item.checkoutUnavailable);
   const unavailableCart = checkoutCart.filter((item) => item.checkoutUnavailable);
   const subtotal = payableCart.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
-  const isCodAllowed = payableCart.length > 0 && subtotal <= COD_MAX_AMOUNT;
+  const isProductCodAllowed = payableCart.length > 0 && payableCart.every(item => Array.isArray(item.payment_options) && item.payment_options.includes("cod"));
+  const isCodAllowed = isProductCodAllowed && subtotal <= COD_MAX_AMOUNT;
+  const [activePayment, setActivePayment] = useState("online");
   const [loading, setLoading] = useState(false);
   const [shippingCharge, setShippingCharge] = useState(0);
   const [shippingDeliveryDate, setShippingDeliveryDate] = useState(null);
@@ -109,9 +113,9 @@ const Checkout = () => {
   const shippingDiscount = shippingDiscountReason ? shippingCharge : 0;
   const finalShippingCharge = Math.max(0, shippingCharge - shippingDiscount);
   const returnDeliveryDeduction = shippingDiscountReason === "first_order" ? 0 : shippingCharge;
-  const paymentFee = payableCart.length > 0 ? COD_FEE_AMOUNT : 0;
+  const paymentFee = payableCart.length > 0 && activePayment === "cod" ? COD_FEE_AMOUNT : 0;
   const platformFee = payableCart.length > 0 ? PLATFORM_FEE_AMOUNT : 0;
-  const paymentDiscount = 0;
+  const paymentDiscount = payableCart.length > 0 && activePayment === "online" ? Math.min(PREPAID_DISCOUNT_AMOUNT, subtotal + finalShippingCharge) : 0;
   const orderGrossTotal = Math.max(0, subtotal + finalShippingCharge + paymentFee + platformFee - paymentDiscount);
   const effectiveCouponDiscount = Math.min(couponDiscount, orderGrossTotal);
   const grossAfterCoupon = Math.max(0, orderGrossTotal - effectiveCouponDiscount);
@@ -175,6 +179,12 @@ const Checkout = () => {
       cancelled = true;
     };
   }, [user?.id]);
+
+  useEffect(() => {
+    if (activePayment === "cod" && !isCodAllowed) {
+      setActivePayment("online");
+    }
+  }, [activePayment, isCodAllowed]);
 
   const selectAddress = (address) => {
     setSelectedAddressId(String(address.id));
@@ -310,7 +320,7 @@ const Checkout = () => {
       showNotification(`Please fix: ${Object.values(errors).join(" | ")}`, "warning");
       return;
     }
-    if (!isCodAllowed) {
+    if (activePayment === "cod" && !isCodAllowed) {
       showNotification(`COD is available only up to Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}.`, "warning");
       return;
     }
@@ -359,7 +369,7 @@ const Checkout = () => {
         setShippingLoading(true);
         const effectiveWeight = Math.max(0.1, Number(totalWeightKg.toFixed(3)));
         const response = await fetch(
-          `${API_ENDPOINTS.shiprocket}/serviceability?pincode=${encodeURIComponent(cleanPincode)}&weight=${effectiveWeight}&is_cod=1`
+          `${API_ENDPOINTS.shiprocket}/serviceability?pincode=${encodeURIComponent(cleanPincode)}&weight=${effectiveWeight}&is_cod=${activePayment === "cod" ? 1 : 0}`
         );
 
         if (!response.ok) {
@@ -370,7 +380,7 @@ const Checkout = () => {
         const couriers = data?.data?.available_courier_companies || [];
         const selectedCourier = selectBestCourier(couriers, {
           weightKg: effectiveWeight,
-          requireCod: isCodAllowed,
+          requireCod: activePayment === "cod" && subtotal <= COD_MAX_AMOUNT,
         });
 
         if (!cancelled) {
@@ -395,7 +405,7 @@ const Checkout = () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [formData.pincode, payableCart.length, totalWeightKg, isCodAllowed]);
+  }, [formData.pincode, payableCart.length, totalWeightKg, activePayment, subtotal]);
 
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
@@ -412,12 +422,11 @@ const Checkout = () => {
         setLoading(false);
         return;
       }
-      if (!isCodAllowed) {
+      if (activePayment === "cod" && !isCodAllowed) {
         showNotification(`COD is available only up to Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}.`, "warning");
         setLoading(false);
         return;
       }
-
       const finalOrderData = {
         customer_name: formData.fullName,
         customer_email: formData.email,
@@ -436,8 +445,8 @@ const Checkout = () => {
         wallet_amount: walletUsableAmount,
         payment_fee: paymentFee + platformFee,
         payment_discount: paymentDiscount,
-        payment_method: 'COD',
-        payment_status: 'Pending',
+        payment_method: activePayment === 'cod' ? 'COD' : 'Prepaid',
+        payment_status: activePayment === 'cod' ? 'Pending' : 'Paid',
         items: payableCart.map((item) => ({
           id: item.id,
           name: item.name,
@@ -447,14 +456,82 @@ const Checkout = () => {
         })),
       };
 
-      const dbRes = await api.post("/api/orders", finalOrderData);
-      clearCart();
-      navigate(`/order-confirmation?orderId=${dbRes.data.orderId}`);
+      if (activePayment === "cod" || total <= 0) {
+        const dbRes = await api.post("/api/orders", finalOrderData);
+        clearCart();
+        navigate(`/order-confirmation?orderId=${dbRes.data.orderId}`);
+        return;
+      }
+
+      if (!window.Razorpay) {
+        throw new Error("Payment gateway is still loading. Please try again.");
+      }
+
+      const orderResponse = await fetch(API_ENDPOINTS.razorpay.createOrder, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: total }),
+      });
+      const razorpayOrder = await orderResponse.json();
+      if (!orderResponse.ok) throw new Error(razorpayOrder.message || "Unable to start payment.");
+
+      const razorpay = new window.Razorpay({
+        key: requiredEnv("VITE_RAZORPAY_KEY_ID"),
+        amount: razorpayOrder.amount,
+        currency: "INR",
+        name: "Banarasi Kala",
+        description: "Banarasi Kala order",
+        order_id: razorpayOrder.id,
+        prefill: buildRazorpayPrefill({
+          name: formData.fullName,
+          email: formData.email,
+          phone: formData.phone,
+        }),
+        theme: { color: "#800020" },
+        handler: async (response) => {
+          try {
+            const verifyRes = await fetch(API_ENDPOINTS.razorpay.verifyPayment, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(response),
+            });
+            const verifyData = await verifyRes.json();
+            if (!verifyRes.ok || !verifyData.success) throw new Error(verifyData.message || "Payment verification failed.");
+
+            const dbRes = await api.post("/api/orders", {
+              ...finalOrderData,
+              payment_gateway: "razorpay",
+              gateway_order_id: response.razorpay_order_id,
+              gateway_payment_id: response.razorpay_payment_id,
+              gateway_signature: response.razorpay_signature,
+              gateway_amount_paise: razorpayOrder.amount,
+              gateway_currency: razorpayOrder.currency || "INR",
+              payment_gateway_response: {
+                provider: "razorpay",
+                order: razorpayOrder,
+                payment: response,
+                verification: verifyData,
+              },
+            });
+            clearCart();
+            navigate(`/order-confirmation?orderId=${dbRes.data.orderId}`);
+          } catch (error) {
+            showNotification(error.message || "Unable to save paid order.", "error");
+          } finally {
+            setLoading(false);
+          }
+        },
+        modal: {
+          ondismiss: () => setLoading(false),
+        },
+      });
+      razorpay.open();
     } catch (err) {
       console.error(err);
       showNotification(err?.response?.data?.message || "We could not place your order. Please try again.", "error");
-    } finally {
       setLoading(false);
+    } finally {
+      if (activePayment === "cod" || total <= 0) setLoading(false);
     }
   };
 
@@ -484,15 +561,27 @@ const Checkout = () => {
               user={user}
               paymentOptions={[
                 {
+                  id: "online",
+                  icon: "lucide:shield-check",
+                  title: "Online Payment",
+                  description: `Rs. ${PREPAID_DISCOUNT_AMOUNT.toLocaleString("en-IN")} extra off`,
+                  active: activePayment === "online",
+                  onSelect: () => setActivePayment("online"),
+                },
+                {
                   id: "cod",
                   icon: "lucide:banknote",
                   title: "Cash on Delivery",
-                  description: isCodAllowed ? `Rs. ${COD_FEE_AMOUNT.toLocaleString("en-IN")} COD charge` : `Not available above Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}`,
-                  active: true,
+                  description: isCodAllowed ? `Rs. ${COD_FEE_AMOUNT.toLocaleString("en-IN")} COD charge` : subtotal > COD_MAX_AMOUNT ? `Not available above Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}` : "Unavailable for some items",
+                  active: activePayment === "cod",
                   disabled: !isCodAllowed,
                   onSelect: () => {
-                    if (!isCodAllowed) {
+                    if (isCodAllowed) {
+                      setActivePayment("cod");
+                    } else if (subtotal > COD_MAX_AMOUNT) {
                       showNotification(`COD is available only up to Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}.`, "warning");
+                    } else {
+                      showNotification("Some products in your cart do not support Cash on Delivery.", "warning");
                     }
                   },
                 },
@@ -512,8 +601,8 @@ const Checkout = () => {
                 phone: formData.phone,
               }}
               reviewPayment={{
-                title: "Cash on Delivery",
-                description: "Pay when your order is delivered.",
+                title: activePayment === "cod" ? "Cash on Delivery" : "Online Payment",
+                description: activePayment === "cod" ? "Pay when your order is delivered." : "Pay securely using Razorpay.",
               }}
               onEditDetails={() => setCheckoutStep("details")}
               summaryProps={{
@@ -544,6 +633,7 @@ const Checkout = () => {
                   ...(unavailableCart.length > 0 ? [{ label: "Unavailable items", value: `${unavailableCart.length} excluded`, tone: "accent" }] : []),
                   ...(appliedCoupon ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-Rs. ${effectiveCouponDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
                   { label: "Free delivery charge", value: shippingLoading ? "Calculating..." : shippingCharge > 0 ? <><s>Rs. {shippingCharge.toLocaleString("en-IN")}</s> Free</> : "Free", tone: "success" },
+                  ...(paymentDiscount > 0 ? [{ label: "Prepaid payment discount", value: `-Rs. ${paymentDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
                   ...(paymentFee > 0 ? [{ label: "COD charge", value: `Rs. ${paymentFee.toLocaleString("en-IN")}`, tone: "accent" }] : []),
                   { label: "Platform fee", value: `Rs. ${platformFee.toLocaleString("en-IN")}` },
                   ...(walletUsableAmount > 0 ? [{ label: "Wallet used", value: `-Rs. ${walletUsableAmount.toLocaleString("en-IN")}`, tone: "success" }] : []),
@@ -565,7 +655,7 @@ const Checkout = () => {
                 action: {
                   label: checkoutStep === "details"
                     ? (shippingLoading ? "Checking delivery..." : "Continue")
-                    : (loading ? "Processing..." : "Place COD Order"),
+                    : (loading ? "Processing..." : activePayment === "cod" ? "Place COD Order" : "Pay & Place Order"),
                   onClick: checkoutStep === "details" ? proceedToReview : handlePlaceOrder,
                   disabled: checkoutStep === "details" ? (shippingLoading || payableCart.length === 0) : (loading || payableCart.length === 0),
                 },
@@ -635,17 +725,30 @@ const Checkout = () => {
                 <div className="buy-now-payment-grid">
                   <button
                     type="button"
+                    className={activePayment === "online" ? "active" : ""}
+                    onClick={() => setActivePayment("online")}
+                  >
+                    <Icon icon="lucide:shield-check" />
+                    <span>Online Payment</span>
+                    <small>Rs. {PREPAID_DISCOUNT_AMOUNT.toLocaleString("en-IN")} extra off</small>
+                  </button>
+                  <button
+                    type="button"
                     disabled={!isCodAllowed}
-                    className="active"
+                    className={activePayment === "cod" ? "active" : ""}
                     onClick={() => {
-                      if (!isCodAllowed) {
+                      if (isCodAllowed) {
+                        setActivePayment("cod");
+                      } else if (subtotal > COD_MAX_AMOUNT) {
                         showNotification(`COD is available only up to Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}.`, "warning");
+                      } else {
+                        showNotification("Some products in your cart do not support Cash on Delivery.", "warning");
                       }
                     }}
                   >
                     <Icon icon="lucide:banknote" />
                     <span>Cash on Delivery</span>
-                    <small>{isCodAllowed ? `Rs. ${COD_FEE_AMOUNT.toLocaleString("en-IN")} COD charge` : `Not available above Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}`}</small>
+                    <small>{isCodAllowed ? `Rs. ${COD_FEE_AMOUNT.toLocaleString("en-IN")} COD charge` : subtotal > COD_MAX_AMOUNT ? `Not available above Rs. ${COD_MAX_AMOUNT.toLocaleString("en-IN")}` : "Unavailable for some items"}</small>
                   </button>
                 </div>
               </section>
@@ -683,8 +786,8 @@ const Checkout = () => {
                   </div>
                   <div className="checkout-review-panel">
                     <span>Payment</span>
-                    <strong>Cash on Delivery</strong>
-                    <p>Pay when your order is delivered.</p>
+                    <strong>{activePayment === "cod" ? "Cash on Delivery" : "Online Payment"}</strong>
+                    <p>{activePayment === "cod" ? "Pay when your order is delivered." : "Pay securely with Razorpay."}</p>
                   </div>
                 </div>
               </section>
@@ -719,6 +822,7 @@ const Checkout = () => {
                       { label: "Subtotal", value: `Rs. ${subtotal.toLocaleString("en-IN")}` },
                       ...(appliedCoupon ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-Rs. ${effectiveCouponDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
                       { label: "Free delivery charge", value: shippingLoading ? "Calculating..." : shippingCharge > 0 ? <><s>Rs. {shippingCharge.toLocaleString("en-IN")}</s> Free</> : "Free", tone: "success" },
+                      ...(paymentDiscount > 0 ? [{ label: "Prepaid payment discount", value: `-Rs. ${paymentDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
                       ...(paymentFee > 0 ? [{ label: "COD charge", value: `Rs. ${paymentFee.toLocaleString("en-IN")}`, tone: "accent" }] : []),
                       { label: "Platform fee", value: `Rs. ${platformFee.toLocaleString("en-IN")}` },
                       ...(walletUsableAmount > 0 ? [{ label: "Wallet used", value: `-Rs. ${walletUsableAmount.toLocaleString("en-IN")}`, tone: "success" }] : []),
@@ -735,7 +839,7 @@ const Checkout = () => {
                     action={{
                       label: checkoutStep === "details"
                         ? (shippingLoading ? "Checking delivery..." : "Continue")
-                        : (loading ? "Processing..." : "Place COD Order"),
+                        : (loading ? "Processing..." : activePayment === "cod" ? "Place COD Order" : "Pay & Place Order"),
                       onClick: checkoutStep === "details" ? proceedToReview : handlePlaceOrder,
                       disabled: checkoutStep === "details" ? shippingLoading : loading,
                     }}
@@ -821,6 +925,12 @@ const Checkout = () => {
                       <span>FREE DELIVERY CHARGE</span>
                       <span>{shippingLoading ? "CALCULATING..." : shippingCharge > 0 ? <><s>Rs. {shippingCharge.toLocaleString("en-IN")}</s> Free</> : "FREE"}</span>
                     </div>
+                    {paymentDiscount > 0 && (
+                      <div className="flex justify-between items-center text-xs text-emerald-600 font-bold">
+                        <span>PREPAID DISCOUNT</span>
+                        <span>-Rs. {paymentDiscount.toLocaleString("en-IN")}</span>
+                      </div>
+                    )}
                     {paymentFee > 0 && (
                       <div className="flex justify-between items-center text-xs text-[#800020] font-bold">
                         <span>COD FEE</span>
@@ -872,7 +982,7 @@ const Checkout = () => {
                       </button>
                     ) : (
                       <button onClick={handlePlaceOrder} disabled={loading} className="checkout-primary-btn w-full">
-                        {loading ? "Processing..." : "Place COD Order"}
+                        {loading ? "Processing..." : activePayment === "cod" ? "Place COD Order" : "Pay & Place Order"}
                       </button>
                     )}
                   </div>

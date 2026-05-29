@@ -5,6 +5,8 @@ const app = require("./src");
 const { connectDB } = require("./src/config/db");
 const { config } = require("./src/config/env");
 const WalletService = require("./src/services/WalletService");
+const { ensureOrderLifecycleColumns } = require("./src/utils/orderLifecycle");
+const { ensureFeedbackColumns } = require("./src/utils/feedbackSchema");
 
 const PORT = config.port;
 
@@ -54,6 +56,8 @@ const startReferralPayoutJob = () => {
 const startServer = async () => {
   try {
     await connectDB();
+    await ensureOrderLifecycleColumns();
+    await ensureFeedbackColumns();
 
     startHeartbeat();
     startReferralPayoutJob();

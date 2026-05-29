@@ -17,6 +17,16 @@ const STATUS_CONFIG = {
   Delivered: { color: "#087a55", bg: "#edfdf5", icon: "lucide:check-circle", label: "Delivered" },
   Cancelled: { color: "#b42318", bg: "#fff0ee", icon: "lucide:x-circle", label: "Cancelled" },
   "Out For Delivery": { color: "#9a6200", bg: "#fff6dc", icon: "lucide:navigation", label: "Out for delivery" },
+  Undelivered: { color: "#9a6200", bg: "#fff6dc", icon: "lucide:triangle-alert", label: "Delivery attempt failed" },
+  "AWB Assigned": { color: "#2454a6", bg: "#eff5ff", icon: "lucide:barcode", label: "AWB assigned" },
+  "RTO Initiated": { color: "#9a6200", bg: "#fff6dc", icon: "lucide:undo-2", label: "Returning to seller" },
+  "RTO In Transit": { color: "#9a6200", bg: "#fff6dc", icon: "lucide:truck", label: "Returning to seller" },
+  "RTO Delivered": { color: "#7a3d00", bg: "#fff4e8", icon: "lucide:warehouse", label: "Order returned to seller" },
+  "Seller Cancelled": { color: "#b42318", bg: "#fff0ee", icon: "lucide:x-circle", label: "Cancelled by seller" },
+  "Re-dispatch Requested": { color: "#2454a6", bg: "#eff5ff", icon: "lucide:repeat-2", label: "Re-dispatch requested" },
+  "Re-dispatch Payment Pending": { color: "#8a5a00", bg: "#fff6dc", icon: "lucide:credit-card", label: "Re-dispatch payment pending" },
+  "Re-dispatch Paid": { color: "#087a55", bg: "#edfdf5", icon: "lucide:badge-check", label: "Re-dispatch paid" },
+  "Re-dispatched": { color: "#6840aa", bg: "#f5f0ff", icon: "lucide:truck", label: "Re-dispatched" },
 };
 
 const getStatus = (status) => {
@@ -28,6 +38,12 @@ const getStatus = (status) => {
   if (normalized === "delivered") return STATUS_CONFIG.Delivered;
   if (normalized === "cancelled") return STATUS_CONFIG.Cancelled;
   if (normalized === "out for delivery" || normalized === "out_for_delivery") return STATUS_CONFIG["Out For Delivery"];
+  if (normalized === "undelivered") return STATUS_CONFIG.Undelivered;
+  if (normalized === "awb assigned" || normalized === "awb_assigned") return STATUS_CONFIG["AWB Assigned"];
+  if (normalized === "rto initiated" || normalized === "rto_initiated") return STATUS_CONFIG["RTO Initiated"];
+  if (normalized === "rto in transit" || normalized === "rto_in_transit") return STATUS_CONFIG["RTO In Transit"];
+  if (normalized === "rto delivered" || normalized === "rto_delivered") return STATUS_CONFIG["RTO Delivered"];
+  if (normalized === "seller cancelled" || normalized === "seller_cancelled") return STATUS_CONFIG["Seller Cancelled"];
   
   return STATUS_CONFIG[status] || STATUS_CONFIG.Pending;
 };
@@ -39,7 +55,7 @@ const toNumber = (value) => {
 const formatPrice = (value) => `Rs. ${toNumber(value).toLocaleString("en-IN")}`;
 const getItemImage = (item) => item.image_url || item.product_image_url || "";
 const getItemColorLabel = (item) => item.color_name || item.Color?.name || "Selected color";
-const isCancelled = (order) => String(order.status || "").toLowerCase() === "cancelled";
+const isCancelled = (order) => ["cancelled", "seller cancelled"].includes(String(order.status || "").toLowerCase());
 const isDelivered = (order) => String(order.status || "").toLowerCase() === "delivered";
 
 const getOrderBreakdown = (order) => {
@@ -88,15 +104,15 @@ const getOrderBreakdown = (order) => {
     couponDiscount,
     walletAmount,
     payable,
-    paymentMethod: order.payment_method || "COD",
-    paymentStatus: order.payment_status || (String(order.payment_method || "COD").toUpperCase() === "COD" ? "Pending" : "Paid"),
+    paymentMethod: order.payment_method || "Prepaid",
+    paymentStatus: order.payment_status || (String(order.payment_method).toUpperCase() === "COD" ? "Pending" : "Paid"),
   };
 };
 
 const canCancelOrder = (order) => {
   if (!order?.createdAt) return false;
   const status = String(order.status || "").toLowerCase();
-  if (["cancelled", "delivered"].includes(status)) return false;
+  if (["cancelled", "seller cancelled", "delivered", "rto delivered"].includes(status) || status.startsWith("rto ")) return false;
   const createdAt = new Date(order.createdAt).getTime();
   if (!Number.isFinite(createdAt)) return false;
   return Date.now() - createdAt <= 24 * 60 * 60 * 1000;
@@ -167,123 +183,41 @@ const CANCEL_EXCHANGE_REASONS = [
   "Other reason"
 ];
 
-const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger }) => {
-  const [expanded, setExpanded] = useState(false);
-  const [tracking, setTracking] = useState(null);
-  const [trackLoading, setTrackLoading] = useState(false);
-  const [trackError, setTrackError] = useState(null);
-  const [cancelLoading, setCancelLoading] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
+const RATING_LABELS = ["Very Bad", "Bad", "Ok-Ok", "Good", "Very Good"];
 
-  const statusConfig = getStatus(order.status);
+const ReviewStars = ({ rating = 0, onSelect, disabled = false }) => (
+  <div className="order-review-stars">
+    {[1, 2, 3, 4, 5].map((star, index) => (
+      <button
+        key={star}
+        type="button"
+        className={Number(rating) >= star ? "active" : ""}
+        onClick={() => onSelect?.(star)}
+        disabled={disabled}
+        aria-label={`${star} star`}
+      >
+        <Icon icon="mdi:star" />
+        <small>{RATING_LABELS[index]}</small>
+      </button>
+    ))}
+  </div>
+);
+
+const OrderCard = ({ order, onImagePreview }) => {
+  const navigate = useNavigate();
+
   const orderNumber = getOrderDisplayNumber(order);
   const items = order.OrderItems || [];
   const activeItems = useMemo(() => items.filter(item => String(item.status || "").toLowerCase() !== "cancelled"), [items]);
-  const breakdown = useMemo(() => getOrderBreakdown(order), [order]);
   const orderDate = new Date(order.createdAt).toLocaleDateString("en-IN", {
     day: "numeric",
     month: "short",
     year: "numeric",
   });
-  const cancellationAvailable = canCancelOrder(order);
 
-  const loadTracking = useCallback(async () => {
-    if (tracking || trackLoading) return;
-    setTrackLoading(true);
-    setTrackError(null);
-
-    try {
-      const response = await api.get(`/api/orders/track/${order.id}`);
-      setTracking(response.data);
-    } catch (error) {
-      setTrackError(error?.response?.data?.message || error.message || "Could not load tracking info. Please try again.");
-    } finally {
-      setTrackLoading(false);
-    }
-  }, [order.id, tracking, trackLoading]);
-
-  const handleExpand = () => {
-    const nextState = !expanded;
-    setExpanded(nextState);
-    if (nextState) loadTracking();
+  const openOrderDetail = () => {
+    navigate(`/order-confirmation?orderId=${order.id}`);
   };
-
-  const handleCancelClick = () => {
-    if (onActionTrigger) {
-      onActionTrigger({
-        type: "cancel_order",
-        orderId: order.id,
-        itemId: null,
-        itemName: `Order ${orderNumber}`
-      });
-    }
-  };
-
-  const handleCancelItemClick = (itemId, itemName) => {
-    if (onActionTrigger) {
-      onActionTrigger({
-        type: "cancel_item",
-        orderId: order.id,
-        itemId,
-        itemName
-      });
-    }
-  };
-
-  const handleReturnRequest = () => {
-    if (onActionTrigger) {
-      onActionTrigger({
-        type: "return",
-        orderId: order.id,
-        itemId: null,
-        itemName: `Order ${orderNumber}`
-      });
-    }
-  };
-
-  const handleExchangeRequest = () => {
-    if (onActionTrigger) {
-      onActionTrigger({
-        type: "exchange",
-        orderId: order.id,
-        itemId: null,
-        itemName: `Order ${orderNumber}`
-      });
-    }
-  };
-
-  const handleCancelReturn = () => {
-    if (onActionTrigger) {
-      onActionTrigger({
-        type: "cancel_return",
-        orderId: order.id,
-        itemId: null,
-        itemName: `Return for Order ${orderNumber}`
-      });
-    }
-  };
-
-  const handleCancelExchange = () => {
-    if (onActionTrigger) {
-      onActionTrigger({
-        type: "cancel_exchange",
-        orderId: order.id,
-        itemId: null,
-        itemName: `Exchange for Order ${orderNumber}`
-      });
-    }
-  };
-
-  const activities = tracking?.tracking?.tracking_data?.shipment_track_activities || [];
-  const etd = tracking?.tracking?.tracking_data?.etd;
-  const expectedDeliveryDate = etd ? formatEstimatedDeliveryDate(getEstimatedDeliveryDate(etd)) : "";
-  const courierName = tracking?.tracking?.tracking_data?.shipment_track?.[0]?.courier_name;
-  const awbCode = tracking?.tracking?.tracking_data?.shipment_track?.[0]?.awb_code;
-  const hasUsedAfterSale = !!order.return_requested_at || !!order.exchange_requested_at || String(order.status || "").toLowerCase().includes("return") || String(order.status || "").toLowerCase().includes("exchange");
-  const isReturnFlow = !!order.return_requested_at || String(order.status || "").toLowerCase().includes("return");
-  const isExchangeFlow = !!order.exchange_requested_at || String(order.status || "").toLowerCase().includes("exchange");
-  const canRequestReturn = String(order.status).toLowerCase() === "delivered" && !hasUsedAfterSale;
-  const canRequestExchange = String(order.status).toLowerCase() === "delivered" && !hasUsedAfterSale;
 
   return (
     <article className={`order-card ${isCancelled(order) ? "is-cancelled" : ""}`}>
@@ -292,10 +226,9 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
           <span className="order-number">Order {orderNumber}</span>
           <span className="order-date">{orderDate}</span>
         </div>
-        <div className="order-status-badge" style={{ color: statusConfig.color, backgroundColor: statusConfig.bg }}>
-          <Icon icon={statusConfig.icon} />
-          {statusConfig.label}
-        </div>
+        <button className="order-detail-arrow" type="button" onClick={openOrderDetail} aria-label={`Open order ${orderNumber}`}>
+          <Icon icon="lucide:chevron-right" />
+        </button>
       </div>
 
       <div className="order-products">
@@ -317,8 +250,12 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
               key={`${item.product_id}-${item.colorId || index}`} 
               className={`order-product-item ${isItemCancelled ? "item-cancelled" : ""}`}
             >
-              {productUrl ? (
-              <Link to={productUrl} className="order-product-media" aria-label={`Open ${productName}`}>
+              <button
+                type="button"
+                className="order-product-media"
+                onClick={() => imageUrl && onImagePreview({ imageUrl, productName })}
+                aria-label={`Open ${productName} image`}
+              >
                 {imageUrl ? (
                   <img src={imageUrl} alt={productName} loading="lazy" />
                 ) : (
@@ -326,212 +263,22 @@ const OrderCard = ({ order, onOrderUpdated, showNotification, onActionTrigger })
                     <Icon icon="lucide:image-off" />
                   </div>
                 )}
-              </Link>
-              ) : (
-              <div className="order-product-media">
-                {imageUrl ? (
-                  <img src={imageUrl} alt={productName} loading="lazy" />
-                ) : (
-                  <div className="order-product-placeholder">
-                    <Icon icon="lucide:image-off" />
-                  </div>
-                )}
-              </div>
-              )}
+              </button>
 
               <div className="order-product-details">
-                {productUrl ? (
-                  <Link to={productUrl} className="order-product-title-link"><h3>{productName}</h3></Link>
-                ) : (
-                  <h3>{productName}</h3>
-                )}
+                <h3>{productName}</h3>
                 <div className="order-product-subline">
                   <span>Qty {item.quantity}</span>
-                  <span className="order-dot" />
-                  <span>{formatPrice(item.price)} each</span>
-                  {item.sku && (
-                    <>
-                      <span className="order-dot" />
-                      <span>SKU: {item.sku}</span>
-                    </>
-                  )}
                 </div>
                 <div className="order-product-color">
                   <span className="order-color-swatch" style={{ backgroundColor: colorHex }} />
                   <span>{getItemColorLabel(item)}</span>
                 </div>
-                {isItemCancelled ? (
-                  <span className="item-cancelled-badge">
-                    <Icon icon="lucide:x-circle" />
-                    Cancelled
-                  </span>
-                ) : (
-                  cancellationAvailable && activeItems.length > 1 && (
-                    <button 
-                      className="cancel-item-btn" 
-                      type="button" 
-                      onClick={() => handleCancelItemClick(item.id, productName)}
-                    >
-                      <Icon icon="lucide:x-circle" />
-                      <span>Cancel Item</span>
-                    </button>
-                  )
-                )}
-                {item.shipping_meta?.refund_rules && (
-                  <p className="order-product-refund">
-                    Return: {formatPrice(item.shipping_meta.refund_rules.return_delivery_deduction)} delivery charge deduction. Exchange: no deduction.
-                  </p>
-                )}
               </div>
-
-              <span className={`order-line-total ${isItemCancelled ? "line-through-price" : ""}`}>{formatPrice(lineTotal)}</span>
             </div>
           );
         })}
       </div>
-
-      <div className="order-breakdown" aria-label={`Order ${order.id} payment summary`}>
-        <div className="breakdown-row">
-          <span>Product total</span>
-          <strong>{formatPrice(breakdown.subtotal)}</strong>
-        </div>
-        <div className="breakdown-row">
-          <span>Delivery charge</span>
-          <strong>{formatPrice(breakdown.shippingCharge)}</strong>
-        </div>
-        {breakdown.shippingDiscount > 0 && (
-          <div className="breakdown-row is-saving">
-            <span>Free shipping benefit</span>
-            <strong>-{formatPrice(breakdown.shippingDiscount)}</strong>
-          </div>
-        )}
-        {breakdown.paymentDiscount > 0 && (
-          <div className="breakdown-row is-saving">
-            <span>Payment discount</span>
-            <strong>-{formatPrice(breakdown.paymentDiscount)}</strong>
-          </div>
-        )}
-        {breakdown.codCharge > 0 && (
-          <div className="breakdown-row">
-            <span>COD charge</span>
-            <strong>{formatPrice(breakdown.codCharge)}</strong>
-          </div>
-        )}
-        {breakdown.platformFee > 0 && (
-          <div className="breakdown-row">
-            <span>Platform fee</span>
-            <strong>{formatPrice(breakdown.platformFee)}</strong>
-          </div>
-        )}
-        {breakdown.couponDiscount > 0 && (
-          <div className="breakdown-row is-saving">
-            <span>Coupon discount{order.coupon_code ? ` (${order.coupon_code})` : ""}</span>
-            <strong>-{formatPrice(breakdown.couponDiscount)}</strong>
-          </div>
-        )}
-        {breakdown.walletAmount > 0 && (
-          <div className="breakdown-row is-saving">
-            <span>Wallet used</span>
-            <strong>-{formatPrice(breakdown.walletAmount)}</strong>
-          </div>
-        )}
-        <div className="breakdown-row final">
-          <span>Final amount</span>
-          <strong>{formatPrice(breakdown.payable)}</strong>
-        </div>
-      </div>
-
-      <div className="order-payment-row">
-        <span><Icon icon="lucide:credit-card" /> {breakdown.paymentMethod}</span>
-        <span>{breakdown.paymentStatus}</span>
-      </div>
-
-      <div className="order-address">
-        <Icon icon="lucide:map-pin" />
-        <span>{order.address}, {order.city} - {order.pincode}</span>
-      </div>
-
-      {(order.refund_note || isCancelled(order)) && (
-        <div className="order-refund-note">
-          <Icon icon="lucide:info" />
-          <span>{order.refund_note || "Refund will be processed in 1-2 days for paid orders."}</span>
-        </div>
-      )}
-
-      <div className="order-actions">
-        {!isCancelled(order) && (!isDelivered(order) || hasUsedAfterSale) && (
-          <button className={`order-action-btn primary ${expanded ? "active" : ""}`} onClick={handleExpand} type="button">
-            <Icon icon={expanded ? "lucide:chevron-up" : "lucide:map-pin"} />
-            {hasUsedAfterSale 
-              ? (expanded ? "Hide pickup tracking" : "Track your pickup")
-              : (expanded ? "Hide tracking" : "Track order")
-            }
-          </button>
-        )}
-        {canRequestReturn && (
-          <button className="order-action-btn" onClick={handleReturnRequest} type="button">
-            <Icon icon="lucide:rotate-ccw" />
-            Request return
-          </button>
-        )}
-        {canRequestExchange && (
-          <button className="order-action-btn" onClick={handleExchangeRequest} type="button">
-            <Icon icon="lucide:repeat-2" />
-            Request exchange
-          </button>
-        )}
-        {isReturnFlow && (
-          <button className="order-action-btn danger" onClick={handleCancelReturn} type="button" disabled={actionLoading}>
-            <Icon icon="lucide:x" />
-            {actionLoading ? "Processing..." : "Cancel return"}
-          </button>
-        )}
-        {isExchangeFlow && (
-          <button className="order-action-btn danger" onClick={handleCancelExchange} type="button" disabled={actionLoading}>
-            <Icon icon="lucide:x" />
-            {actionLoading ? "Processing..." : "Cancel exchange"}
-          </button>
-        )}
-        {!isReturnFlow && !isExchangeFlow && (
-          cancellationAvailable ? (
-            activeItems.length === 1 && (
-              <button className="order-action-btn danger" onClick={handleCancelClick} type="button">
-                <Icon icon="lucide:x" />
-                Cancel order
-              </button>
-            )
-          ) : (
-            !isCancelled(order) && <span className="cancel-window-note">Cancellation available within 24 hours only.</span>
-          )
-        )}
-      </div>
-
-      {expanded && (
-        <div className="tracking-panel">
-          <div className="tracking-panel-header">
-            <h4><Icon icon="lucide:truck" /> Shipment tracking</h4>
-            {courierName && <span className="courier-badge">{courierName}</span>}
-          </div>
-
-          {awbCode && (
-            <div className="awb-row">
-              <span className="awb-label">AWB</span>
-              <span className="awb-code">{awbCode}</span>
-            </div>
-          )}
-
-          {expectedDeliveryDate && (
-            <div className="etd-row">
-              <Icon icon="lucide:calendar-check" />
-              <span>Expected delivery: <strong>{expectedDeliveryDate}</strong></span>
-            </div>
-          )}
-
-          {trackLoading && <div className="track-loading"><span>Fetching live tracking...</span></div>}
-          {trackError && <div className="track-error"><Icon icon="lucide:alert-circle" />{trackError}</div>}
-          {!trackLoading && !trackError && <TrackingTimeline activities={activities} />}
-        </div>
-      )}
     </article>
   );
 };
@@ -541,8 +288,10 @@ export default function MyOrders() {
   const { showNotification } = useNotification();
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [previewImage, setPreviewImage] = useState(null);
 
   const [actionModal, setActionModal] = useState({
     isOpen: false,
@@ -556,6 +305,29 @@ export default function MyOrders() {
     comments: ""
   });
   const [modalSubmitLoading, setModalSubmitLoading] = useState(false);
+  const [feedbackModal, setFeedbackModal] = useState({
+    isOpen: false,
+    order: null,
+    item: null,
+    productName: "",
+  });
+  const [feedbackForm, setFeedbackForm] = useState({
+    rating: 5,
+    title: "",
+    comment: "",
+    images: [],
+  });
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+
+  const visibleOrders = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return orders;
+    return orders.filter((order) => {
+      const orderNumber = getOrderDisplayNumber(order).toLowerCase();
+      const productNames = (order.OrderItems || []).map((item) => item.product_name || "").join(" ").toLowerCase();
+      return orderNumber.includes(query) || productNames.includes(query) || String(order.status || "").toLowerCase().includes(query);
+    });
+  }, [orders, searchQuery]);
 
   const fetchOrders = useCallback(async () => {
     if (!user?.id) return;
@@ -592,6 +364,50 @@ export default function MyOrders() {
       reason: defaultReason,
       comments: ""
     });
+  };
+
+  const handleFeedbackTrigger = ({ order, item, productName }) => {
+    setFeedbackModal({ isOpen: true, order, item, productName });
+    setFeedbackForm({ rating: 5, title: "", comment: "", images: [] });
+  };
+
+  const closeFeedbackModal = () => {
+    if (feedbackSubmitting) return;
+    setFeedbackModal({ isOpen: false, order: null, item: null, productName: "" });
+    setFeedbackForm({ rating: 5, title: "", comment: "", images: [] });
+  };
+
+  const submitFeedback = async (event) => {
+    event.preventDefault();
+    const { order, item } = feedbackModal;
+    if (!order?.id || !item?.id) return;
+    if (feedbackForm.comment.trim().length < 8) {
+      showNotification("Please write a short product review.", "warning");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("orderId", order.id);
+    formData.append("orderItemId", item.id);
+    formData.append("productId", item.product_id);
+    formData.append("rating", feedbackForm.rating);
+    formData.append("title", feedbackForm.title.trim());
+    formData.append("comment", feedbackForm.comment.trim());
+    feedbackForm.images.forEach((file) => formData.append("images", file));
+
+    setFeedbackSubmitting(true);
+    try {
+      const response = await api.post("/api/feedback/submit", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      showNotification(response.data?.message || "Review submitted for approval.", "success");
+      closeFeedbackModal();
+      fetchOrders();
+    } catch (err) {
+      showNotification(err?.response?.data?.message || "Could not submit review right now.", "error");
+    } finally {
+      setFeedbackSubmitting(false);
+    }
   };
 
   const handleModalSubmit = async (e) => {
@@ -643,8 +459,22 @@ export default function MyOrders() {
     <div className="my-orders-page">
       <section className="orders-hero">
         <div className="orders-hero-content">
-          <h1>Your Orders</h1>
+          <h1>My Orders</h1>
           <span>{orders.length ? `${orders.length} order${orders.length === 1 ? "" : "s"}` : "Track your orders here"}</span>
+          <div className="orders-search-row">
+            <label>
+              <Icon icon="lucide:search" />
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search orders"
+              />
+            </label>
+            <button type="button">
+              <Icon icon="lucide:list-filter" />
+              Filters
+            </button>
+          </div>
         </div>
       </section>
 
@@ -678,19 +508,104 @@ export default function MyOrders() {
         )}
         {!loading && !error && orders.length > 0 && (
           <div className="orders-list">
-            <div className="orders-count"><Icon icon="lucide:layers" />{orders.length} {orders.length === 1 ? "Order" : "Orders"}</div>
-            {orders.map((order) => (
+            <div className="orders-count"><Icon icon="lucide:layers" />{visibleOrders.length} {visibleOrders.length === 1 ? "Order" : "Orders"}</div>
+            {visibleOrders.map((order) => (
               <OrderCard
                 key={order.id}
                 order={order}
-                onOrderUpdated={fetchOrders}
-                showNotification={showNotification}
-                onActionTrigger={handleActionTrigger}
+                onImagePreview={setPreviewImage}
               />
             ))}
           </div>
         )}
       </main>
+
+      {previewImage?.imageUrl && (
+        <div className="order-image-preview" role="dialog" aria-modal="true" onClick={() => setPreviewImage(null)}>
+          <button type="button" onClick={() => setPreviewImage(null)} aria-label="Close image preview">
+            <Icon icon="lucide:x" />
+          </button>
+          <img src={previewImage.imageUrl} alt={previewImage.productName || "Order product"} onClick={(event) => event.stopPropagation()} />
+        </div>
+      )}
+
+      {feedbackModal.isOpen && (
+        <div className="cancel-modal-overlay">
+          <div className="cancel-modal-container feedback-modal-container">
+            <button type="button" className="cancel-modal-close" onClick={closeFeedbackModal} disabled={feedbackSubmitting}>
+              <Icon icon="lucide:x" />
+            </button>
+            <div className="cancel-modal-header">
+              <h3>Complete your Feedback</h3>
+              <p>Rate <strong>{feedbackModal.productName}</strong> from your delivered order.</p>
+            </div>
+
+            <form className="cancel-modal-form" onSubmit={submitFeedback}>
+              <div className="form-group">
+                <label>Product Rating</label>
+                <ReviewStars
+                  rating={feedbackForm.rating}
+                  onSelect={(rating) => setFeedbackForm((current) => ({ ...current, rating }))}
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="feedback-title">Short title (optional)</label>
+                <input
+                  id="feedback-title"
+                  type="text"
+                  value={feedbackForm.title}
+                  maxLength={120}
+                  onChange={(event) => setFeedbackForm((current) => ({ ...current, title: event.target.value }))}
+                  placeholder="Beautiful saree, loved the fabric"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="feedback-comment">Product Review</label>
+                <textarea
+                  id="feedback-comment"
+                  required
+                  rows={4}
+                  value={feedbackForm.comment}
+                  onChange={(event) => setFeedbackForm((current) => ({ ...current, comment: event.target.value }))}
+                  placeholder="Share what you liked about this product..."
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="feedback-images">Upload product photos (optional)</label>
+                <input
+                  id="feedback-images"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(event) => {
+                    const files = Array.from(event.target.files || []).slice(0, 5);
+                    setFeedbackForm((current) => ({ ...current, images: files }));
+                  }}
+                />
+                {feedbackForm.images.length > 0 && (
+                  <div className="feedback-image-preview">
+                    {feedbackForm.images.map((file) => (
+                      <span key={`${file.name}-${file.size}`}>{file.name}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="modal-action-btn secondary" onClick={closeFeedbackModal} disabled={feedbackSubmitting}>
+                  Go Back
+                </button>
+                <button type="submit" className="modal-action-btn primary" disabled={feedbackSubmitting}>
+                  {feedbackSubmitting ? "Submitting..." : "Submit Feedback"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {actionModal.isOpen && (() => {
         const type = actionModal.type;

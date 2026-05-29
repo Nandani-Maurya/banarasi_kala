@@ -106,6 +106,7 @@ export default function Reviews() {
               <tr>
                 <th className="px-6 py-4">Customer</th>
                 <th className="px-6 py-4">Rating</th>
+                <th className="px-6 py-4">Product</th>
                 <th className="px-6 py-4">Review</th>
                 <th className="px-6 py-4">Date</th>
                 <th className="px-6 py-4 text-right">Actions</th>
@@ -114,7 +115,7 @@ export default function Reviews() {
             <tbody className="text-xs divide-y divide-[#D4AF37]/5 bg-white">
               {feedbacks.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-20 text-center">
+                  <td colSpan="6" className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <MessageSquare className="w-12 h-12 text-gray-200" />
                       <p className="text-gray-400 font-medium">No {activeTab} feedback found</p>
@@ -139,7 +140,18 @@ export default function Reviews() {
                         ))}
                       </div>
                     </td>
+                    <td className="px-6 py-4 text-gray-600 max-w-[180px]">
+                      <p className="font-bold text-[#4A3F35]">{item.Product?.name || "Store feedback"}</p>
+                      {Array.isArray(item.images) && item.images.length > 0 && (
+                        <div className="flex gap-1 mt-2">
+                          {item.images.slice(0, 3).map((image, index) => (
+                            <img key={`${image.url}-${index}`} src={image.url} alt="" className="w-9 h-9 rounded object-cover border" />
+                          ))}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-gray-600 max-w-xs italic leading-relaxed">
+                      {item.title && <p className="not-italic font-bold text-[#4A3F35] mb-1">{item.title}</p>}
                       "{item.comment}"
                     </td>
                     <td className="px-6 py-4 text-gray-400 text-[10px]">

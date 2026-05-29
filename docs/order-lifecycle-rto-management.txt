@@ -1,0 +1,178 @@
+Order Lifecycle & RTO Management Requirements
+=============================================
+
+1. Shipping Policy
+------------------
+- All orders are shipped with free shipping for the first delivery attempt cycle.
+- Free shipping is a customer-facing benefit. The actual forward delivery charge is still stored on the order for refund/RTO calculations.
+
+2. COD Orders
+-------------
+Scenario: COD order becomes RTO on the first delivery cycle.
+
+Conditions:
+- Customer does not receive the parcel.
+- Courier does not perform a re-attempt.
+- Order directly goes into RTO.
+
+Action:
+- Order status: Seller Cancelled.
+- Customer message:
+  "Your order has been cancelled due to unsuccessful delivery. Please place a new order if you still wish to purchase the product."
+- Customer COD privilege is blocked.
+
+Blocking criteria:
+- Mobile number
+- Email address
+
+Database fields:
+- is_cod_blocked BOOLEAN
+- cod_block_reason TEXT
+- blocked_at TIMESTAMP
+- customer_cod_blocked BOOLEAN
+- cod_blocked_at TIMESTAMP
+- cod_block_reason TEXT
+
+Recommended softer business rule for later:
+- 1st COD RTO: Warning
+- 2nd COD RTO: COD Block
+
+Current implementation target:
+- First COD RTO blocks COD, as requested in the active flow.
+
+3. Prepaid Orders
+-----------------
+Scenario: First delivery attempt fails and order becomes RTO.
+
+Conditions:
+- Customer unavailable.
+- Address issue.
+- Repeated failed delivery attempts.
+- Order returned to origin.
+
+Customer options:
+- Refund.
+- Re-dispatch.
+
+Refund calculation:
+- Refund = Order Amount - Forward Shipping Charge - RTO Shipping Charge
+- Customer UI: "Refund Eligible Amount: Rs. XXXX"
+
+4. Re-dispatch Flow
+-------------------
+Preconditions:
+- Original order must be marked RTO Delivered.
+- Customer chooses re-dispatch.
+- Re-dispatch payment is mandatory and online only.
+- COD is not allowed for re-dispatch.
+
+First re-dispatch:
+- Customer pays forward shipping charge.
+- System creates a new shipment.
+- System generates a new AWB.
+- System starts a new tracking timeline.
+
+Customer UI example:
+- Order #1001
+  Status: Order Returned to Seller
+- Re-dispatched Order #1001-R1
+  Status: In Transit
+
+5. Second RTO After Re-dispatch
+-------------------------------
+If re-dispatched shipment again becomes RTO:
+
+Refund calculation:
+- Deduct 1st forward shipping charge.
+- Deduct 1st RTO charge.
+- Deduct 2nd forward shipping charge.
+- Deduct 2nd RTO charge.
+
+Formula:
+- Refund = Order Amount - 1st Forward Charge - 1st RTO Charge - 2nd Forward Charge - 2nd RTO Charge
+
+Customer message:
+"Your order could not be delivered after multiple attempts and has been cancelled. If you still wish to purchase this item, please place a fresh order."
+
+6. Required Internal Order Statuses
+-----------------------------------
+- Order Placed
+- Processing
+- AWB Assigned
+- Shipped
+- Out For Delivery
+- Undelivered
+- RTO Initiated
+- RTO In Transit
+- RTO Delivered
+- Re-dispatch Requested
+- Re-dispatch Payment Pending
+- Re-dispatch Paid
+- Re-dispatched
+- Seller Cancelled
+- Delivered
+
+7. Customer UI Status Model
+---------------------------
+Customer should not see raw logistics jargon where it is confusing.
+
+Order Status:
+- Active
+- Delivered
+- Cancelled
+- Returned
+
+Shipment Status:
+- Processing
+- Shipped
+- Out For Delivery
+- RTO In Transit
+- RTO Delivered
+
+Customer-friendly label:
+- Internal: RTO Delivered
+- UI: Order Returned to Seller
+
+8. Failed Delivery Flow
+-----------------------
+Order Placed
+Processing
+AWB Assigned
+Shipped
+Out For Delivery
+Undelivered
+RTO Initiated
+RTO In Transit
+RTO Delivered
+
+9. Re-dispatch Flow
+-------------------
+RTO Delivered
+Re-dispatch Requested
+Re-dispatch Payment Pending
+Re-dispatch Paid
+Re-dispatched
+AWB Assigned
+Shipped
+Out For Delivery
+Delivered
+
+10. Database Requirements
+-------------------------
+Orders table:
+- is_rto BOOLEAN
+- rto_count INTEGER
+- is_redispatched BOOLEAN
+- redispatch_count INTEGER
+- original_order_id BIGINT
+- redispatch_payment_amount DECIMAL
+- customer_cod_blocked BOOLEAN
+- cod_blocked_at TIMESTAMP
+- cod_block_reason TEXT
+- refund_amount DECIMAL
+- refund_status VARCHAR(50)
+
+Customers table:
+- is_cod_blocked BOOLEAN
+- cod_block_reason TEXT
+- blocked_at TIMESTAMP

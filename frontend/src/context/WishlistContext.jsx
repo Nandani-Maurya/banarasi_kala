@@ -7,6 +7,27 @@ import { getProductCoverImage } from '../utils/productMedia';
 
 const WishlistContext = createContext();
 
+const getWishlistRows = (payload) => {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.items)) return payload.items;
+  if (Array.isArray(payload?.wishlist)) return payload.wishlist;
+  return [];
+};
+
+const formatWishlist = (payload) =>
+  getWishlistRows(payload)
+    .filter(item => item?.Product)
+    .map(item => {
+      const product = item.Product;
+      return {
+        ...product,
+        wishlistItemId: item.id,
+        price: product.selling_price || product.mrp_price || 0,
+        image_url: getProductCoverImage(product)
+      };
+    });
+
 export const useWishlist = () => {
   const context = useContext(WishlistContext);
   if (!context) {
@@ -28,18 +49,7 @@ export const WishlistProvider = ({ children }) => {
         setLoading(true);
         try {
           const res = await api.get(API_ENDPOINTS.wishlist);
-          const formattedWishlist = res.data
-            .filter(item => item.Product)
-            .map(item => {
-              const product = item.Product;
-              return {
-                ...product,
-                wishlistItemId: item.id,
-                price: product.selling_price || product.mrp_price || 0,
-                image_url: getProductCoverImage(product)
-              };
-            });
-          setWishlist(formattedWishlist);
+          setWishlist(formatWishlist(res.data));
         } catch (error) {
           console.error("Error fetching wishlist:", error);
         } finally {
@@ -81,19 +91,7 @@ export const WishlistProvider = ({ children }) => {
 
       // 2. Refresh fresh data
       const refreshRes = await api.get(API_ENDPOINTS.wishlist);
-      const formattedWishlist = refreshRes.data
-        .filter(item => item.Product)
-        .map(item => {
-          const p = item.Product;
-          return {
-            ...p,
-            wishlistItemId: item.id,
-            price: p.selling_price || p.mrp_price || 0,
-            image_url: getProductCoverImage(p)
-          };
-        });
-      
-      setWishlist(formattedWishlist);
+      setWishlist(formatWishlist(refreshRes.data));
       return isAdded;
     } catch (error) {
       console.error("Error toggling wishlist:", error);

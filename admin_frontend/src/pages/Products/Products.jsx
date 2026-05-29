@@ -13,7 +13,7 @@ const INITIAL_FORM_STATE = {
   material_id: "", variety_id: "", occasion_id: "",
   special_collection: false, is_new_arrival: false, status: "active",
   blouse_piece: true,
-  payment_options: ["cod"],
+  payment_options: ["prepaid"],
   service_options: [],
   care_instructions: "",
 };
@@ -322,7 +322,7 @@ export default function Products() {
     }
 
     if (!Array.isArray(formData.payment_options) || formData.payment_options.length === 0) {
-      showModal("warning", "Payment option required", "Choose at least one payment option.");
+      showModal("warning", "Payment option required", "Choose at least one payment option: Prepaid or COD.");
       setSubmitting(false);
       return;
     }

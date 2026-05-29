@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import api from "../../utils/api";
 import { getOrderDisplayNumber } from "../../utils/itemCode";
+import { useNotification } from "../../context/NotificationContext";
 import "./OrderConfirmation.css";
 
 const toNumber = (value) => {
@@ -42,9 +43,19 @@ const getBreakdown = (order = {}) => {
 
 const canCancelOrder = (order) => {
   const status = String(order?.status || "").toLowerCase();
-  if (!order?.createdAt || ["cancelled", "delivered", "shipped", "out for delivery"].includes(status)) return false;
+  if (!order?.createdAt || ["cancelled", "seller cancelled", "delivered", "shipped", "out for delivery", "rto delivered"].includes(status) || status.startsWith("rto ")) return false;
   const createdAt = new Date(order.createdAt).getTime();
   return Number.isFinite(createdAt) && Date.now() - createdAt <= 24 * 60 * 60 * 1000;
+};
+
+const getCustomerOrderStatusLabel = (status) => {
+  const normalized = String(status || "Pending").toLowerCase();
+  if (normalized === "seller cancelled") return "Cancelled by seller";
+  if (normalized === "rto delivered") return "Order returned to seller";
+  if (normalized === "rto initiated" || normalized === "rto in transit") return "Returning to seller";
+  if (normalized === "undelivered") return "Delivery attempt failed";
+  if (normalized === "awb assigned") return "AWB assigned";
+  return status || "Pending";
 };
 
 const buildTimeline = (order, tracking) => {
@@ -69,21 +80,27 @@ const buildTimeline = (order, tracking) => {
     {
       title: status === "processing" ? "Preparation in progress" : "Artisan preparation",
       detail: "Quality check and packing before dispatch",
-      active: ["processing", "shipped", "out for delivery", "delivered"].includes(status),
+      active: ["processing", "awb assigned", "shipped", "out for delivery", "delivered", "undelivered", "rto initiated", "rto in transit", "rto delivered", "seller cancelled"].includes(status),
       icon: "lucide:package",
     },
     {
       title: "Shipped",
       detail: order?.shiprocket_awb ? `AWB ${order.shiprocket_awb}` : "Tracking appears after dispatch",
-      active: ["shipped", "out for delivery", "delivered"].includes(status),
+      active: ["awb assigned", "shipped", "out for delivery", "delivered", "undelivered", "rto initiated", "rto in transit", "rto delivered", "seller cancelled"].includes(status),
       icon: "lucide:truck",
     },
     {
       title: "Out for delivery",
       detail: "Courier will attempt delivery at your address",
-      active: ["out for delivery", "delivered"].includes(status),
+      active: ["out for delivery", "delivered", "undelivered", "rto initiated", "rto in transit", "rto delivered", "seller cancelled"].includes(status),
       icon: "lucide:navigation",
     },
+    ...(status.includes("rto") || status === "undelivered" || status === "seller cancelled" ? [{
+      title: status === "rto delivered" || status === "seller cancelled" ? "Order returned to seller" : "Returning to seller",
+      detail: order?.refund_note || "The courier could not complete delivery.",
+      active: ["rto initiated", "rto in transit", "rto delivered", "seller cancelled"].includes(status),
+      icon: "lucide:warehouse",
+    }] : []),
     {
       title: "Delivered",
       detail: order?.delivered_at ? formatDate(order.delivered_at) : "Final delivery scan pending",
@@ -106,6 +123,7 @@ const CANCEL_REASONS = [
 export default function OrderConfirmation() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { showNotification } = useNotification();
   const orderId = searchParams.get("orderId");
   const [order, setOrder] = useState(null);
   const [tracking, setTracking] = useState(null);
@@ -122,11 +140,15 @@ export default function OrderConfirmation() {
     comments: ""
   });
   const [modalSubmitLoading, setModalSubmitLoading] = useState(false);
+  const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, item: null });
+  const [feedbackForm, setFeedbackForm] = useState({ rating: 5, title: "", comment: "", images: [] });
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
 
   const breakdown = useMemo(() => getBreakdown(order || {}), [order]);
   const timeline = useMemo(() => buildTimeline(order, tracking), [order, tracking]);
   const cancellationAvailable = canCancelOrder(order);
   const orderNumber = getOrderDisplayNumber(order);
+  const canReview = String(order?.status || "").toLowerCase() === "delivered";
 
   useEffect(() => {
     let cancelled = false;
@@ -173,6 +195,51 @@ export default function OrderConfirmation() {
       reason: CANCEL_REASONS[0],
       comments: ""
     });
+  };
+
+  const openFeedbackModal = (item) => {
+    setFeedbackModal({ isOpen: true, item });
+    setFeedbackForm({ rating: 5, title: "", comment: "", images: [] });
+  };
+
+  const closeFeedbackModal = () => {
+    if (feedbackSubmitting) return;
+    setFeedbackModal({ isOpen: false, item: null });
+    setFeedbackForm({ rating: 5, title: "", comment: "", images: [] });
+  };
+
+  const submitFeedback = async (event) => {
+    event.preventDefault();
+    const item = feedbackModal.item;
+    if (!item || !order?.id) return;
+    if (feedbackForm.comment.trim().length < 8) {
+      showNotification("Please write a short product review.", "warning");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("orderId", order.id);
+    formData.append("orderItemId", item.id);
+    formData.append("productId", item.product_id);
+    formData.append("rating", feedbackForm.rating);
+    formData.append("title", feedbackForm.title.trim());
+    formData.append("comment", feedbackForm.comment.trim());
+    feedbackForm.images.forEach((file) => formData.append("images", file));
+
+    setFeedbackSubmitting(true);
+    try {
+      const response = await api.post("/api/feedback/submit", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      showNotification(response.data?.message || "Review submitted for approval.", "success");
+      closeFeedbackModal();
+      const updated = await api.get(`/api/orders/${orderId}`);
+      setOrder(updated.data);
+    } catch (error) {
+      showNotification(error?.response?.data?.message || "Could not submit review right now.", "error");
+    } finally {
+      setFeedbackSubmitting(false);
+    }
   };
 
   const handleModalSubmit = async (e) => {
@@ -234,7 +301,7 @@ export default function OrderConfirmation() {
           <section className="order-panel">
             <div className="order-panel-head">
               <h2>Shipment timeline</h2>
-              <span>{order.status || "Pending"}</span>
+              <span>{getCustomerOrderStatusLabel(order.status)}</span>
             </div>
             <div className="confirmation-timeline">
               {timeline.map((step, index) => (
@@ -283,6 +350,17 @@ export default function OrderConfirmation() {
                         Return deduction: {formatPrice(item.shipping_meta.refund_rules.return_delivery_deduction)} delivery charge. Exchange: no deduction.
                       </small>
                     )}
+                    {canReview && (
+                      item.feedback ? (
+                        <small className="confirmation-feedback-note">
+                          Review {item.feedback.is_approved ? "published" : "pending approval"} - {item.feedback.rating}/5
+                        </small>
+                      ) : (
+                        <button className="confirmation-feedback-btn" type="button" onClick={() => openFeedbackModal(item)}>
+                          Add Feedback
+                        </button>
+                      )
+                    )}
                   </div>
                   <strong>{formatPrice(toNumber(item.price) * Math.max(1, toNumber(item.quantity) || 1))}</strong>
                 </article>
@@ -304,8 +382,8 @@ export default function OrderConfirmation() {
             {breakdown.walletAmount > 0 && <div className="summary-row is-saving"><span>Wallet used</span><strong>-{formatPrice(breakdown.walletAmount)}</strong></div>}
             <div className="summary-row is-final"><span>Final amount</span><strong>{formatPrice(breakdown.payable)}</strong></div>
             <div className="payment-tags">
-              <span>{order.payment_method || "COD"}</span>
-              <span>{order.payment_status || "Pending"}</span>
+              <span>{order.payment_method || "Prepaid"}</span>
+              <span>{order.payment_status || "Paid"}</span>
             </div>
           </section>
 
@@ -334,6 +412,85 @@ export default function OrderConfirmation() {
           </Link>
         </aside>
       </section>
+
+      {feedbackModal.isOpen && (
+        <div className="cancel-modal-overlay">
+          <div className="cancel-modal-container feedback-detail-modal">
+            <button type="button" className="cancel-modal-close" onClick={closeFeedbackModal} disabled={feedbackSubmitting}>
+              <Icon icon="lucide:x" />
+            </button>
+            <div className="cancel-modal-header">
+              <h3>Complete your Feedback</h3>
+              <p>Share your experience for <strong>{feedbackModal.item?.product_name}</strong>.</p>
+            </div>
+
+            <form onSubmit={submitFeedback} className="cancel-modal-form">
+              <div className="form-group">
+                <label>Rating</label>
+                <div className="confirmation-rating-picker">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      className={feedbackForm.rating >= star ? "active" : ""}
+                      onClick={() => setFeedbackForm((current) => ({ ...current, rating: star }))}
+                    >
+                      <Icon icon="mdi:star" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="feedback-title">Short title (optional)</label>
+                <input
+                  id="feedback-title"
+                  type="text"
+                  maxLength={120}
+                  value={feedbackForm.title}
+                  onChange={(event) => setFeedbackForm((current) => ({ ...current, title: event.target.value }))}
+                  placeholder="Loved the fabric"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="feedback-comment">Product review</label>
+                <textarea
+                  id="feedback-comment"
+                  rows={5}
+                  required
+                  value={feedbackForm.comment}
+                  onChange={(event) => setFeedbackForm((current) => ({ ...current, comment: event.target.value }))}
+                  placeholder="Write what you liked about this product..."
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="feedback-images">Upload photos (optional)</label>
+                <input
+                  id="feedback-images"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(event) => {
+                    const files = Array.from(event.target.files || []).slice(0, 5);
+                    setFeedbackForm((current) => ({ ...current, images: files }));
+                  }}
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" className="modal-action-btn secondary" onClick={closeFeedbackModal} disabled={feedbackSubmitting}>
+                  Go Back
+                </button>
+                <button type="submit" className="modal-action-btn primary" disabled={feedbackSubmitting}>
+                  {feedbackSubmitting ? "Submitting..." : "Submit Feedback"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {cancelModal.isOpen && (
         <div className="cancel-modal-overlay">

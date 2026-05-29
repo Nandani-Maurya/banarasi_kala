@@ -5,12 +5,26 @@ const OrderItem = require('../models/OrderItem');
 const EmailService = require('../services/EmailService');
 const WalletService = require('../services/WalletService');
 const { config } = require('../config/env');
+const {
+  COD_RTO_BLOCK_REASON,
+  blockCustomerCodForOrder,
+  calculateRtoRefundAmount,
+  ensureOrderLifecycleColumns,
+  getForwardShippingCharge,
+  getRtoShippingCharge,
+} = require('../utils/orderLifecycle');
 
 const mapShiprocketStatus = (value = '') => {
   const status = String(value || '').toLowerCase();
+
+  if (status.includes('awb assigned') || status.includes('awb_assigned')) return 'AWB Assigned';
+  if (status.includes('rto delivered') || status.includes('returned to origin') || status.includes('return to origin delivered')) return 'RTO Delivered';
+  if (status.includes('rto in transit') || status.includes('rto_in_transit') || status.includes('return to origin in transit')) return 'RTO In Transit';
+  if (status.includes('rto initiated') || status.includes('rto_initiated') || status.includes('return to origin initiated')) return 'RTO Initiated';
+  if (status.includes('undelivered') || status.includes('delivery failed') || status.includes('customer unavailable') || status.includes('address issue')) return 'Undelivered';
   
   // Handle return/exchange reverse statuses first to avoid catching by standard shipped check
-  if (status.includes('returned to origin') || status.includes('returned')) return 'Returned';
+  if (status.includes('returned')) return 'Returned';
   if (status.includes('picked up') || status.includes('picked_up')) return 'Return Picked Up';
   if (status.includes('out for pickup') || status.includes('out_for_pickup')) return 'Out For Pickup';
   if (status.includes('pickup scheduled') || status.includes('pickup_scheduled') || status.includes('pickup queued') || status.includes('pickup_queued')) return 'Pickup Scheduled';
@@ -64,6 +78,7 @@ class ShipRocketController {
         const updatePayload = { shiprocket_order_id: srOrderId };
         if (awbData?.response?.data?.awb_code) {
           updatePayload.shiprocket_awb = awbData.response.data.awb_code;
+          updatePayload.status = 'AWB Assigned';
         }
         await order.update(updatePayload);
       } catch (_) {
@@ -99,7 +114,7 @@ class ShipRocketController {
       if (awbCode && srOrderId) {
         try {
           await Order.update(
-            { shiprocket_awb: String(awbCode) },
+            { shiprocket_awb: String(awbCode), status: 'AWB Assigned' },
             { where: { shiprocket_order_id: String(srOrderId) } }
           );
         } catch (dbErr) {
@@ -406,6 +421,7 @@ class ShipRocketController {
   async webhook(req, res) {
     console.log("Webhook received");
     try {
+      await ensureOrderLifecycleColumns();
       const providedSecret =
         req.headers['x-api-key'] ||
         req.headers['x-webhook-secret'] ||
@@ -470,6 +486,7 @@ class ShipRocketController {
         let reverseStatus = nextStatus;
         if (nextStatus === "Shipped") reverseStatus = `${prefix} Shipped`;
         else if (nextStatus === "Returned") reverseStatus = `${prefix} Completed`;
+        else if (nextStatus === "RTO Delivered") reverseStatus = `${prefix} Completed`;
         else if (nextStatus === "Cancelled") reverseStatus = `${prefix} Cancelled`;
         else if (nextStatus === "Delivered") reverseStatus = `${prefix} Delivered`;
         else if (nextStatus === "Return Picked Up") reverseStatus = `${prefix} Picked Up`;
@@ -488,6 +505,9 @@ class ShipRocketController {
       } else {
         // Forward shipment updates
         updatePayload.status = nextStatus;
+        const isRtoStatus = ['RTO Initiated', 'RTO In Transit', 'RTO Delivered'].includes(nextStatus);
+        const currentRtoCount = Number(order.rto_count || 0);
+        const nextRtoCount = isRtoStatus ? Math.max(1, currentRtoCount || 1) : currentRtoCount;
         
         if (awb && !order.shiprocket_awb) {
           updatePayload.shiprocket_awb = String(awb);
@@ -498,6 +518,54 @@ class ShipRocketController {
         
         if (nextStatus === 'Delivered' && !order.delivered_at) {
           updatePayload.delivered_at = new Date();
+        }
+
+        if (isRtoStatus) {
+          updatePayload.is_rto = true;
+          updatePayload.rto_count = nextRtoCount;
+        }
+
+        if (nextStatus === 'RTO Delivered') {
+          const paymentMethod = String(order.payment_method || '').toUpperCase();
+          const isCodOrder = paymentMethod === 'COD';
+          const currentStatus = String(order.status || '').toLowerCase();
+          const alreadyFinalRto = currentStatus === 'rto delivered'
+            || (currentStatus === 'seller cancelled' && Boolean(order.is_rto));
+          const actualRtoCount = alreadyFinalRto
+            ? Math.max(1, currentRtoCount)
+            : currentRtoCount + 1;
+
+          updatePayload.rto_count = actualRtoCount;
+
+          if (isCodOrder) {
+            const blockedAt = new Date();
+            updatePayload.status = 'Seller Cancelled';
+            updatePayload.cancelled_at = blockedAt;
+            updatePayload.customer_cod_blocked = true;
+            updatePayload.cod_blocked_at = blockedAt;
+            updatePayload.cod_block_reason = COD_RTO_BLOCK_REASON;
+            updatePayload.refund_status = 'Not Required';
+            updatePayload.refund_amount = 0;
+            updatePayload.refund_note = 'Your order has been cancelled due to unsuccessful delivery. Please place a new order if you still wish to purchase the product. COD is now blocked for this account.';
+
+            await blockCustomerCodForOrder(order, COD_RTO_BLOCK_REASON);
+          } else {
+            const refundAmount = calculateRtoRefundAmount(order, actualRtoCount);
+            const forwardCharge = getForwardShippingCharge(order);
+            const rtoCharge = getRtoShippingCharge(order);
+            const hasRedispatch = Number(order.redispatch_count || 0) > 0 || actualRtoCount > 1;
+
+            updatePayload.refund_amount = refundAmount;
+            updatePayload.refund_status = hasRedispatch ? 'Refund Pending' : 'RTO Action Required';
+            updatePayload.refund_note = hasRedispatch
+              ? `Your order could not be delivered after multiple attempts and has been cancelled. Refund eligible amount: Rs. ${refundAmount.toLocaleString('en-IN')} after delivery deductions. Please place a fresh order if you still wish to purchase this item.`
+              : `Order returned to seller. Refund eligible amount: Rs. ${refundAmount.toLocaleString('en-IN')} after Rs. ${forwardCharge.toLocaleString('en-IN')} forward charge and Rs. ${rtoCharge.toLocaleString('en-IN')} RTO charge deduction. You may choose refund or re-dispatch.`;
+
+            if (hasRedispatch) {
+              updatePayload.status = 'Seller Cancelled';
+              updatePayload.cancelled_at = new Date();
+            }
+          }
         }
       }
 

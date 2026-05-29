@@ -62,6 +62,19 @@ const Customer = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    is_cod_blocked: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    cod_block_reason: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    blocked_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   },
   {
     tableName: "customers",
