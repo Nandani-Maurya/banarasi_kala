@@ -3,8 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import api from "../../utils/api";
 import { getOrderDisplayNumber } from "../../utils/itemCode";
+import { numberEnv } from "../../utils/env";
 import { useNotification } from "../../context/NotificationContext";
 import "./OrderConfirmation.css";
+
+const PLATFORM_FEE_AMOUNT = numberEnv("VITE_PLATFORM_FEE_AMOUNT");
 
 const toNumber = (value) => {
   const next = Number(value);
@@ -23,6 +26,14 @@ const formatDate = (value) => {
 const getItemImage = (item) => item.image_url || item.product_image_url || "";
 const getItemColor = (item) => item.color_name || item.Color?.name || "Selected color";
 
+const RatingStars = ({ rating = 0 }) => (
+  <span className="confirmation-item-stars" aria-label={`${rating || 0} star rating`}>
+    {[1, 2, 3, 4, 5].map((star) => (
+      <Icon key={star} icon="mdi:star" className={Number(rating) >= star ? "filled" : "empty"} />
+    ))}
+  </span>
+);
+
 const getBreakdown = (order = {}) => {
   const items = order.OrderItems || [];
   const itemSubtotal = items.reduce((sum, item) => sum + toNumber(item.price) * Math.max(1, toNumber(item.quantity) || 1), 0);
@@ -30,6 +41,11 @@ const getBreakdown = (order = {}) => {
   const shippingCharge = toNumber(order.shipping_charge);
   const shippingDiscount = toNumber(order.shipping_discount);
   const paymentFee = toNumber(order.payment_fee);
+  const isCod = String(order.payment_method || "").toUpperCase() === "COD";
+  const storedPlatformFee = toNumber(order.platform_fee);
+  const storedCodFee = toNumber(order.cod_fee);
+  const platformFee = storedPlatformFee || (paymentFee > 0 ? Math.min(PLATFORM_FEE_AMOUNT, paymentFee) : 0);
+  const codFee = storedCodFee || (isCod ? Math.max(0, paymentFee - platformFee) : 0);
   const paymentDiscount = toNumber(order.payment_discount);
   const couponDiscount = toNumber(order.discount_amount);
   const walletAmount = toNumber(order.wallet_amount);
@@ -38,7 +54,7 @@ const getBreakdown = (order = {}) => {
     subtotal + shippingCharge + paymentFee - shippingDiscount - paymentDiscount - couponDiscount - walletAmount,
   );
 
-  return { subtotal, shippingCharge, shippingDiscount, paymentFee, paymentDiscount, couponDiscount, walletAmount, payable };
+  return { subtotal, shippingCharge, shippingDiscount, paymentFee, platformFee, codFee, paymentDiscount, couponDiscount, walletAmount, payable };
 };
 
 const canCancelOrder = (order) => {
@@ -53,10 +69,111 @@ const getCustomerOrderStatusLabel = (status) => {
   if (normalized === "seller cancelled") return "Cancelled by seller";
   if (normalized === "rto delivered") return "Order returned to seller";
   if (normalized === "rto initiated" || normalized === "rto in transit") return "Returning to seller";
+  if (normalized.includes("return completed")) return "Return completed";
+  if (normalized.includes("return picked up")) return "Return picked up";
+  if (normalized.includes("out for return pickup")) return "Out for return pickup";
+  if (normalized.includes("return initiated") || normalized.includes("return requested")) return "Return initiated";
+  if (normalized.includes("exchange completed")) return "Exchange completed";
+  if (normalized.includes("exchange picked up")) return "Exchange picked up";
+  if (normalized.includes("exchange pickup scheduled")) return "Exchange pickup scheduled";
+  if (normalized.includes("exchange initiated") || normalized.includes("exchange requested")) return "Exchange initiated";
   if (normalized === "undelivered") return "Delivery attempt failed";
   if (normalized === "awb assigned") return "AWB assigned";
   return status || "Pending";
 };
+
+const normalizeStatus = (value) => String(value || "Pending").toLowerCase();
+
+const PRE_DELIVERY_STATUSES = new Set([
+  "pending",
+  "order placed",
+  "order_placed",
+  "processing",
+  "picked up",
+  "picked_up",
+  "awb assigned",
+  "awb_assigned",
+  "shipped",
+  "out for delivery",
+  "out_for_delivery",
+  "undelivered",
+  "rto initiated",
+  "rto_initiated",
+  "rto in transit",
+  "rto_in_transit",
+]);
+
+const wasDelivered = (order) => {
+  const status = normalizeStatus(order?.status);
+  if (PRE_DELIVERY_STATUSES.has(status)) return false;
+  return status === "delivered" || Boolean(order?.delivered_at);
+};
+
+const canReviewOrderItem = (order, item) => {
+  const itemStatus = normalizeStatus(item?.status);
+  return wasDelivered(order) && !itemStatus.includes("cancel");
+};
+
+const getActionableQty = (item) => Math.max(0, toNumber(item.actionable_quantity ?? (
+  toNumber(item.quantity)
+  - toNumber(item.cancelled_quantity)
+  - toNumber(item.returned_quantity)
+  - toNumber(item.exchanged_quantity)
+  - toNumber(item.pending_action_quantity)
+)));
+
+const hasClosedOrActiveAction = (item, actionType) => (item.actions || []).some((action) => {
+  const type = String(action.action_type || action.actionType || "").toLowerCase();
+  const status = String(action.status || "").toLowerCase();
+  return type === actionType && !["rejected", "cancelled"].includes(status);
+});
+
+const getEligibleActionItems = (order, actionType) => {
+  const delivered = wasDelivered(order);
+  const cancelAllowed = canCancelOrder(order);
+  return (order?.OrderItems || []).filter((item) => {
+    const itemStatus = normalizeStatus(item.status);
+    if (getActionableQty(item) < 1) return false;
+    if (itemStatus.includes("requested") || itemStatus.includes("completed") || itemStatus.includes("cancelled")) return false;
+    if (actionType === "return" && hasClosedOrActiveAction(item, "return")) return false;
+    if (actionType === "exchange" && hasClosedOrActiveAction(item, "exchange")) return false;
+    if (actionType === "cancel") return cancelAllowed;
+    if (["return", "exchange"].includes(actionType)) return delivered;
+    return false;
+  });
+};
+
+const getItemDisplayStatus = (order, item) => {
+  const status = normalizeStatus(item?.status);
+  if (status && status !== "active") return item.status;
+  return getCustomerOrderStatusLabel(order?.status);
+};
+
+const getActionLabel = (action) => {
+  const type = String(action?.action_type || "").toLowerCase();
+  if (type === "return") return "Return";
+  if (type === "exchange") return "Exchange";
+  if (type === "cancel") return "Cancellation";
+  return "Request";
+};
+
+const getOrderActions = (order) => ({
+  canCancel: getEligibleActionItems(order, "cancel").length > 0,
+  canReturnExchange: getEligibleActionItems(order, "return").length > 0 || getEligibleActionItems(order, "exchange").length > 0,
+});
+
+const stepState = (status, currentIndex, steps) => {
+  const matchedIndex = steps.findIndex((step) => step.matches.some((match) => status.includes(match)));
+  if (matchedIndex === -1) return currentIndex === 0 ? "current" : "pending";
+  if (currentIndex < matchedIndex) return "done";
+  if (currentIndex === matchedIndex) return "current";
+  return "pending";
+};
+
+const buildSteps = (status, steps) => steps.map((step, index) => ({
+  ...step,
+  state: stepState(status, index, steps),
+}));
 
 const buildTimeline = (order, tracking) => {
   const status = String(order?.status || "Pending").toLowerCase();
@@ -110,6 +227,54 @@ const buildTimeline = (order, tracking) => {
   ];
 };
 
+const buildOrderTimeline = (order, tracking) => {
+  const status = String(order?.status || "Pending").toLowerCase();
+  const activities = tracking?.tracking?.tracking_data?.shipment_track_activities || [];
+  if (activities.length) {
+    return activities.map((activity, index) => ({
+      title: activity.activity || "Shipment update",
+      detail: [activity.location, activity.date].filter(Boolean).join(" - "),
+      state: index === 0 ? "current" : "done",
+      icon: index === 0 ? "lucide:radio" : "lucide:circle",
+    }));
+  }
+
+  const forwardSteps = [
+    { title: "Order placed", detail: `${formatDate(order?.createdAt)} - Confirmation email sent`, icon: "lucide:check-circle-2", matches: ["pending", "order placed", "processing"] },
+    { title: "Picked up", detail: "Courier pickup scheduled or completed", icon: "lucide:package-check", matches: ["picked up", "pickup", "awb assigned"] },
+    { title: "Shipped", detail: order?.shiprocket_awb ? `AWB ${order.shiprocket_awb}` : "Tracking appears after dispatch", icon: "lucide:truck", matches: ["shipped", "in transit"] },
+    { title: "Out for delivery", detail: "Courier will attempt delivery at your address", icon: "lucide:navigation", matches: ["out for delivery"] },
+    { title: "Delivered", detail: order?.delivered_at ? formatDate(order.delivered_at) : "Final delivery scan pending", icon: "lucide:badge-check", matches: ["delivered"] },
+  ];
+
+  const rtoSteps = [
+    ...forwardSteps.slice(0, 4),
+    { title: "Delivery attempt failed", detail: "Courier could not complete delivery", icon: "lucide:triangle-alert", matches: ["undelivered"] },
+    { title: "RTO initiated", detail: "Shipment is returning to seller", icon: "lucide:undo-2", matches: ["rto initiated"] },
+    { title: "RTO in transit", detail: "Shipment is on the way back", icon: "lucide:truck", matches: ["rto in transit"] },
+    { title: "Order returned to seller", detail: order?.refund_note || "Order returned to seller", icon: "lucide:warehouse", matches: ["rto delivered", "seller cancelled"] },
+  ];
+
+  const returnSteps = [
+    { title: "Return initiated", detail: "Return request created", icon: "lucide:rotate-ccw", matches: ["return requested", "return initiated"] },
+    { title: "Out for return pickup", detail: "Courier will collect the parcel", icon: "lucide:navigation", matches: ["out for return pickup"] },
+    { title: "Return picked up", detail: "Parcel collected by courier", icon: "lucide:package-check", matches: ["return picked up"] },
+    { title: "Return completed", detail: order?.refund_note || "Return completed", icon: "lucide:badge-check", matches: ["return completed", "return delivered"] },
+  ];
+
+  const exchangeSteps = [
+    { title: "Exchange initiated", detail: "Exchange request created", icon: "lucide:repeat-2", matches: ["exchange requested", "exchange initiated"] },
+    { title: "Exchange pickup scheduled", detail: "Courier pickup is being arranged", icon: "lucide:calendar-clock", matches: ["exchange pickup scheduled", "out for exchange pickup"] },
+    { title: "Exchange picked up", detail: "Exchange parcel collected", icon: "lucide:package-check", matches: ["exchange picked up"] },
+    { title: "Exchange completed", detail: order?.refund_note || "Exchange completed", icon: "lucide:badge-check", matches: ["exchange completed", "exchange delivered"] },
+  ];
+
+  if (status.includes("exchange")) return buildSteps(status, exchangeSteps);
+  if (status.includes("return")) return buildSteps(status, returnSteps);
+  if (status.includes("rto") || status === "undelivered" || status === "seller cancelled") return buildSteps(status, rtoSteps);
+  return buildSteps(status, forwardSteps);
+};
+
 const CANCEL_REASONS = [
   "Incorrect item/size selected",
   "Ordered by mistake / Duplicate order",
@@ -119,6 +284,28 @@ const CANCEL_REASONS = [
   "Payment or billing issue",
   "Other reason"
 ];
+
+const RETURN_REASONS = [
+  "Size or fit issue",
+  "Product color/design is different from images",
+  "Received damaged or defective product",
+  "Quality of material is not as expected",
+  "Wrong product delivered",
+  "Other reason",
+];
+
+const EXCHANGE_REASONS = [
+  "Need a different color/design",
+  "Size or fit issue",
+  "Received damaged or defective product",
+  "Other reason",
+];
+
+const getActionConfig = (type) => {
+  if (type === "return") return { title: "Request Return", label: "Return reason", reasons: RETURN_REASONS, button: "Submit Return Request", tone: "primary" };
+  if (type === "exchange") return { title: "Request Exchange", label: "Exchange reason", reasons: EXCHANGE_REASONS, button: "Submit Exchange Request", tone: "primary" };
+  return { title: "Cancel Products", label: "Cancellation reason", reasons: CANCEL_REASONS, button: "Submit Cancellation", tone: "danger" };
+};
 
 export default function OrderConfirmation() {
   const [searchParams] = useSearchParams();
@@ -132,23 +319,35 @@ export default function OrderConfirmation() {
   
   const [cancelModal, setCancelModal] = useState({
     isOpen: false,
+    type: "cancel",
     orderId: null,
-    itemName: ""
+    itemName: "",
+    selected: {},
   });
   const [cancelForm, setCancelForm] = useState({
     reason: "Incorrect item/size selected",
     comments: ""
   });
   const [modalSubmitLoading, setModalSubmitLoading] = useState(false);
+  const [actionEstimate, setActionEstimate] = useState(null);
   const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, item: null });
   const [feedbackForm, setFeedbackForm] = useState({ rating: 5, title: "", comment: "", images: [] });
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [bankForm, setBankForm] = useState({
+    account_holder_name: "",
+    account_number: "",
+    ifsc_code: "",
+    bank_name: "",
+    branch_name: "",
+  });
+  const [bankSaving, setBankSaving] = useState(false);
 
   const breakdown = useMemo(() => getBreakdown(order || {}), [order]);
-  const timeline = useMemo(() => buildTimeline(order, tracking), [order, tracking]);
-  const cancellationAvailable = canCancelOrder(order);
+  const timeline = useMemo(() => buildOrderTimeline(order, tracking), [order, tracking]);
+  const orderActions = useMemo(() => getOrderActions(order), [order]);
   const orderNumber = getOrderDisplayNumber(order);
-  const canReview = String(order?.status || "").toLowerCase() === "delivered";
+  const needsCodBankDetails = String(order?.payment_method || "").toUpperCase() === "COD"
+    && String(order?.refund_status || "").toLowerCase().includes("bank");
 
   useEffect(() => {
     let cancelled = false;
@@ -185,21 +384,45 @@ export default function OrderConfirmation() {
     };
   }, [orderId]);
 
-  const handleCancelClick = () => {
+  const openActionModal = (type = "cancel") => {
+    const config = getActionConfig(type);
+    const eligibleItems = getEligibleActionItems(order, type);
+    const selected = eligibleItems.reduce((map, item, index) => ({
+      ...map,
+      [item.id]: { checked: index === 0, quantity: 1 },
+    }), {});
     setCancelModal({
       isOpen: true,
+      type,
       orderId: order.id,
-      itemName: `Order ${orderNumber}`
+      itemName: `Order ${orderNumber}`,
+      selected,
     });
     setCancelForm({
-      reason: CANCEL_REASONS[0],
+      reason: config.reasons[0],
       comments: ""
     });
+    setActionEstimate(null);
+  };
+
+  const closeActionModal = (force = false) => {
+    if (modalSubmitLoading && !force) return;
+    setCancelModal({ isOpen: false, type: "cancel", orderId: null, itemName: "", selected: {} });
+    setActionEstimate(null);
   };
 
   const openFeedbackModal = (item) => {
+    if (!canReviewOrderItem(order, item)) {
+      showNotification("Product review is available after delivery.", "warning");
+      return;
+    }
     setFeedbackModal({ isOpen: true, item });
-    setFeedbackForm({ rating: 5, title: "", comment: "", images: [] });
+    setFeedbackForm({
+      rating: Number(item.feedback?.rating || 5),
+      title: item.feedback?.title || "",
+      comment: item.feedback?.comment || "",
+      images: [],
+    });
   };
 
   const closeFeedbackModal = () => {
@@ -212,6 +435,10 @@ export default function OrderConfirmation() {
     event.preventDefault();
     const item = feedbackModal.item;
     if (!item || !order?.id) return;
+    if (!canReviewOrderItem(order, item)) {
+      showNotification("Product review is available after delivery.", "warning");
+      return;
+    }
     if (feedbackForm.comment.trim().length < 8) {
       showNotification("Please write a short product review.", "warning");
       return;
@@ -242,20 +469,82 @@ export default function OrderConfirmation() {
     }
   };
 
+  const selectedActionItems = useMemo(() => Object.entries(cancelModal.selected || {})
+    .filter(([, value]) => value.checked)
+    .map(([id, value]) => ({ orderItemId: Number(id), quantity: Math.max(1, Number(value.quantity || 1)) })), [cancelModal.selected]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadEstimate = async () => {
+      if (!cancelModal.isOpen || !cancelModal.orderId || !selectedActionItems.length) {
+        setActionEstimate(null);
+        return;
+      }
+      try {
+        const response = await api.post(`/api/orders/${cancelModal.orderId}/item-actions/estimate`, {
+          actionType: cancelModal.type,
+          items: selectedActionItems,
+        });
+        if (!cancelled) setActionEstimate(response.data);
+      } catch {
+        if (!cancelled) setActionEstimate(null);
+      }
+    };
+    loadEstimate();
+    return () => {
+      cancelled = true;
+    };
+  }, [cancelModal.isOpen, cancelModal.orderId, cancelModal.type, selectedActionItems]);
+
+  const submitBankDetails = async (event) => {
+    event.preventDefault();
+    setBankSaving(true);
+    try {
+      const response = await api.post(`/api/orders/${orderId}/refund-bank-details`, bankForm);
+      showNotification(response.data?.message || "Bank details saved.", "success");
+      const updated = await api.get(`/api/orders/${orderId}`);
+      setOrder(updated.data);
+      setBankForm({
+        account_holder_name: "",
+        account_number: "",
+        ifsc_code: "",
+        bank_name: "",
+        branch_name: "",
+      });
+    } catch (err) {
+      showNotification(err?.response?.data?.message || "Please check bank details and try again.", "error");
+    } finally {
+      setBankSaving(false);
+    }
+  };
+
   const handleModalSubmit = async (e) => {
     e.preventDefault();
     setModalSubmitLoading(true);
-    const { orderId } = cancelModal;
+    const { orderId, type } = cancelModal;
     const finalReason = cancelForm.comments.trim() 
       ? `${cancelForm.reason} - ${cancelForm.comments.trim()}`
       : cancelForm.reason;
 
     try {
-      const response = await api.post(`/api/orders/${orderId}/cancel`, { reason: finalReason });
-      setOrder(response.data.order || order);
-      setCancelModal({ isOpen: false, orderId: null, itemName: "" });
+      if (!selectedActionItems.length) {
+        showNotification("Please select at least one product.", "warning");
+        setModalSubmitLoading(false);
+        return;
+      }
+      const endpoint = type === "cancel" ? `/api/orders/${orderId}/item-actions/cancel` : `/api/orders/${orderId}/item-actions`;
+      const response = await api.post(endpoint, {
+        actionType: type,
+        items: selectedActionItems,
+        reason: finalReason,
+        comments: cancelForm.comments.trim(),
+      });
+      showNotification(response.data?.message || "Request submitted.", "success");
+      const updated = await api.get(`/api/orders/${orderId}`);
+      setOrder(updated.data || response.data.order || order);
+      closeActionModal(true);
     } catch (err) {
-      setError(err?.response?.data?.message || "Unable to cancel order.");
+      showNotification(err?.response?.data?.message || "Unable to process this request.", "error");
     } finally {
       setModalSubmitLoading(false);
     }
@@ -305,7 +594,7 @@ export default function OrderConfirmation() {
             </div>
             <div className="confirmation-timeline">
               {timeline.map((step, index) => (
-                <div key={`${step.title}-${index}`} className={`confirmation-step ${step.active ? "is-active" : ""}`}>
+                <div key={`${step.title}-${index}`} className={`confirmation-step is-${step.state || "pending"}`}>
                   <span className="confirmation-step-icon"><Icon icon={step.icon} /></span>
                   <div>
                     <strong>{step.title}</strong>
@@ -330,38 +619,48 @@ export default function OrderConfirmation() {
             <div className="confirmation-items">
               {(order.OrderItems || []).map((item, index) => {
                 const productUrl = item.product_slug ? `/product/${item.product_slug}` : null;
+                const itemRating = Number(item.feedback?.rating || 0);
                 return (
                 <article className="confirmation-item" key={`${item.product_id}-${item.colorId || index}`}>
-                  {productUrl ? (
-                    <Link to={productUrl} className="confirmation-item-media" aria-label={`Open ${item.product_name}`}>
-                      {getItemImage(item) ? <img src={getItemImage(item)} alt={item.product_name} /> : <Icon icon="lucide:image-off" />}
-                    </Link>
-                  ) : (
-                    <div className="confirmation-item-media">
-                      {getItemImage(item) ? <img src={getItemImage(item)} alt={item.product_name} /> : <Icon icon="lucide:image-off" />}
+                  <div className="confirmation-item-top">
+                    {productUrl ? (
+                      <Link to={productUrl} className="confirmation-item-media" aria-label={`Open ${item.product_name}`}>
+                        {getItemImage(item) ? <img src={getItemImage(item)} alt={item.product_name} /> : <Icon icon="lucide:image-off" />}
+                      </Link>
+                    ) : (
+                      <div className="confirmation-item-media">
+                        {getItemImage(item) ? <img src={getItemImage(item)} alt={item.product_name} /> : <Icon icon="lucide:image-off" />}
+                      </div>
+                    )}
+                    <div className="confirmation-item-copy">
+                      {productUrl ? <Link to={productUrl} className="confirmation-product-link"><h3>{item.product_name}</h3></Link> : <h3>{item.product_name}</h3>}
+                      <p>{getItemColor(item)}</p>
+                      <p>Qty {item.quantity}{item.sku ? ` - SKU: ${item.sku}` : ""}</p>
+                      <span className="confirmation-item-status">{getItemDisplayStatus(order, item)}</span>
+                    </div>
+                  </div>
+                  {canReviewOrderItem(order, item) && (
+                    <div className="confirmation-feedback-area">
+                      <RatingStars rating={itemRating} />
+                      <button className="confirmation-feedback-btn" type="button" onClick={() => openFeedbackModal(item)}>
+                        {item.feedback ? "Edit Feedback" : "Add Feedback"}
+                      </button>
                     </div>
                   )}
-                  <div>
-                    {productUrl ? <Link to={productUrl} className="confirmation-product-link"><h3>{item.product_name}</h3></Link> : <h3>{item.product_name}</h3>}
-                    <p>{getItemColor(item)} - Qty {item.quantity}{item.sku ? ` - SKU: ${item.sku}` : ""}</p>
-                    <span>{formatPrice(item.price)} each</span>
-                    {item.shipping_meta?.refund_rules && (
-                      <small>
-                        Return deduction: {formatPrice(item.shipping_meta.refund_rules.return_delivery_deduction)} delivery charge. Exchange: no deduction.
-                      </small>
-                    )}
-                    {canReview && (
-                      item.feedback ? (
-                        <small className="confirmation-feedback-note">
-                          Review {item.feedback.is_approved ? "published" : "pending approval"} - {item.feedback.rating}/5
-                        </small>
-                      ) : (
-                        <button className="confirmation-feedback-btn" type="button" onClick={() => openFeedbackModal(item)}>
-                          Add Feedback
-                        </button>
-                      )
-                    )}
-                  </div>
+                  {(item.actions || []).length > 0 && (
+                    <div className="confirmation-item-actions">
+                      {(item.actions || []).map((action) => (
+                        <div key={action.id || `${action.action_type}-${action.created_at}`}>
+                          <span>{getActionLabel(action)}</span>
+                          <strong>{action.status || "Initiated"}</strong>
+                          <small>
+                            Qty {action.quantity || 1}
+                            {action.created_at ? ` - ${formatDate(action.created_at)}` : ""}
+                          </small>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <strong>{formatPrice(toNumber(item.price) * Math.max(1, toNumber(item.quantity) || 1))}</strong>
                 </article>
                 );
@@ -374,10 +673,17 @@ export default function OrderConfirmation() {
           <section className="order-panel">
             <h2>Payment summary</h2>
             <div className="summary-row"><span>Product total</span><strong>{formatPrice(breakdown.subtotal)}</strong></div>
-            <div className="summary-row"><span>Delivery charge</span><strong>{formatPrice(breakdown.shippingCharge)}</strong></div>
-            {breakdown.shippingDiscount > 0 && <div className="summary-row is-saving"><span>Free shipping</span><strong>-{formatPrice(breakdown.shippingDiscount)}</strong></div>}
+            <div className="summary-row">
+              <span>Delivery charge</span>
+              <strong>
+                {breakdown.shippingDiscount >= breakdown.shippingCharge && breakdown.shippingCharge > 0 ? (
+                  <><span className="summary-strike">{formatPrice(breakdown.shippingCharge)}</span> Free</>
+                ) : formatPrice(Math.max(0, breakdown.shippingCharge - breakdown.shippingDiscount))}
+              </strong>
+            </div>
             {breakdown.paymentDiscount > 0 && <div className="summary-row is-saving"><span>Payment discount</span><strong>-{formatPrice(breakdown.paymentDiscount)}</strong></div>}
-            {breakdown.paymentFee > 0 && <div className="summary-row"><span>COD charge</span><strong>{formatPrice(breakdown.paymentFee)}</strong></div>}
+            {breakdown.codFee > 0 && <div className="summary-row"><span>COD charge</span><strong>{formatPrice(breakdown.codFee)}</strong></div>}
+            {breakdown.platformFee > 0 && <div className="summary-row"><span>Platform fee</span><strong>{formatPrice(breakdown.platformFee)}</strong></div>}
             {breakdown.couponDiscount > 0 && <div className="summary-row is-saving"><span>Coupon{order.coupon_code ? ` (${order.coupon_code})` : ""}</span><strong>-{formatPrice(breakdown.couponDiscount)}</strong></div>}
             {breakdown.walletAmount > 0 && <div className="summary-row is-saving"><span>Wallet used</span><strong>-{formatPrice(breakdown.walletAmount)}</strong></div>}
             <div className="summary-row is-final"><span>Final amount</span><strong>{formatPrice(breakdown.payable)}</strong></div>
@@ -392,18 +698,73 @@ export default function OrderConfirmation() {
             <p className="address-copy">{order.customer_name}<br />{order.address}<br />{order.city}, {order.state} - {order.pincode}<br />Phone: {order.phone}</p>
           </section>
 
-          <section className="order-panel">
-            <h2>Need to cancel?</h2>
+          {needsCodBankDetails && (
+            <section className="order-panel">
+              <h2>Refund bank details</h2>
+              {order.refund_bank_details ? (
+                <div className="refund-bank-saved">
+                  <strong>{order.refund_bank_details.account_holder_name}</strong>
+                  <span>{order.refund_bank_details.bank_name} - {order.refund_bank_details.ifsc_code}</span>
+                  <span>Account ending {order.refund_bank_details.account_number_last4}</span>
+                </div>
+              ) : (
+                <form className="refund-bank-form" onSubmit={submitBankDetails}>
+                  <input
+                    required
+                    value={bankForm.account_holder_name}
+                    onChange={(event) => setBankForm((current) => ({ ...current, account_holder_name: event.target.value }))}
+                    placeholder="Account holder name"
+                  />
+                  <input
+                    required
+                    inputMode="numeric"
+                    value={bankForm.account_number}
+                    onChange={(event) => setBankForm((current) => ({ ...current, account_number: event.target.value }))}
+                    placeholder="Account number"
+                  />
+                  <input
+                    required
+                    value={bankForm.ifsc_code}
+                    onChange={(event) => setBankForm((current) => ({ ...current, ifsc_code: event.target.value.toUpperCase() }))}
+                    placeholder="IFSC code"
+                  />
+                  <input
+                    required
+                    value={bankForm.bank_name}
+                    onChange={(event) => setBankForm((current) => ({ ...current, bank_name: event.target.value }))}
+                    placeholder="Bank name"
+                  />
+                  <input
+                    value={bankForm.branch_name}
+                    onChange={(event) => setBankForm((current) => ({ ...current, branch_name: event.target.value }))}
+                    placeholder="Branch name (optional)"
+                  />
+                  <button type="submit" disabled={bankSaving}>{bankSaving ? "Saving..." : "Save bank details"}</button>
+                </form>
+              )}
+            </section>
+          )}
+
+          <section className="order-panel order-actions-panel">
+            <h2>Order actions</h2>
             <p className="policy-copy">
-              You can cancel within 24 hours or until the order is shipped. Once shipped, live tracking will continue here and in My Orders.
+              Manage cancellation, return or exchange from here. Final eligibility is checked when you submit the request.
             </p>
-            {cancellationAvailable ? (
-              <button className="cancel-order-btn" type="button" onClick={handleCancelClick}>
-                Cancel order
-              </button>
-            ) : (
-              <span className="cancel-disabled-note">Cancellation is closed for this order.</span>
-            )}
+            <div className="order-action-list">
+              {orderActions.canCancel && (
+                <button className="cancel-order-btn" type="button" onClick={() => openActionModal("cancel")}>
+                  Cancel products
+                </button>
+              )}
+              {orderActions.canReturnExchange && (
+                <button className="order-secondary-btn" type="button" onClick={() => openActionModal("return")}>
+                  Return / exchange products
+                </button>
+              )}
+              {!Object.values(orderActions).some(Boolean) && (
+                <span className="cancel-disabled-note">No order action is available right now.</span>
+              )}
+            </div>
           </section>
 
           <Link className="continue-shopping-link" to="/collection">
@@ -498,25 +859,100 @@ export default function OrderConfirmation() {
             <button 
               type="button"
               className="cancel-modal-close" 
-              onClick={() => setCancelModal({ isOpen: false, orderId: null, itemName: "" })}
+              onClick={closeActionModal}
             >
               <Icon icon="lucide:x" />
             </button>
             <div className="cancel-modal-header">
-              <h3>Confirm Cancellation</h3>
-              <p>Please specify reason for cancelling <strong>{cancelModal.itemName}</strong></p>
+              <h3>{getActionConfig(cancelModal.type).title}</h3>
+              <p>Select product and quantity for <strong>{cancelModal.itemName}</strong>.</p>
             </div>
             
             <form onSubmit={handleModalSubmit} className="cancel-modal-form">
+              {cancelModal.type !== "cancel" && (
+                <div className="action-type-switch">
+                  <button
+                    type="button"
+                    className={cancelModal.type === "return" ? "active" : ""}
+                    onClick={() => {
+                      const eligible = getEligibleActionItems(order, "return");
+                      setCancelModal((current) => ({
+                        ...current,
+                        type: "return",
+                        selected: eligible.reduce((map, item, index) => ({ ...map, [item.id]: { checked: index === 0, quantity: 1 } }), {}),
+                      }));
+                      setCancelForm({ reason: RETURN_REASONS[0], comments: "" });
+                    }}
+                  >
+                    Return
+                  </button>
+                  <button
+                    type="button"
+                    className={cancelModal.type === "exchange" ? "active" : ""}
+                    onClick={() => {
+                      const eligible = getEligibleActionItems(order, "exchange");
+                      setCancelModal((current) => ({
+                        ...current,
+                        type: "exchange",
+                        selected: eligible.reduce((map, item, index) => ({ ...map, [item.id]: { checked: index === 0, quantity: 1 } }), {}),
+                      }));
+                      setCancelForm({ reason: EXCHANGE_REASONS[0], comments: "" });
+                    }}
+                  >
+                    Exchange
+                  </button>
+                </div>
+              )}
+
+              <div className="action-item-picker">
+                {getEligibleActionItems(order, cancelModal.type).map((item) => {
+                  const selected = cancelModal.selected?.[item.id] || { checked: false, quantity: 1 };
+                  const maxQty = getActionableQty(item);
+                  return (
+                    <label className="action-item-row" key={item.id}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selected.checked)}
+                        onChange={(event) => setCancelModal((current) => ({
+                          ...current,
+                          selected: {
+                            ...current.selected,
+                            [item.id]: { ...selected, checked: event.target.checked },
+                          },
+                        }))}
+                      />
+                      <span className="action-item-info">
+                        <strong>{item.product_name}</strong>
+                        <small>{getItemColor(item)} - Available qty {maxQty}</small>
+                      </span>
+                      <input
+                        type="number"
+                        min="1"
+                        max={maxQty}
+                        value={selected.quantity}
+                        disabled={!selected.checked}
+                        onChange={(event) => setCancelModal((current) => ({
+                          ...current,
+                          selected: {
+                            ...current.selected,
+                            [item.id]: { ...selected, quantity: Math.min(maxQty, Math.max(1, Number(event.target.value || 1))) },
+                          },
+                        }))}
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+
               <div className="form-group">
-                <label htmlFor="cancel-reason">Select Reason</label>
+                <label htmlFor="cancel-reason">{getActionConfig(cancelModal.type).label}</label>
                 <select 
                   id="cancel-reason" 
                   value={cancelForm.reason} 
                   onChange={(e) => setCancelForm(prev => ({ ...prev, reason: e.target.value }))}
                   required
                 >
-                  {CANCEL_REASONS.map((r, i) => (
+                  {getActionConfig(cancelModal.type).reasons.map((r, i) => (
                     <option key={i} value={r}>{r}</option>
                   ))}
                 </select>
@@ -526,28 +962,45 @@ export default function OrderConfirmation() {
                 <label htmlFor="cancel-comments">Additional Comments (Optional)</label>
                 <textarea
                   id="cancel-comments"
-                  placeholder="Bhai, details yahan likh sakte ho (optional)..."
+                  placeholder="You can provide additional details here to help us process your request better."
                   value={cancelForm.comments}
                   onChange={(e) => setCancelForm(prev => ({ ...prev, comments: e.target.value }))}
                   rows={4}
                 />
               </div>
 
+              {actionEstimate?.totals && (
+                <div className="action-estimate-box">
+                  <div><span>Selected product value</span><strong>{formatPrice(actionEstimate.totals.item_amount)}</strong></div>
+                  {cancelModal.type === "return" && (
+                    <>
+                      <div><span>Delivery charge deduction</span><strong>{formatPrice(actionEstimate.totals.forward_shipping_deduction)}</strong></div>
+                      <div><span>Return pickup charge</span><strong>{formatPrice(actionEstimate.totals.reverse_shipping_deduction)}</strong></div>
+                      <p className="action-estimate-note">
+                        <Icon icon="lucide:info" />
+                        RTO charge is not included in normal returns. RTO charge applies only when a shipment is returned to seller after failed delivery.
+                      </p>
+                    </>
+                  )}
+                  <div><span>{cancelModal.type === "exchange" ? "Refund" : "Estimated refund"}</span><strong>{formatPrice(actionEstimate.totals.estimated_refund_amount)}</strong></div>
+                </div>
+              )}
+
               <div className="modal-actions">
                 <button 
                   type="button" 
                   className="modal-action-btn secondary"
-                  onClick={() => setCancelModal({ isOpen: false, orderId: null, itemName: "" })}
+                  onClick={closeActionModal}
                   disabled={modalSubmitLoading}
                 >
                   Go Back
                 </button>
                 <button 
                   type="submit" 
-                  className="modal-action-btn danger"
+                  className={`modal-action-btn ${getActionConfig(cancelModal.type).tone}`}
                   disabled={modalSubmitLoading}
                 >
-                  {modalSubmitLoading ? "Processing..." : "Confirm Cancellation"}
+                  {modalSubmitLoading ? "Processing..." : getActionConfig(cancelModal.type).button}
                 </button>
               </div>
             </form>

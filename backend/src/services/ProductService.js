@@ -3,7 +3,9 @@ const Material = require("../models/Material");
 const Variety = require("../models/Variety");
 const Occasion = require("../models/Occasion");
 const Color = require("../models/Color");
+const Feedback = require("../models/Feedback");
 const { Op } = require("sequelize");
+const { fn, col } = require("sequelize");
 const { formatProductCode, formatVariantItemCode } = require("../utils/codes");
 
 const productIncludes = [
@@ -154,6 +156,46 @@ const normalizeProduct = (product) => {
   };
 };
 
+const attachReviewSummaries = async (products = []) => {
+  const ids = products.map((product) => product.id).filter(Boolean);
+  if (!ids.length) return products;
+
+  try {
+    const rows = await Feedback.findAll({
+      attributes: [
+        "product_id",
+        [fn("COUNT", col("id")), "review_count"],
+        [fn("AVG", col("rating")), "average_rating"],
+      ],
+      where: {
+        product_id: { [Op.in]: ids },
+        is_approved: true,
+      },
+      group: ["product_id"],
+      raw: true,
+    });
+
+    const summaries = new Map(rows.map((row) => {
+      const count = Number(row.review_count || 0);
+      const average = count ? Math.round(Number(row.average_rating || 0) * 10) / 10 : 0;
+      return [Number(row.product_id), { average, count }];
+    }));
+
+    return products.map((product) => {
+      const summary = summaries.get(Number(product.id)) || { average: 0, count: 0 };
+      return {
+        ...product,
+        review_summary: summary,
+        rating: summary.average,
+        review_count: summary.count,
+      };
+    });
+  } catch (error) {
+    console.error("[ProductService] review summary warning:", error.message);
+    return products;
+  }
+};
+
 const getStockStatus = (quantity, threshold = 5) => {
   const stock = toIntOrZero(quantity);
   const low = toIntOrZero(threshold || 5);
@@ -189,6 +231,9 @@ const toHomeProduct = (product) => {
     low_stock_threshold: coverProduct.low_stock_threshold,
     status: coverProduct.status,
     stock_status: getStockStatus(coverProduct.stock_quantity, coverProduct.low_stock_threshold),
+    review_summary: coverProduct.review_summary || { average: 0, count: 0 },
+    rating: coverProduct.rating || 0,
+    review_count: coverProduct.review_count || 0,
   };
 };
 
@@ -209,6 +254,9 @@ const toCollectionProduct = (product) => {
     low_stock_threshold: coverProduct.low_stock_threshold,
     status: coverProduct.status,
     stock_status: getStockStatus(coverProduct.stock_quantity, coverProduct.low_stock_threshold),
+    review_summary: coverProduct.review_summary || { average: 0, count: 0 },
+    rating: coverProduct.rating || 0,
+    review_count: coverProduct.review_count || 0,
   };
 };
 
@@ -397,7 +445,7 @@ class ProductService {
       queryOptions.where.stock_quantity = { [Op.and]: [{ [Op.gt]: 0 }, { [Op.lt]: 5 }] };
     }
 
-    const rows = (await Product.findAll(queryOptions)).map(normalizeProduct);
+    const rows = await attachReviewSummaries((await Product.findAll(queryOptions)).map(normalizeProduct));
     const targetColors = this.parseCommaSeparated(color);
     const filteredRows = targetColors
       ? rows.filter((product) => targetColors.some((colorId) => toIntOrZero(product.color_stocks?.[String(colorId)]) > 0))

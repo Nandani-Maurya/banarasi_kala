@@ -5,6 +5,7 @@ const Color = require('../models/Color');
 const Customer = require('../models/Customer');
 const WalletTransaction = require('../models/WalletTransaction');
 const Feedback = require('../models/Feedback');
+const OrderItemAction = require('../models/OrderItemAction');
 const { sequelize } = require('../config/db');
 const { DataTypes } = require('sequelize');
 const crypto = require('crypto');
@@ -22,6 +23,7 @@ const {
   isCodBlockedForContact,
 } = require('../utils/orderLifecycle');
 const { ensureFeedbackColumns } = require('../utils/feedbackSchema');
+const { ensureOrderItemActionSchema, getActionableQuantity } = require('../utils/orderItemActions');
 
 const sortProductImages = (images = []) => [...images].sort((a, b) => {
   const left = Number.isFinite(Number(a.display_order)) ? Number(a.display_order) : 999;
@@ -43,7 +45,7 @@ const pickOrderItemImage = (product, colorId) => {
   return selected?.url || selected?.image_url || "";
 };
 
-const serializeOrder = (order, feedbackRows = []) => {
+const serializeOrder = (order, feedbackRows = [], actionRows = []) => {
   const json = order.toJSON();
   const rows = Array.isArray(feedbackRows)
     ? feedbackRows.map((item) => (typeof item?.toJSON === 'function' ? item.toJSON() : item))
@@ -51,6 +53,17 @@ const serializeOrder = (order, feedbackRows = []) => {
   const feedbackByItem = new Map(
     rows.map((item) => [`${item.order_id}:${item.order_item_id}:${item.product_id}`, item]),
   );
+  const nestedActions = (json.OrderItems || []).flatMap((item) => item.OrderItemActions || []);
+  const actions = Array.isArray(actionRows)
+    ? actionRows.map((item) => (typeof item?.toJSON === 'function' ? item.toJSON() : item))
+    : [];
+  actions.push(...nestedActions);
+  const actionsByItem = actions.reduce((map, action) => {
+    const key = String(action.order_item_id);
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(action);
+    return map;
+  }, new Map());
   json.OrderItems = (json.OrderItems || []).map((item) => ({
     id: item.id,
     product_id: item.product_id,
@@ -65,6 +78,12 @@ const serializeOrder = (order, feedbackRows = []) => {
     product_slug: item.Product?.slug || null,
     shipping_meta: item.shipping_meta || null,
     status: item.status || 'Active',
+    cancelled_quantity: Number(item.cancelled_quantity || 0),
+    returned_quantity: Number(item.returned_quantity || 0),
+    exchanged_quantity: Number(item.exchanged_quantity || 0),
+    pending_action_quantity: Number(item.pending_action_quantity || 0),
+    actionable_quantity: getActionableQuantity(item),
+    actions: actionsByItem.get(String(item.id)) || [],
     feedback: feedbackByItem.get(`${json.id}:${item.id}:${item.product_id}`) || null,
   }));
   return json;
@@ -74,6 +93,8 @@ let orderAccountingColumnsReady = false;
 let orderColumnCache = null;
 
 const REQUIRED_ORDER_COLUMNS = {
+  platform_fee: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
+  cod_fee: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
   payment_gateway: { type: DataTypes.STRING, allowNull: true },
   gateway_order_id: { type: DataTypes.STRING, allowNull: true },
   gateway_payment_id: { type: DataTypes.STRING, allowNull: true },
@@ -83,6 +104,10 @@ const REQUIRED_ORDER_COLUMNS = {
   payment_verified_at: { type: DataTypes.DATE, allowNull: true },
   payment_gateway_response: { type: DataTypes.JSONB, allowNull: true },
   payment_failure_reason: { type: DataTypes.TEXT, allowNull: true },
+  refund_bank_details: { type: DataTypes.JSONB, allowNull: true },
+  refund_payment_reference: { type: DataTypes.STRING, allowNull: true },
+  refund_processed_at: { type: DataTypes.DATE, allowNull: true },
+  refund_processed_by: { type: DataTypes.INTEGER, allowNull: true },
   ...ORDER_LIFECYCLE_COLUMNS,
 };
 
@@ -111,6 +136,7 @@ let orderItemColumnsReady = false;
 let orderItemColumnCache = null;
 
 const ensureOrderItemAccountingColumns = async () => {
+  await ensureOrderItemActionSchema();
   const queryInterface = sequelize.getQueryInterface();
   const table = { tableName: 'order_items', schema: config.dbSchema };
   if (orderItemColumnsReady && orderItemColumnCache) return orderItemColumnCache;
@@ -308,10 +334,9 @@ class OrderController {
       const effectiveShippingDiscountReason = actualShippingCharge > 0 ? (shipping_discount_reason || 'free_delivery') : null;
       const normalizedPaymentMethod = String(payment_method || 'Prepaid').toUpperCase() === 'COD' ? 'COD' : 'Prepaid';
       const normalizedPaymentStatus = normalizedPaymentMethod === 'COD' ? 'Pending' : (payment_status || 'Paid');
-      const actualPaymentFee = Math.max(
-        0,
-        Number(config.platformFeeAmount || 0) + (normalizedPaymentMethod === 'COD' ? Number(config.codFeeAmount || 0) : 0),
-      );
+      const actualPlatformFee = Math.max(0, Number(config.platformFeeAmount || 0));
+      const actualCodFee = normalizedPaymentMethod === 'COD' ? Math.max(0, Number(config.codFeeAmount || 0)) : 0;
+      const actualPaymentFee = actualPlatformFee + actualCodFee;
       const actualPaymentDiscount = normalizedPaymentMethod === 'Prepaid'
         ? Math.min(Number(config.prepaidDiscountAmount || 0), itemSubtotal)
         : 0;
@@ -428,6 +453,8 @@ class OrderController {
         shipping_charge: actualShippingCharge,
         shipping_discount: actualShippingDiscount,
         payment_fee: actualPaymentFee,
+        platform_fee: actualPlatformFee,
+        cod_fee: actualCodFee,
         payment_discount: actualPaymentDiscount,
         total_amount: final_total,
         coupon_code,
@@ -553,26 +580,119 @@ class OrderController {
   async getMyOrders(req, res) {
     try {
       await ensureOrderAccountingColumns();
+      await ensureOrderItemActionSchema();
+      const { status, paymentMethod, customer, q } = req.query;
+      const where = {};
+      if (status && status !== 'all') where.status = status;
+      if (paymentMethod && paymentMethod !== 'all') where.payment_method = paymentMethod;
+      const customerSearch = String(customer || q || '').trim();
+      if (customerSearch) {
+        where[Op.or] = [
+          { customer_name: { [Op.iLike]: `%${customerSearch}%` } },
+          { customer_email: { [Op.iLike]: `%${customerSearch}%` } },
+          { phone: { [Op.iLike]: `%${customerSearch}%` } },
+          { order_number: { [Op.iLike]: `%${customerSearch}%` } },
+        ];
+      }
       const orders = await Order.findAll({
+        where,
         include: [{
           model: OrderItem,
           include: [
             { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
             { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
+            { model: OrderItemAction },
           ],
         }],
         order: [['createdAt', 'DESC']],
       });
-      const orderIds = orders.map((order) => order.id);
-      const feedbacks = orderIds.length
-        ? await Feedback.findAll({
-          where: { customer_id: req.user.id, order_id: orderIds },
-          attributes: ['id', 'order_id', 'order_item_id', 'product_id', 'rating', 'comment', 'title', 'images', 'is_approved'],
-        })
-        : [];
-      res.status(200).json(orders.map((order) => serializeOrder(order, feedbacks.map((item) => item.toJSON()))));
+      res.status(200).json(orders.map((order) => serializeOrder(order)));
     } catch (error) {
       res.status(500).json({ message: error.message });
+    }
+  }
+
+  async saveRefundBankDetails(req, res) {
+    try {
+      await ensureOrderAccountingColumns();
+      if (!req.user?.id || req.userRole === 'admin') {
+        return res.status(401).json({ message: 'Customer authentication required' });
+      }
+
+      const order = await Order.findByPk(req.params.id);
+      if (!order) return res.status(404).json({ message: 'Order not found' });
+      const isOwnedByCustomerId = Number(order.customer_id) === Number(req.user.id);
+      const isLegacyOwnedByEmail = !order.customer_id
+        && req.user?.email
+        && String(order.customer_email || '').toLowerCase() === String(req.user.email).toLowerCase();
+      if (!isOwnedByCustomerId && !isLegacyOwnedByEmail) {
+        return res.status(403).json({ message: 'This order does not belong to this customer.' });
+      }
+
+      const accountHolderName = String(req.body.account_holder_name || '').trim();
+      const accountNumber = String(req.body.account_number || '').replace(/\s+/g, '');
+      const ifscCode = String(req.body.ifsc_code || '').trim().toUpperCase();
+      const bankName = String(req.body.bank_name || '').trim();
+      const branchName = String(req.body.branch_name || '').trim();
+
+      if (accountHolderName.length < 3) {
+        return res.status(400).json({ message: 'Please enter the bank account holder name.' });
+      }
+      if (!/^\d{6,18}$/.test(accountNumber)) {
+        return res.status(400).json({ message: 'Please enter a valid bank account number.' });
+      }
+      if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode)) {
+        return res.status(400).json({ message: 'Please enter a valid IFSC code.' });
+      }
+      if (bankName.length < 2) {
+        return res.status(400).json({ message: 'Please enter the bank name.' });
+      }
+
+      await order.update({
+        refund_bank_details: {
+          account_holder_name: accountHolderName,
+          account_number_last4: accountNumber.slice(-4),
+          account_number: accountNumber,
+          ifsc_code: ifscCode,
+          bank_name: bankName,
+          branch_name: branchName || null,
+          updated_at: new Date().toISOString(),
+        },
+        refund_status: order.refund_status || 'Bank Details Submitted',
+      });
+
+      return res.status(200).json({ message: 'Bank details saved for refund.' });
+    } catch (error) {
+      console.error('[Order] saveRefundBankDetails error:', error.message);
+      return res.status(500).json({ message: 'Unable to save bank details right now.' });
+    }
+  }
+
+  async updateRefundStatus(req, res) {
+    try {
+      await ensureOrderAccountingColumns();
+      const order = await Order.findByPk(req.params.id);
+      if (!order) return res.status(404).json({ message: 'Order not found' });
+
+      const refundStatus = String(req.body.refund_status || '').trim();
+      if (!refundStatus) return res.status(400).json({ message: 'refund_status is required' });
+
+      const updatePayload = {
+        refund_status: refundStatus,
+        refund_note: req.body.refund_note || order.refund_note,
+        refund_payment_reference: req.body.refund_payment_reference || order.refund_payment_reference,
+      };
+
+      if (String(refundStatus).toLowerCase().includes('paid') || String(refundStatus).toLowerCase().includes('processed')) {
+        updatePayload.refund_processed_at = new Date();
+        updatePayload.refund_processed_by = req.user?.id || null;
+      }
+
+      await order.update(updatePayload);
+      return res.status(200).json({ message: 'Refund status updated.', order: serializeOrder(order) });
+    } catch (error) {
+      console.error('[Order] updateRefundStatus error:', error.message);
+      return res.status(500).json({ message: 'Unable to update refund status right now.' });
     }
   }
 
@@ -588,6 +708,7 @@ class OrderController {
           include: [
             { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
             { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
+            { model: OrderItemAction },
           ],
         }],
         order: [['createdAt', 'DESC']],
@@ -638,6 +759,7 @@ class OrderController {
     try {
       await ensureOrderAccountingColumns();
       await ensureFeedbackColumns();
+      await ensureOrderItemActionSchema();
       if (!req.user?.id || req.userRole === 'admin') {
         return res.status(401).json({ message: 'Customer authentication required' });
       }
@@ -654,11 +776,19 @@ class OrderController {
           include: [
             { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
             { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
+            { model: OrderItemAction },
           ],
         }],
         order: [['createdAt', 'DESC']],
       });
-      res.status(200).json(orders.map(serializeOrder));
+      const orderIds = orders.map((order) => order.id);
+      const feedbacks = orderIds.length
+        ? await Feedback.findAll({
+          where: { customer_id: req.user.id, order_id: orderIds },
+          attributes: ['id', 'order_id', 'order_item_id', 'product_id', 'rating', 'comment', 'title', 'images', 'is_approved'],
+        })
+        : [];
+      res.status(200).json(orders.map((order) => serializeOrder(order, feedbacks.map((item) => item.toJSON()))));
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
@@ -668,6 +798,7 @@ class OrderController {
     try {
       await ensureOrderAccountingColumns();
       await ensureFeedbackColumns();
+      await ensureOrderItemActionSchema();
       if (!req.user?.id || req.userRole === 'admin') {
         return res.status(401).json({ message: 'Customer authentication required' });
       }
@@ -685,6 +816,7 @@ class OrderController {
           include: [
             { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
             { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
+            { model: OrderItemAction },
           ],
         }],
       });
@@ -978,6 +1110,37 @@ class OrderController {
       }
 
       await order.update(updatePayload, { transaction: t });
+
+      const itemShipmentStatuses = new Set([
+        'order placed',
+        'pending',
+        'processing',
+        'picked up',
+        'awb assigned',
+        'shipped',
+        'out for delivery',
+        'delivered',
+        'undelivered',
+        'rto initiated',
+        'rto in transit',
+        'rto delivered',
+        'seller cancelled',
+        'cancelled',
+      ]);
+      if (itemShipmentStatuses.has(normalized.toLowerCase())) {
+        const orderItems = await OrderItem.findAll({
+          where: { order_id: order.id },
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        });
+        for (const item of orderItems) {
+          const itemStatus = String(item.status || '').toLowerCase();
+          const hasItemSpecificAction = ['cancel', 'return', 'exchange'].some((word) => itemStatus.includes(word));
+          if (!hasItemSpecificAction) {
+            await item.update({ status: normalized }, { transaction: t });
+          }
+        }
+      }
 
       // Referral milestone reward:
       // If this is the referred customer's *first* delivered order, and the referrer

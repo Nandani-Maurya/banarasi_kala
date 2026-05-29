@@ -176,3 +176,252 @@ Customers table:
 - is_cod_blocked BOOLEAN
 - cod_block_reason TEXT
 - blocked_at TIMESTAMP
+
+11. Partial Item Cancel / Return / Exchange Requirements
+--------------------------------------------------------
+Goal:
+- One order can contain multiple products.
+- Customer should not need to open each product separately for cancel, return, or exchange.
+- Customer opens one action modal from order details and selects products + quantities.
+- Order-level status can stay broad, but item-level statuses must drive product-level UI and admin work queues.
+
+Core rule:
+- Every order item has its own lifecycle.
+- Order status is a summary only.
+- Order item status is the source of truth for cancel/return/exchange eligibility.
+
+Required item statuses:
+- Active
+- Cancel Requested
+- Cancelled
+- Return Requested
+- Return Initiated
+- Out For Return Pickup
+- Return Picked Up
+- Return Completed
+- Exchange Requested
+- Exchange Initiated
+- Exchange Pickup Scheduled
+- Exchange Picked Up
+- Exchange Completed
+
+Eligibility:
+- Cancel modal:
+  - Show only items that are still Active and order is cancellable.
+  - Hide items already Cancelled, Return*, Exchange*.
+- Return/Exchange modal:
+  - Show only delivered items that are not Cancelled, not Return*, not Exchange*.
+  - Customer first chooses one mode: Return or Exchange.
+  - Then customer selects products and quantities.
+- Quantity:
+  - If one order item has quantity > 1, customer chooses action quantity.
+  - Action quantity must be between 1 and remaining actionable quantity.
+  - Remaining actionable quantity = ordered quantity - cancelled quantity - returned quantity - exchanged quantity.
+
+Modal UX:
+- Cancel order button opens modal:
+  - List all cancellable products.
+  - Checkbox per product.
+  - Quantity selector per selected product.
+  - Reason dropdown + optional comment.
+  - Submit creates item-level cancel requests or immediate cancellations as per backend rule.
+- Return / Exchange button opens modal:
+  - Step 1: choose Return or Exchange.
+  - Step 2: select eligible products.
+  - Step 3: choose quantity per product.
+  - Step 4: show customer-facing refundable estimate for return only.
+  - Exchange does not show refund deduction unless extra payment is required later.
+
+Customer-facing deduction copy:
+- Return:
+  - Show: "Estimated refund is calculated after delivery charges for pickup and original shipment."
+  - Do not show raw internal formula everywhere.
+  - In the return modal summary, show the final estimated refund amount.
+- Exchange:
+  - Show: "Exchange pickup is created after approval. No refund is processed for exchange."
+
+Return calculation:
+- For each selected return item:
+  - Item refund = item unit price * selected quantity.
+- Delivery deduction:
+  - Deduct forward shipping charge allocation for the item/order.
+  - Deduct reverse pickup shipping charge from serviceability/courier rate.
+  - If same product item quantity is partially returned, full allocated delivery charge for that order item is still deducted once.
+- Formula:
+  - Estimated refund = selected item amount - forward delivery deduction - reverse pickup deduction
+- Guard:
+  - Estimated refund cannot go below 0.
+
+Exchange calculation:
+- No refund by default.
+- Reverse pickup and forward re-dispatch charges are stored internally.
+- If business later decides to collect exchange charge, add online payment step.
+
+Required backend design:
+- Add an item action model/table instead of stuffing every request into orders table.
+- Suggested table: order_item_actions
+  - id
+  - order_id
+  - order_item_id
+  - product_id
+  - action_type: cancel | return | exchange
+  - quantity
+  - reason
+  - comment
+  - status
+  - item_amount
+  - forward_shipping_deduction
+  - reverse_shipping_charge
+  - estimated_refund
+  - selected_courier_data JSONB
+  - created_by_customer_id
+  - approved_by_admin_id
+  - created_at
+  - updated_at
+- Add aggregate quantity columns to order_items:
+  - cancelled_quantity
+  - returned_quantity
+  - exchanged_quantity
+  - pending_action_quantity
+- Keep order_items.status as a display summary:
+  - Active when no action.
+  - Partially Cancelled / Cancelled.
+  - Return Requested / Return Completed.
+  - Exchange Requested / Exchange Completed.
+
+Required customer APIs:
+- POST /api/orders/:orderId/cancel-items
+  - Body: { items: [{ orderItemId, quantity }], reason, comment }
+- POST /api/orders/:orderId/item-action
+  - Body: { actionType: "return" | "exchange", items: [{ orderItemId, quantity }], reason, comment }
+- GET /api/orders/:orderId
+  - Include order item action history and remaining actionable quantities.
+
+Required admin APIs:
+- GET /api/admin/order-item-actions?type=cancel|return|exchange&status=pending
+- PATCH /api/admin/order-item-actions/:id/status
+  - approve/reject/process/complete action.
+- Admin should see:
+  - Total ordered quantity.
+  - Cancelled quantity.
+  - Returned quantity.
+  - Exchanged quantity.
+  - Remaining active quantity.
+  - Customer reason and comment.
+  - Refund estimate.
+  - Courier/serviceability data for return/exchange pickup.
+
+Admin sidebar requirements:
+- Orders
+- Returns
+- Exchanges
+- Cancellations
+- Reviews
+
+Admin dashboard/reporting:
+- Ordered count.
+- Cancelled count.
+- Return requested count.
+- Return completed count.
+- Exchange requested count.
+- Exchange completed count.
+- Product-wise and order-wise filters.
+
+Uniform calculation requirement:
+- All cancel/return/exchange calculations must live in one backend utility.
+- Suggested utility: backend/src/utils/orderItemActions.js
+- No duplicate refund/deduction math in frontend.
+- Frontend displays backend-calculated amounts only.
+
+Customer UI item status display:
+- My Orders card:
+  - Show overall order status.
+  - Product rows can show small item status if not Active.
+- Order details:
+  - Each item shows its own status and remaining actionable quantity.
+  - Completed/cancelled/returned/exchanged items should not appear in future action modals.
+
+12. Manual UI Testing Matrix
+----------------------------
+Use these DB edits only for local UI testing when backend automation is not complete.
+
+Table: orders
+- status = Delivered
+- delivered_at = current timestamp
+Expected UI:
+- Return/Exchange button available.
+- Feedback available.
+
+Table: order_items
+- status = Active
+- quantity = 4
+Expected UI:
+- Item appears in cancel modal if order is cancellable.
+- Item appears in return/exchange modal if order delivered.
+- Quantity selector allows 1 to 4.
+
+Table: order_items
+- status = Cancelled
+Expected UI:
+- Item does not appear in cancel/return/exchange modal.
+- Item row shows cancelled state.
+
+Table: order_items
+- status = Return Requested
+Expected UI:
+- Item does not appear in return/exchange/cancel options.
+- Admin Returns queue should show this item action once order_item_actions exists.
+
+Table: order_items
+- status = Exchange Requested
+Expected UI:
+- Item does not appear in return/exchange/cancel options.
+- Admin Exchanges queue should show this item action once order_item_actions exists.
+
+Table: order_item_actions
+- action_type = return
+- status = Requested
+Expected UI:
+- Admin Returns queue shows the request.
+- Customer item status shows Return Requested.
+
+Table: order_item_actions
+- action_type = exchange
+- status = Requested
+Expected UI:
+- Admin Exchanges queue shows the request.
+- Customer item status shows Exchange Requested.
+
+Table: order_item_actions
+- action_type = cancel
+- status = Requested
+Expected UI:
+- Admin Cancellations queue shows the request.
+- Customer item status shows Cancel Requested or Cancelled depending approval rule.
+
+13. Implementation Order
+------------------------
+Phase 1:
+- Add DB schema helpers for order_item_actions and order_items quantity columns.
+- Add backend calculation utility for item action eligibility and refund estimate.
+
+Phase 2:
+- Add customer APIs for multi-item cancel and return/exchange request.
+- Update GET order detail response to include item action summary.
+
+Phase 3:
+- Redesign customer Order Confirmation modal:
+  - Cancel modal with multi-product checkbox + quantity.
+  - Return/Exchange combined modal with mode selector + product selector + quantity.
+  - Use backend estimates.
+
+Phase 4:
+- Admin pages:
+  - Returns
+  - Exchanges
+  - Cancellations
+  - Order action detail view.
+
+Phase 5:
+- Manual QA with DB statuses above.
+- Then end-to-end QA from UI.

@@ -7,6 +7,7 @@ import { useNotification } from "../../context/NotificationContext";
 import { API_ENDPOINTS } from "../../config/api";
 import { getProductCoverImage, getProductImages } from "../../utils/productMedia";
 import { getProductStockInfo } from "../../utils/stockStatus";
+import ProductRating from "../../components/ProductRating";
 import "./Collection.css";
 
 const PAGE_SIZE = 20;
@@ -562,6 +563,7 @@ const Collection = () => {
                         </>
                       )}
                     </div>
+                    <ProductRating product={product} className="collection-product-rating" />
                   </div>
                 </div>
               );

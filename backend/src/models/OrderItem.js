@@ -45,6 +45,26 @@ const OrderItem = sequelize.define('OrderItem', {
     allowNull: false,
     defaultValue: 'Active'
   },
+  cancelled_quantity: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
+  },
+  returned_quantity: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
+  },
+  exchanged_quantity: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
+  },
+  pending_action_quantity: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    defaultValue: 0
+  },
   shipping_meta: {
     type: DataTypes.JSONB,
     allowNull: true

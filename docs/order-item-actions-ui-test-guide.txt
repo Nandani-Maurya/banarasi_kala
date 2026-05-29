@@ -1,0 +1,203 @@
+Order Item Actions UI Test Guide
+================================
+
+Purpose
+-------
+Use this file to manually test the new item-level cancel, return and exchange flow.
+The customer UI reads item status mainly from `vns_saree.order_items`.
+The admin queue reads request rows from `vns_saree.order_item_actions`.
+
+Tables
+------
+1. `vns_saree.orders`
+   - Main order status and delivery status.
+   - Useful columns: `id`, `order_number`, `status`, `delivered_at`, `payment_method`, `shipping_charge`, `selected_courier_data`.
+
+2. `vns_saree.order_items`
+   - Product-level status and quantity split.
+   - Useful columns:
+     - `status`
+     - `quantity`
+     - `cancelled_quantity`
+     - `returned_quantity`
+     - `exchanged_quantity`
+     - `pending_action_quantity`
+
+3. `vns_saree.order_item_actions`
+   - Every customer request is stored here.
+   - Useful columns:
+     - `action_type`: `cancel`, `return`, `exchange`
+     - `status`: `Requested`, `Approved`, `Rejected`, `Completed`, `Cancelled`
+     - `quantity`
+     - `item_amount`
+     - `forward_shipping_deduction`
+     - `reverse_shipping_deduction`
+     - `estimated_refund_amount`
+
+Case 1: Show Cancel Products Modal
+----------------------------------
+Database setup:
+
+```sql
+UPDATE vns_saree.orders
+SET status = 'Pending',
+    created_at = NOW()
+WHERE id = 57;
+
+UPDATE vns_saree.order_items
+SET status = 'Active',
+    cancelled_quantity = 0,
+    returned_quantity = 0,
+    exchanged_quantity = 0,
+    pending_action_quantity = 0
+WHERE order_id = 57;
+```
+
+Expected UI:
+- Open `/order-confirmation?orderId=57`.
+- Order actions shows `Cancel products`.
+- Modal shows all active products with checkbox and quantity.
+- After submit, selected items show `Cancel Requested`.
+- Admin `/cancellations` shows the request.
+
+Case 2: Show Return / Exchange Modal
+------------------------------------
+Database setup:
+
+```sql
+UPDATE vns_saree.orders
+SET status = 'Delivered',
+    delivered_at = NOW(),
+    shipping_charge = 223.36,
+    selected_courier_data = '{"freight_charge": 223.36}'::jsonb
+WHERE id = 57;
+
+UPDATE vns_saree.order_items
+SET status = 'Active',
+    cancelled_quantity = 0,
+    returned_quantity = 0,
+    exchanged_quantity = 0,
+    pending_action_quantity = 0
+WHERE order_id = 57;
+```
+
+Expected UI:
+- Open `/order-confirmation?orderId=57`.
+- Order actions shows `Return / exchange products`.
+- Choose `Return`: modal shows product value, forward delivery deduction, return pickup deduction and estimated refund.
+- Submit: selected items show `Return Requested`.
+- Admin `/returns` shows request details and refund estimate.
+- Choose `Exchange`: modal shows zero refund and creates exchange request.
+- Admin `/exchanges` shows request details.
+
+Case 3: Partial Quantity Return
+-------------------------------
+Database setup:
+
+```sql
+UPDATE vns_saree.order_items
+SET quantity = 4,
+    status = 'Active',
+    cancelled_quantity = 0,
+    returned_quantity = 0,
+    exchanged_quantity = 0,
+    pending_action_quantity = 0
+WHERE order_id = 57
+  AND id = <ORDER_ITEM_ID>;
+```
+
+Expected UI:
+- Return modal lets customer choose quantity from 1 to 4.
+- If customer returns quantity 1, delivery deduction is still full for that selected order item.
+- After submit, `pending_action_quantity` becomes 1 and the same item cannot be requested again for that pending quantity.
+
+Case 4: Admin Completes a Return
+--------------------------------
+Admin action:
+- Open `/returns`.
+- Click `Complete`.
+
+Expected database:
+- `order_item_actions.status = 'Completed'`
+- `order_items.pending_action_quantity` decreases by requested quantity.
+- `order_items.returned_quantity` increases by requested quantity.
+- `order_items.status` becomes `Return Completed` or `Partially Returned`.
+
+Case 5: Admin Rejects a Request
+-------------------------------
+Admin action:
+- Open `/cancellations`, `/returns`, or `/exchanges`.
+- Click `Reject`.
+
+Expected database:
+- `order_item_actions.status = 'Rejected'`
+- `order_items.pending_action_quantity` decreases by requested quantity.
+- `order_items.status` returns to `Active`.
+
+Case 6: RTO Status Display
+--------------------------
+Database setup:
+
+```sql
+UPDATE vns_saree.orders
+SET status = 'RTO Delivered',
+    is_rto = true,
+    rto_count = 1,
+    refund_note = 'Order returned to seller.'
+WHERE id = 57;
+```
+
+Expected UI:
+- Order timeline shows RTO flow.
+- Customer-facing label says order returned to seller.
+- This is order-level shipment state, not item-level return request.
+
+Case 7: Admin Orders Filters and Status
+---------------------------------------
+Admin UI:
+- Open admin `/orders`.
+- Search by customer name, email, phone, or order number.
+- Filter by order status.
+- Filter by payment method: `COD` or `Prepaid`.
+- Change an order status from the status dropdown in the table.
+
+Expected database:
+- `vns_saree.orders.status` updates to the selected status.
+- If status is `Delivered`, `delivered_at` is filled by backend status update logic.
+
+Case 8: COD Refund Bank Details
+-------------------------------
+Database setup for customer UI:
+
+```sql
+UPDATE vns_saree.orders
+SET payment_method = 'COD',
+    refund_status = 'Bank Details Required',
+    refund_amount = 500
+WHERE id = 57;
+```
+
+Expected customer UI:
+- Open `/order-confirmation?orderId=57`.
+- Refund bank details form appears.
+- Valid IFSC format is required, for example `SBIN0001234`.
+
+Expected admin UI:
+- Open admin `/orders`.
+- Click `Refund`.
+- Bank detail summary appears after customer submits it.
+- Admin enters bank UTR/reference and marks refund as `Refund Paid`.
+
+COD Refund Recommendation
+-------------------------
+- COD refunds should be handled manually through bank transfer/UPI from business account.
+- Store the bank UTR/reference in `refund_payment_reference`.
+- Razorpay webhook is useful for prepaid payment/refund tracking, not for cash collected COD refunds.
+
+Important Notes
+---------------
+- Do not manually set an item to returned/cancelled/exchanged unless the matching quantity columns are also updated.
+- Customer action buttons only show items where actionable quantity is greater than zero.
+- Actionable quantity formula:
+  `quantity - cancelled_quantity - returned_quantity - exchanged_quantity - pending_action_quantity`
+- Admin completion/rejection should be preferred over manual updates because it keeps status and quantities consistent.

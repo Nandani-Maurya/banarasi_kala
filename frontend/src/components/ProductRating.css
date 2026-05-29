@@ -1,0 +1,28 @@
+.product-rating-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  color: #d39a2d;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.product-rating-chip span {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.product-rating-chip svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.product-rating-chip strong,
+.product-rating-chip small {
+  color: rgba(50, 21, 15, 0.66);
+  font-size: 11px;
+  font-weight: 650;
+}

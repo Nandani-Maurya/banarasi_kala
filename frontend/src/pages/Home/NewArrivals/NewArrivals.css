@@ -301,6 +301,10 @@
   white-space: nowrap;
 }
 
+.bk-arrival-rating {
+  margin-top: 7px;
+}
+
 .bk-arrival-price {
   color: #46130d;
   font-family: "Poppins", sans-serif;

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { getProductCoverImage, getProductImages } from "../../../utils/productMedia";
 import { getProductStockInfo } from "../../../utils/stockStatus";
+import ProductRating from "../../../components/ProductRating";
 import "./NewArrivals.css";
 
 const calcDiscount = (mrp, sell) => {
@@ -191,6 +192,7 @@ const NewArrivals = () => {
                           {mrp > sell && <span className="bk-arrival-mrp">Rs. {mrp.toLocaleString("en-IN")}</span>}
                           {disc > 0 && <span className="bk-arrival-discount">{disc}% OFF</span>}
                         </div>
+                        <ProductRating product={product} className="bk-arrival-rating" />
                       </div>
                     </Link>
                   </article>

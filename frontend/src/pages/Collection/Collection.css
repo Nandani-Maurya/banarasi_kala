@@ -550,6 +550,11 @@ hat undo kiy ahai:root {
     flex-wrap: wrap;
 }
 
+.collection-product-rating {
+    justify-content: center;
+    margin: 7px auto 0;
+}
+
 .selling-price {
     font-family: "Poppins", sans-serif;
     font-size: 16px;

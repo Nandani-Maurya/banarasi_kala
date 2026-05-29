@@ -11,8 +11,10 @@ import EmptyStateIcon from "../../components/EmptyStateIcon";
 import "./MyOrders.css";
 
 const STATUS_CONFIG = {
+  "Order Placed": { color: "#8a5a00", bg: "#fff6dc", icon: "lucide:clock-3", label: "Order placed" },
   Pending: { color: "#8a5a00", bg: "#fff6dc", icon: "lucide:clock-3", label: "Order placed" },
   Processing: { color: "#2454a6", bg: "#eff5ff", icon: "lucide:package", label: "Processing" },
+  "Picked Up": { color: "#6840aa", bg: "#f5f0ff", icon: "lucide:package-check", label: "Picked up" },
   Shipped: { color: "#6840aa", bg: "#f5f0ff", icon: "lucide:truck", label: "Shipped" },
   Delivered: { color: "#087a55", bg: "#edfdf5", icon: "lucide:check-circle", label: "Delivered" },
   Cancelled: { color: "#b42318", bg: "#fff0ee", icon: "lucide:x-circle", label: "Cancelled" },
@@ -27,13 +29,25 @@ const STATUS_CONFIG = {
   "Re-dispatch Payment Pending": { color: "#8a5a00", bg: "#fff6dc", icon: "lucide:credit-card", label: "Re-dispatch payment pending" },
   "Re-dispatch Paid": { color: "#087a55", bg: "#edfdf5", icon: "lucide:badge-check", label: "Re-dispatch paid" },
   "Re-dispatched": { color: "#6840aa", bg: "#f5f0ff", icon: "lucide:truck", label: "Re-dispatched" },
+  "Return Requested": { color: "#9a6200", bg: "#fff6dc", icon: "lucide:rotate-ccw", label: "Return requested" },
+  "Return Initiated": { color: "#9a6200", bg: "#fff6dc", icon: "lucide:rotate-ccw", label: "Return initiated" },
+  "Out For Return Pickup": { color: "#9a6200", bg: "#fff6dc", icon: "lucide:navigation", label: "Return pickup" },
+  "Return Picked Up": { color: "#6840aa", bg: "#f5f0ff", icon: "lucide:package-check", label: "Return picked up" },
+  "Return Completed": { color: "#087a55", bg: "#edfdf5", icon: "lucide:badge-check", label: "Return completed" },
+  "Exchange Requested": { color: "#2454a6", bg: "#eff5ff", icon: "lucide:repeat-2", label: "Exchange requested" },
+  "Exchange Initiated": { color: "#2454a6", bg: "#eff5ff", icon: "lucide:repeat-2", label: "Exchange initiated" },
+  "Exchange Pickup Scheduled": { color: "#9a6200", bg: "#fff6dc", icon: "lucide:calendar-clock", label: "Exchange pickup scheduled" },
+  "Exchange Picked Up": { color: "#6840aa", bg: "#f5f0ff", icon: "lucide:package-check", label: "Exchange picked up" },
+  "Exchange Completed": { color: "#087a55", bg: "#edfdf5", icon: "lucide:badge-check", label: "Exchange completed" },
 };
 
 const getStatus = (status) => {
   if (!status) return STATUS_CONFIG.Pending;
   const normalized = String(status).toLowerCase();
+  if (normalized === "order placed" || normalized === "order_placed") return STATUS_CONFIG["Order Placed"];
   if (normalized === "pending") return STATUS_CONFIG.Pending;
   if (normalized === "processing") return STATUS_CONFIG.Processing;
+  if (normalized === "picked up" || normalized === "picked_up") return STATUS_CONFIG["Picked Up"];
   if (normalized === "shipped") return STATUS_CONFIG.Shipped;
   if (normalized === "delivered") return STATUS_CONFIG.Delivered;
   if (normalized === "cancelled") return STATUS_CONFIG.Cancelled;
@@ -44,6 +58,16 @@ const getStatus = (status) => {
   if (normalized === "rto in transit" || normalized === "rto_in_transit") return STATUS_CONFIG["RTO In Transit"];
   if (normalized === "rto delivered" || normalized === "rto_delivered") return STATUS_CONFIG["RTO Delivered"];
   if (normalized === "seller cancelled" || normalized === "seller_cancelled") return STATUS_CONFIG["Seller Cancelled"];
+  if (normalized.includes("return requested")) return STATUS_CONFIG["Return Requested"];
+  if (normalized.includes("return initiated")) return STATUS_CONFIG["Return Initiated"];
+  if (normalized.includes("out for return pickup")) return STATUS_CONFIG["Out For Return Pickup"];
+  if (normalized.includes("return picked up")) return STATUS_CONFIG["Return Picked Up"];
+  if (normalized.includes("return completed") || normalized.includes("return delivered")) return STATUS_CONFIG["Return Completed"];
+  if (normalized.includes("exchange requested")) return STATUS_CONFIG["Exchange Requested"];
+  if (normalized.includes("exchange initiated")) return STATUS_CONFIG["Exchange Initiated"];
+  if (normalized.includes("exchange pickup scheduled")) return STATUS_CONFIG["Exchange Pickup Scheduled"];
+  if (normalized.includes("exchange picked up")) return STATUS_CONFIG["Exchange Picked Up"];
+  if (normalized.includes("exchange completed") || normalized.includes("exchange delivered")) return STATUS_CONFIG["Exchange Completed"];
   
   return STATUS_CONFIG[status] || STATUS_CONFIG.Pending;
 };
@@ -56,7 +80,58 @@ const formatPrice = (value) => `Rs. ${toNumber(value).toLocaleString("en-IN")}`;
 const getItemImage = (item) => item.image_url || item.product_image_url || "";
 const getItemColorLabel = (item) => item.color_name || item.Color?.name || "Selected color";
 const isCancelled = (order) => ["cancelled", "seller cancelled"].includes(String(order.status || "").toLowerCase());
-const isDelivered = (order) => String(order.status || "").toLowerCase() === "delivered";
+const PRE_DELIVERY_STATUSES = new Set([
+  "pending",
+  "order placed",
+  "order_placed",
+  "processing",
+  "picked up",
+  "picked_up",
+  "awb assigned",
+  "awb_assigned",
+  "shipped",
+  "out for delivery",
+  "out_for_delivery",
+  "undelivered",
+  "rto initiated",
+  "rto_initiated",
+  "rto in transit",
+  "rto_in_transit",
+]);
+const isDelivered = (order) => {
+  const status = String(order?.status || "").toLowerCase();
+  if (PRE_DELIVERY_STATUSES.has(status)) return false;
+  return status === "delivered" || Boolean(order?.delivered_at);
+};
+const canReviewOrderItem = (order, item) => {
+  const itemStatus = String(item?.status || "").toLowerCase();
+  return isDelivered(order) && !itemStatus.includes("cancel");
+};
+const getItemDisplayStatus = (order, item) => {
+  const itemStatus = String(item?.status || "").trim();
+  if (itemStatus && itemStatus.toLowerCase() !== "active") return itemStatus;
+  return getStatus(order?.status).label;
+};
+
+const FILTER_OPTIONS = [
+  { id: "all", label: "All" },
+  { id: "ordered", label: "Ordered" },
+  { id: "shipped", label: "Shipped" },
+  { id: "delivered", label: "Delivered" },
+  { id: "cancelled", label: "Cancelled" },
+  { id: "exchange", label: "Exchange" },
+  { id: "return", label: "Return" },
+];
+
+const getOrderFilterGroup = (status = "") => {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized.includes("exchange")) return "exchange";
+  if (normalized.includes("return")) return "return";
+  if (normalized.includes("cancel")) return "cancelled";
+  if (normalized.includes("delivered")) return "delivered";
+  if (normalized.includes("ship") || normalized.includes("awb") || normalized.includes("out for delivery")) return "shipped";
+  return "ordered";
+};
 
 const getOrderBreakdown = (order) => {
   const items = order.OrderItems || [];
@@ -203,10 +278,11 @@ const ReviewStars = ({ rating = 0, onSelect, disabled = false }) => (
   </div>
 );
 
-const OrderCard = ({ order, onImagePreview }) => {
+const OrderCard = ({ order, onImagePreview, onFeedback }) => {
   const navigate = useNavigate();
 
   const orderNumber = getOrderDisplayNumber(order);
+  const statusMeta = getStatus(order.status);
   const items = order.OrderItems || [];
   const activeItems = useMemo(() => items.filter(item => String(item.status || "").toLowerCase() !== "cancelled"), [items]);
   const orderDate = new Date(order.createdAt).toLocaleDateString("en-IN", {
@@ -223,9 +299,13 @@ const OrderCard = ({ order, onImagePreview }) => {
     <article className={`order-card ${isCancelled(order) ? "is-cancelled" : ""}`}>
       <div className="order-card-header">
         <div className="order-meta">
-          <span className="order-number">Order {orderNumber}</span>
+          <span className="order-number">{statusMeta.label}</span>
           <span className="order-date">{orderDate}</span>
         </div>
+        <span className="order-status-badge" style={{ backgroundColor: statusMeta.bg, color: statusMeta.color }}>
+          <Icon icon={statusMeta.icon} />
+          {statusMeta.label}
+        </span>
         <button className="order-detail-arrow" type="button" onClick={openOrderDetail} aria-label={`Open order ${orderNumber}`}>
           <Icon icon="lucide:chevron-right" />
         </button>
@@ -240,10 +320,9 @@ const OrderCard = ({ order, onImagePreview }) => {
         {items.map((item, index) => {
           const imageUrl = getItemImage(item);
           const colorHex = item.color_hex || item.Color?.hex_code || "#b7822d";
-          const lineTotal = toNumber(item.price) * Math.max(1, toNumber(item.quantity) || 1);
           const productName = item.product_name || `Product #${item.product_id}`;
-          const productUrl = item.product_slug ? `/product/${item.product_slug}` : null;
           const isItemCancelled = String(item.status || "").toLowerCase() === "cancelled";
+          const itemRating = Number(item.feedback?.rating || 0);
 
           return (
             <div 
@@ -274,7 +353,16 @@ const OrderCard = ({ order, onImagePreview }) => {
                   <span className="order-color-swatch" style={{ backgroundColor: colorHex }} />
                   <span>{getItemColorLabel(item)}</span>
                 </div>
+                <span className="order-item-status">{getItemDisplayStatus(order, item)}</span>
               </div>
+              {canReviewOrderItem(order, item) && (
+                <div className="order-feedback-row">
+                  <ReviewStars rating={itemRating} disabled />
+                  <button type="button" onClick={() => onFeedback(order, item)}>
+                    {item.feedback ? "Edit feedback" : "Add feedback"}
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
@@ -289,6 +377,9 @@ export default function MyOrders() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFilter, setSelectedFilter] = useState("all");
+  const [draftFilter, setDraftFilter] = useState("all");
+  const [filterOpen, setFilterOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
@@ -321,13 +412,15 @@ export default function MyOrders() {
 
   const visibleOrders = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return orders;
     return orders.filter((order) => {
+      const matchesFilter = selectedFilter === "all" || getOrderFilterGroup(order.status) === selectedFilter;
+      if (!matchesFilter) return false;
+      if (!query) return true;
       const orderNumber = getOrderDisplayNumber(order).toLowerCase();
       const productNames = (order.OrderItems || []).map((item) => item.product_name || "").join(" ").toLowerCase();
       return orderNumber.includes(query) || productNames.includes(query) || String(order.status || "").toLowerCase().includes(query);
     });
-  }, [orders, searchQuery]);
+  }, [orders, searchQuery, selectedFilter]);
 
   const fetchOrders = useCallback(async () => {
     if (!user?.id) return;
@@ -366,9 +459,19 @@ export default function MyOrders() {
     });
   };
 
-  const handleFeedbackTrigger = ({ order, item, productName }) => {
+  const handleFeedbackTrigger = (order, item) => {
+    if (!canReviewOrderItem(order, item)) {
+      showNotification("Product review is available after delivery.", "warning");
+      return;
+    }
+    const productName = item.product_name || `Product #${item.product_id}`;
     setFeedbackModal({ isOpen: true, order, item, productName });
-    setFeedbackForm({ rating: 5, title: "", comment: "", images: [] });
+    setFeedbackForm({
+      rating: Number(item.feedback?.rating || 5),
+      title: item.feedback?.title || "",
+      comment: item.feedback?.comment || "",
+      images: [],
+    });
   };
 
   const closeFeedbackModal = () => {
@@ -381,6 +484,10 @@ export default function MyOrders() {
     event.preventDefault();
     const { order, item } = feedbackModal;
     if (!order?.id || !item?.id) return;
+    if (!canReviewOrderItem(order, item)) {
+      showNotification("Product review is available after delivery.", "warning");
+      return;
+    }
     if (feedbackForm.comment.trim().length < 8) {
       showNotification("Please write a short product review.", "warning");
       return;
@@ -455,12 +562,27 @@ export default function MyOrders() {
     fetchOrders();
   }, [user, navigate, fetchOrders]);
 
+  const openFilterModal = () => {
+    setDraftFilter(selectedFilter);
+    setFilterOpen(true);
+  };
+
+  const applyFilter = () => {
+    setSelectedFilter(draftFilter);
+    setFilterOpen(false);
+  };
+
+  const clearFilter = () => {
+    setDraftFilter("all");
+    setSelectedFilter("all");
+    setFilterOpen(false);
+  };
+
   return (
     <div className="my-orders-page">
       <section className="orders-hero">
         <div className="orders-hero-content">
           <h1>My Orders</h1>
-          <span>{orders.length ? `${orders.length} order${orders.length === 1 ? "" : "s"}` : "Track your orders here"}</span>
           <div className="orders-search-row">
             <label>
               <Icon icon="lucide:search" />
@@ -470,9 +592,9 @@ export default function MyOrders() {
                 placeholder="Search orders"
               />
             </label>
-            <button type="button">
+            <button type="button" onClick={openFilterModal}>
               <Icon icon="lucide:list-filter" />
-              Filters
+              {FILTER_OPTIONS.find((item) => item.id === selectedFilter)?.label || "Filters"}
             </button>
           </div>
         </div>
@@ -508,17 +630,50 @@ export default function MyOrders() {
         )}
         {!loading && !error && orders.length > 0 && (
           <div className="orders-list">
-            <div className="orders-count"><Icon icon="lucide:layers" />{visibleOrders.length} {visibleOrders.length === 1 ? "Order" : "Orders"}</div>
             {visibleOrders.map((order) => (
               <OrderCard
                 key={order.id}
                 order={order}
                 onImagePreview={setPreviewImage}
+                onFeedback={handleFeedbackTrigger}
               />
             ))}
+            {visibleOrders.length === 0 && (
+              <div className="orders-filter-empty">No orders match this filter.</div>
+            )}
           </div>
         )}
       </main>
+
+      {filterOpen && (
+        <div className="orders-filter-overlay" role="dialog" aria-modal="true" onClick={() => setFilterOpen(false)}>
+          <div className="orders-filter-sheet" onClick={(event) => event.stopPropagation()}>
+            <span className="orders-filter-handle" />
+            <div className="orders-filter-head">
+              <h2>Filter orders</h2>
+              <button type="button" onClick={() => setFilterOpen(false)} aria-label="Close filters">
+                <Icon icon="lucide:x" />
+              </button>
+            </div>
+            <div className="orders-filter-options">
+              {FILTER_OPTIONS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={draftFilter === option.id ? "active" : ""}
+                  onClick={() => setDraftFilter(option.id)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <div className="orders-filter-actions">
+              <button type="button" onClick={clearFilter}>Clear</button>
+              <button type="button" onClick={applyFilter}>Apply</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {previewImage?.imageUrl && (
         <div className="order-image-preview" role="dialog" aria-modal="true" onClick={() => setPreviewImage(null)}>
@@ -680,7 +835,7 @@ export default function MyOrders() {
                   <label htmlFor="action-comments">Additional Comments (Optional)</label>
                   <textarea
                     id="action-comments"
-                    placeholder="Bhai, details yahan likh sakte ho (optional)..."
+                    placeholder="You can provide additional details here to help us process your request better."
                     value={actionForm.comments}
                     onChange={(e) => setActionForm(prev => ({ ...prev, comments: e.target.value }))}
                     rows={4}

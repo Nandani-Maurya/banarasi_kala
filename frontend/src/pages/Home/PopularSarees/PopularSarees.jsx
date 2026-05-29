@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { API_ENDPOINTS } from "../../../config/api";
 import { getProductCoverImage, getProductImages } from "../../../utils/productMedia";
 import { getProductStockInfo } from "../../../utils/stockStatus";
+import ProductRating from "../../../components/ProductRating";
 import "./PopularSarees.css";
 
 const calcDiscount = (mrp, sell) => {
@@ -258,17 +259,7 @@ const PopularSarees = () => {
                           </span>
                         )}
                       </div>
-                      <div className="bk-popular-rating">
-                        <svg width="13" height="13" fill="#B9872A" viewBox="0 0 24 24">
-                          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                        </svg>
-                        {product.rating && <span>{product.rating}</span>}
-                        {(product.reviews || product.review_count) && (
-                          <span>
-                            ({product.reviews || product.review_count})
-                          </span>
-                        )}
-                      </div>
+                      <ProductRating product={product} className="bk-popular-rating" />
                     </div>
                   </Link>
                 </article>

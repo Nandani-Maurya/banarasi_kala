@@ -73,11 +73,6 @@ const ReviewsStory = () => {
 
       {(loadingReviews || hasReviews) && (
         <div className="bk-review-shell">
-          <div className="bk-review-heading">
-            <h2>Customer Reviews</h2>
-            <span aria-hidden="true" />
-          </div>
-
           <div className="bk-review-row">
             <button className="bk-review-arrow" type="button" aria-label="Previous reviews">
               <svg viewBox="0 0 24 24" fill="none">

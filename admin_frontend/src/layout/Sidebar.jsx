@@ -14,6 +14,9 @@ import {
   BarChart3,
   CreditCard,
   LogOut,
+  RotateCcw,
+  RefreshCw,
+  XCircle,
 } from "lucide-react";
 
 const navItems = [
@@ -56,6 +59,9 @@ const navItems = [
   },
   { id: "users", label: "User Management", icon: Users },
   { id: "orders", label: "Orders", icon: Box },
+  { id: "cancellations", label: "Cancellations", icon: XCircle },
+  { id: "returns", label: "Returns", icon: RotateCcw },
+  { id: "exchanges", label: "Exchanges", icon: RefreshCw },
   { id: "inventory", label: "Inventory", icon: PackageCheck },
   { id: "reviews", label: "Reviews", icon: MessageSquareText, badge: 4 },
   { id: "analytics", label: "Analytics", icon: BarChart3 },

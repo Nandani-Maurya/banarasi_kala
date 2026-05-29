@@ -1,0 +1,161 @@
+.orders-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 180px 150px auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.orders-filter-input,
+.orders-filter-bar select,
+.orders-filter-bar button {
+  min-height: 42px;
+  border-radius: 12px;
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  background: #fff;
+  color: #4a3f35;
+  font-size: 12px;
+  outline: none;
+}
+
+.orders-filter-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+}
+
+.orders-filter-input input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+
+.orders-filter-bar select {
+  padding: 0 12px;
+}
+
+.orders-status-select {
+  max-width: 160px;
+  min-height: 30px;
+  border: 1px solid rgba(128, 0, 32, 0.14);
+  border-radius: 999px;
+  background: rgba(128, 0, 32, 0.08);
+  color: #800020;
+  padding: 0 9px;
+  font-size: 10px;
+  font-weight: 800;
+  outline: none;
+}
+
+.orders-filter-bar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  color: #800020;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.orders-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(49, 24, 13, 0.42);
+  backdrop-filter: blur(4px);
+}
+
+.orders-refund-modal {
+  width: min(520px, 100%);
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  border-radius: 18px;
+  background: #fffdf8;
+  border: 1px solid rgba(128, 0, 32, 0.16);
+  box-shadow: 0 24px 64px rgba(49, 24, 13, 0.18);
+}
+
+.orders-refund-modal h3 {
+  margin: 0;
+  color: #800020;
+  font-family: "Cinzel", serif;
+  font-size: 22px;
+}
+
+.orders-refund-modal p,
+.orders-bank-box span {
+  margin: 4px 0 0;
+  color: rgba(74, 63, 53, 0.7);
+  font-size: 12px;
+}
+
+.orders-refund-modal label {
+  display: grid;
+  gap: 7px;
+  color: #4a3f35;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.orders-refund-modal input,
+.orders-refund-modal select,
+.orders-refund-modal textarea {
+  width: 100%;
+  border: 1px solid rgba(128, 0, 32, 0.16);
+  border-radius: 10px;
+  background: #fffaf1;
+  padding: 11px 12px;
+  color: #4a3f35;
+  font: inherit;
+  outline: none;
+}
+
+.orders-bank-box {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #fff6e7;
+  border: 1px solid rgba(128, 0, 32, 0.1);
+}
+
+.orders-bank-box strong {
+  color: #4a3f35;
+  font-size: 13px;
+}
+
+.orders-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.orders-modal-actions button {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(128, 0, 32, 0.18);
+  background: #fff;
+  color: #800020;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.orders-modal-actions button[type="submit"] {
+  background: #800020;
+  color: #f5c94d;
+}
+
+@media (max-width: 980px) {
+  .orders-filter-bar {
+    grid-template-columns: 1fr;
+  }
+}

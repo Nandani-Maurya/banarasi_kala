@@ -1,4 +1,3 @@
-const { Op } = require('sequelize');
 const Feedback = require('../models/Feedback');
 const Customer = require('../models/Customer');
 const Product = require('../models/Product');
@@ -10,6 +9,31 @@ const { ensureFeedbackColumns } = require('../utils/feedbackSchema');
 const toInt = (value) => {
   const next = Number(value);
   return Number.isInteger(next) ? next : null;
+};
+
+const PRE_DELIVERY_STATUSES = new Set([
+  'pending',
+  'order placed',
+  'order_placed',
+  'processing',
+  'picked up',
+  'picked_up',
+  'awb assigned',
+  'awb_assigned',
+  'shipped',
+  'out for delivery',
+  'out_for_delivery',
+  'undelivered',
+  'rto initiated',
+  'rto_initiated',
+  'rto in transit',
+  'rto_in_transit',
+]);
+
+const isReviewAllowedForOrder = (order) => {
+  const status = String(order?.status || '').toLowerCase();
+  if (PRE_DELIVERY_STATUSES.has(status)) return false;
+  return status === 'delivered' || Boolean(order?.delivered_at);
 };
 
 const serializeSummary = (rows) => {
@@ -57,7 +81,6 @@ exports.submitFeedback = async (req, res) => {
       where: {
         id: orderId,
         customer_id: customerId,
-        status: { [Op.iLike]: 'Delivered' },
       },
       include: [{
         model: OrderItem,
@@ -66,7 +89,7 @@ exports.submitFeedback = async (req, res) => {
       }],
     });
 
-    if (!order) {
+    if (!order || !isReviewAllowedForOrder(order)) {
       return res.status(403).json({
         success: false,
         message: 'Review is available only after this product is delivered to your account.',
@@ -82,26 +105,35 @@ exports.submitFeedback = async (req, res) => {
       },
     });
 
-    if (existing) {
-      return res.status(409).json({ success: false, message: 'You have already reviewed this product.' });
-    }
-
     const images = await uploadFeedbackImages(req.files || []);
-    const feedback = await Feedback.create({
-      customer_id: customerId,
-      order_id: orderId,
-      order_item_id: orderItemId,
-      product_id: productId,
-      rating,
-      title: title || null,
-      comment,
-      images,
-      is_approved: false,
-    });
+    let feedback = existing;
+
+    if (existing) {
+      feedback.rating = rating;
+      feedback.title = title || null;
+      feedback.comment = comment;
+      if (images.length) feedback.images = images;
+      feedback.is_approved = false;
+      await feedback.save();
+    } else {
+      feedback = await Feedback.create({
+        customer_id: customerId,
+        order_id: orderId,
+        order_item_id: orderItemId,
+        product_id: productId,
+        rating,
+        title: title || null,
+        comment,
+        images,
+        is_approved: false,
+      });
+    }
 
     res.status(201).json({
       success: true,
-      message: 'Review submitted successfully. It will be visible after admin approval.',
+      message: existing
+        ? 'Review updated successfully. It will be visible after admin approval.'
+        : 'Review submitted successfully. It will be visible after admin approval.',
       data: feedback,
     });
   } catch (error) {

@@ -21,6 +21,7 @@ import Analytics from "./pages/Analytics/Analytics";
 import Payments from "./pages/Payments/Payments";
 import Login from "./pages/Auth/Login";
 import Profile from "./pages/Profile/Profile";
+import OrderActions from "./pages/OrderActions/OrderActions";
 
 export default function App() {
   return (
@@ -40,6 +41,9 @@ export default function App() {
           <Route path="/coupons" element={<EnhancedCoupons />} />
           <Route path="/occasions" element={<Occasions />} />
           <Route path="/orders" element={<Orders />} />
+          <Route path="/cancellations" element={<OrderActions type="cancel" />} />
+          <Route path="/returns" element={<OrderActions type="return" />} />
+          <Route path="/exchanges" element={<OrderActions type="exchange" />} />
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/reviews" element={<Reviews />} />
           <Route path="/analytics" element={<Analytics />} />
