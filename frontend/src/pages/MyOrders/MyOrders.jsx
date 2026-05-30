@@ -365,6 +365,79 @@ const OrderCard = ({ order, onImagePreview, onFeedback }) => {
           );
         })}
       </div>
+
+      {(() => {
+        const isPrepaid = String(order.payment_method || '').toUpperCase() !== 'COD';
+        const hasCompletedReturn = String(order.status || '').toLowerCase().includes('return completed') || 
+          items.some(item => String(item.status || '').toLowerCase().includes('return completed'));
+        if (isPrepaid && hasCompletedReturn) {
+          let totalItemAmount = 0;
+          let totalForwardDeduction = 0;
+          let totalReverseDeduction = 0;
+          let returnActionsFound = false;
+
+          items.forEach(item => {
+            const itemActions = Array.isArray(item.actions) ? item.actions : [];
+            itemActions.forEach(action => {
+              const actionType = String(action.action_type || '').toLowerCase();
+              if (actionType === 'return') {
+                totalItemAmount += Number(action.item_amount || 0);
+                totalForwardDeduction += Number(action.forward_shipping_deduction || 0);
+                totalReverseDeduction += Number(action.reverse_shipping_deduction || 0);
+                returnActionsFound = true;
+              }
+            });
+          });
+
+          // Fallbacks for legacy/older order formats
+          if (!returnActionsFound || totalItemAmount === 0) {
+            totalItemAmount = items.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
+            totalForwardDeduction = Number(order.shipping_charge || 0);
+            totalReverseDeduction = 0;
+          }
+
+          const calculatedRefund = Math.max(0, totalItemAmount - totalForwardDeduction - totalReverseDeduction);
+          const finalRefund = Number(order.refund_amount || calculatedRefund);
+
+          return (
+            <div className="order-card-refund-box">
+              <div className="refund-box-header">
+                <Icon icon="lucide:badge-indian-rupee" />
+                <h4>Refund Breakdown</h4>
+              </div>
+
+              <div className="refund-breakdown-details">
+                <div className="refund-detail-row">
+                  <span>Returned Items Value:</span>
+                  <span>{formatPrice(totalItemAmount)}</span>
+                </div>
+                {totalForwardDeduction > 0 && (
+                  <div className="refund-detail-row deduction">
+                    <span>Delivery Charges Deduction:</span>
+                    <span>-{formatPrice(totalForwardDeduction)}</span>
+                  </div>
+                )}
+                {totalReverseDeduction > 0 && (
+                  <div className="refund-detail-row deduction">
+                    <span>RTO / Reverse Shipping Charges:</span>
+                    <span>-{formatPrice(totalReverseDeduction)}</span>
+                  </div>
+                )}
+                <div className="refund-detail-row final-refund">
+                  <span>Total Refund Processed:</span>
+                  <strong>{formatPrice(finalRefund)}</strong>
+                </div>
+              </div>
+
+              <p className="refund-box-note">
+                <Icon icon="lucide:info" />
+                Refund has been processed after successful quality check. Forward delivery charges and RTO/reverse shipping charges have been deducted from the original paid amount.
+              </p>
+            </div>
+          );
+        }
+        return null;
+      })()}
     </article>
   );
 };

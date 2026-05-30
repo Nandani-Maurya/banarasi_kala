@@ -1676,3 +1676,82 @@
   font-size: 11px;
   font-weight: 800;
 }
+
+/* Prepaid Return Completed Refund Box styling */
+.order-card-refund-box {
+  margin: 12px 18px 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(255, 247, 225, 0.85);
+  border: 1px solid rgba(214, 177, 86, 0.28);
+  animation: orders-slide-down 180ms ease;
+}
+
+.refund-box-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #8b0021;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.refund-box-header svg {
+  font-size: 18px;
+}
+
+.refund-breakdown-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  border-bottom: 1px dashed rgba(116, 40, 19, 0.12);
+  padding-bottom: 10px;
+}
+
+.refund-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: rgba(50, 21, 15, 0.72);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.refund-detail-row.deduction {
+  color: #b42318;
+}
+
+.refund-detail-row.final-refund {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(116, 40, 19, 0.1);
+  color: #087a55;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.refund-detail-row.final-refund strong {
+  font-size: 16px;
+  color: #087a55;
+  font-weight: 800;
+}
+
+.refund-box-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: #6a5342;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.refund-box-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-size: 14px;
+  color: #d5ae45;
+}
