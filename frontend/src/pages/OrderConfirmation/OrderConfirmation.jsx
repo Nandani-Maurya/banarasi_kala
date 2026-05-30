@@ -336,6 +336,7 @@ export default function OrderConfirmation() {
   });
   const [modalSubmitLoading, setModalSubmitLoading] = useState(false);
   const [actionEstimate, setActionEstimate] = useState(null);
+  const [loadingEstimate, setLoadingEstimate] = useState(false);
   const [feedbackModal, setFeedbackModal] = useState({ isOpen: false, item: null });
   const [feedbackForm, setFeedbackForm] = useState({ rating: 5, title: "", comment: "", images: [] });
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
@@ -404,12 +405,14 @@ export default function OrderConfirmation() {
       comments: ""
     });
     setActionEstimate(null);
+    setLoadingEstimate(false);
   };
 
   const closeActionModal = (force = false) => {
     if (modalSubmitLoading && !force) return;
     setCancelModal({ isOpen: false, type: "cancel", orderId: null, itemName: "", selected: {} });
     setActionEstimate(null);
+    setLoadingEstimate(false);
   };
 
   const openFeedbackModal = (item) => {
@@ -476,11 +479,13 @@ export default function OrderConfirmation() {
 
   useEffect(() => {
     let cancelled = false;
+    setActionEstimate(null);
     const loadEstimate = async () => {
       if (!cancelModal.isOpen || !cancelModal.orderId || !selectedActionItems.length) {
-        setActionEstimate(null);
+        setLoadingEstimate(false);
         return;
       }
+      setLoadingEstimate(true);
       try {
         const response = await api.post(`/api/orders/${cancelModal.orderId}/item-actions/estimate`, {
           actionType: cancelModal.type,
@@ -489,6 +494,8 @@ export default function OrderConfirmation() {
         if (!cancelled) setActionEstimate(response.data);
       } catch {
         if (!cancelled) setActionEstimate(null);
+      } finally {
+        if (!cancelled) setLoadingEstimate(false);
       }
     };
     loadEstimate();
@@ -953,7 +960,14 @@ export default function OrderConfirmation() {
                 />
               </div>
 
-              {actionEstimate?.totals && (
+              {loadingEstimate && (
+                <div className="action-estimate-loading">
+                  <div className="action-estimate-spinner"></div>
+                  <span>Fetching details...</span>
+                </div>
+              )}
+
+              {!loadingEstimate && actionEstimate?.totals && (
                 <div className="action-estimate-box">
                   <div><span>Selected product value</span><strong>{formatPrice(actionEstimate.totals.item_amount)}</strong></div>
                   {cancelModal.type === "return" && (
