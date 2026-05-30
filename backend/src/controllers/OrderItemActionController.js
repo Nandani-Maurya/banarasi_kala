@@ -37,22 +37,33 @@ const canCancelOrderItems = (order) => {
 
 const normalizeItems = (items = []) => {
   if (!Array.isArray(items)) return [];
-  return items
-    .map((item) => ({
-      orderItemId: Number(item.orderItemId || item.order_item_id || item.id),
-      quantity: Math.max(1, Number(item.quantity || 1)),
-    }))
-    .filter((item) => Number.isInteger(item.orderItemId) && item.quantity > 0);
+  const itemIds = new Set();
+  items.forEach((item) => {
+    const orderItemId = Number(item.orderItemId || item.order_item_id || item.id);
+    if (Number.isInteger(orderItemId) && orderItemId > 0) itemIds.add(orderItemId);
+  });
+  return Array.from(itemIds).map((orderItemId) => ({ orderItemId }));
 };
 
-const hasClosedOrActiveAction = (item, actionType) => {
+const isActionClosedByRejection = (action) => {
+  const status = String(action?.status || '').toLowerCase();
+  return ['rejected'].includes(status);
+};
+
+const hasUsableAction = (item, actionType = null) => {
   const actions = item?.OrderItemActions || [];
   return actions.some((action) => {
     const type = String(action.action_type || '').toLowerCase();
-    const status = String(action.status || '').toLowerCase();
-    return type === actionType && !['rejected', 'cancelled'].includes(status);
+    return (!actionType || type === actionType) && !isActionClosedByRejection(action);
   });
 };
+
+const hasOrderExchangeHistory = (order) => (
+  Boolean(order?.exchange_requested_at)
+  || (order?.OrderItems || []).some((item) => hasUsableAction(item, ACTION_TYPES.EXCHANGE))
+);
+
+const getWholeProductActionQuantity = (item) => getActionableQuantity(item);
 
 const actionOrderStatus = (actionType) => {
   if (actionType === ACTION_TYPES.CANCEL) return 'Cancel Requested';
@@ -129,14 +140,13 @@ class OrderItemActionController {
       const estimates = selections.map((selection) => {
         const item = itemMap.get(selection.orderItemId);
         if (!item) return null;
-        if (
-          [ACTION_TYPES.RETURN, ACTION_TYPES.EXCHANGE].includes(actionType)
-          && hasClosedOrActiveAction(item, actionType)
-        ) {
+        if (hasUsableAction(item)) {
           return null;
         }
-        const maxQuantity = getActionableQuantity(item);
-        const quantity = Math.min(selection.quantity, maxQuantity);
+        if (actionType === ACTION_TYPES.EXCHANGE && hasOrderExchangeHistory(order)) {
+          return null;
+        }
+        const quantity = getWholeProductActionQuantity(item);
         if (quantity < 1) return null;
         return {
           order_item_id: item.id,
@@ -222,34 +232,36 @@ class OrderItemActionController {
       const cancelledSelections = new Map();
       let cancelledAmount = 0;
 
+      if (actionType === ACTION_TYPES.EXCHANGE && hasOrderExchangeHistory(order)) {
+        await transaction.rollback();
+        return res.status(400).json({ message: 'Exchange can be requested only once for an order. Remaining products can be returned.' });
+      }
+
       for (const selection of selections) {
         const item = itemMap.get(selection.orderItemId);
         if (!item) {
           await transaction.rollback();
           return res.status(404).json({ message: 'One selected product was not found in this order.' });
         }
-        if (
-          [ACTION_TYPES.RETURN, ACTION_TYPES.EXCHANGE].includes(actionType)
-          && hasClosedOrActiveAction(item, actionType)
-        ) {
+        if (hasUsableAction(item)) {
           await transaction.rollback();
           return res.status(400).json({
-            message: `${item.product_name || 'This product'} already has a ${actionType} request. Please choose another product.`,
+            message: `${item.product_name || 'This product'} already has an action request. Please choose another product.`,
           });
         }
-        const maxQuantity = getActionableQuantity(item);
-        if (selection.quantity > maxQuantity) {
+        const quantity = getWholeProductActionQuantity(item);
+        if (quantity < 1) {
           await transaction.rollback();
-          return res.status(400).json({ message: `${item.product_name || 'This product'} has only ${maxQuantity} quantity available for this request.` });
+          return res.status(400).json({ message: `${item.product_name || 'This product'} is not available for this request.` });
         }
 
-        const calculation = calculateItemAction({ order, item, actionType, quantity: selection.quantity });
+        const calculation = calculateItemAction({ order, item, actionType, quantity });
         const action = await OrderItemAction.create({
           order_id: order.id,
           order_item_id: item.id,
           product_id: item.product_id,
           action_type: actionType,
-          quantity: selection.quantity,
+          quantity,
           status: actionType === ACTION_TYPES.CANCEL ? ACTION_STATUS.COMPLETED : ACTION_STATUS.INITIATED,
           reason,
           ...calculation,
@@ -263,19 +275,19 @@ class OrderItemActionController {
 
         if (actionType === ACTION_TYPES.CANCEL) {
           const itemId = Number(item.id);
-          cancelledSelections.set(itemId, Number(cancelledSelections.get(itemId) || 0) + selection.quantity);
+          cancelledSelections.set(itemId, Number(cancelledSelections.get(itemId) || 0) + quantity);
           cancelledAmount += Number(calculation.item_amount || 0);
           const itemUpdate = {
-            cancelled_quantity: Number(item.cancelled_quantity || 0) + selection.quantity,
+            cancelled_quantity: Number(item.cancelled_quantity || 0) + quantity,
             pending_action_quantity: Number(item.pending_action_quantity || 0),
           };
           itemUpdate.status = statusAfterCompletedAction({ ...item.toJSON(), ...itemUpdate }, actionType);
           await item.update(itemUpdate, { transaction });
-          await restockCancelledItem(item, selection.quantity, transaction);
+          await restockCancelledItem(item, quantity, transaction);
         } else {
           await item.update({
             status: statusForRequestedAction(actionType),
-            pending_action_quantity: Number(item.pending_action_quantity || 0) + selection.quantity,
+            pending_action_quantity: Number(item.pending_action_quantity || 0) + quantity,
           }, { transaction });
         }
 

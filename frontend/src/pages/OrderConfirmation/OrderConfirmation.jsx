@@ -127,23 +127,27 @@ const getActionableQty = (item) => Math.max(0, toNumber(item.actionable_quantity
   - toNumber(item.pending_action_quantity)
 )));
 
-const hasClosedOrActiveAction = (item, actionType) => (item.actions || []).some((action) => {
+const hasUsableAction = (item, actionType = null) => (item.actions || []).some((action) => {
   const type = String(action.action_type || action.actionType || "").toLowerCase();
   const status = String(action.status || "").toLowerCase();
-  return type === actionType && !["rejected", "cancelled"].includes(status);
+  return (!actionType || type === actionType) && status !== "rejected";
 });
+
+const hasOrderExchangeHistory = (order) => Boolean(order?.exchange_requested_at)
+  || (order?.OrderItems || []).some((item) => hasUsableAction(item, "exchange"));
 
 const getEligibleActionItems = (order, actionType) => {
   const delivered = wasDelivered(order);
   const cancelAllowed = canCancelOrder(order);
+  const exchangeUsed = hasOrderExchangeHistory(order);
   return (order?.OrderItems || []).filter((item) => {
     const itemStatus = normalizeStatus(item.status);
     if (getActionableQty(item) < 1) return false;
     if (itemStatus.includes("requested") || itemStatus.includes("initiated")) return false;
+    if (hasUsableAction(item)) return false;
     if (actionType === "cancel") return cancelAllowed && itemStatus !== "cancelled";
     if (itemStatus === "cancelled") return false;
-    if (actionType === "return" && hasClosedOrActiveAction(item, "return")) return false;
-    if (actionType === "exchange" && hasClosedOrActiveAction(item, "exchange")) return false;
+    if (actionType === "exchange" && exchangeUsed) return false;
     if (["return", "exchange"].includes(actionType)) return delivered;
     return false;
   });
@@ -347,6 +351,7 @@ export default function OrderConfirmation() {
   const breakdown = useMemo(() => getBreakdown(order || {}), [order]);
   const timeline = useMemo(() => buildOrderTimeline(order), [order]);
   const orderActions = useMemo(() => getOrderActions(order), [order]);
+  const canSelectExchangeItems = useMemo(() => getEligibleActionItems(order, "exchange").length > 0, [order]);
   const orderNumber = getOrderDisplayNumber(order);
   const needsCodBankDetails = String(order?.payment_method || "").toUpperCase() === "COD"
     && String(order?.refund_status || "").toLowerCase().includes("bank");
@@ -385,7 +390,7 @@ export default function OrderConfirmation() {
     const eligibleItems = getEligibleActionItems(order, type);
     const selected = eligibleItems.reduce((map, item, index) => ({
       ...map,
-      [item.id]: { checked: index === 0, quantity: 1 },
+      [item.id]: { checked: index === 0 },
     }), {});
     setCancelModal({
       isOpen: true,
@@ -467,7 +472,7 @@ export default function OrderConfirmation() {
 
   const selectedActionItems = useMemo(() => Object.entries(cancelModal.selected || {})
     .filter(([, value]) => value.checked)
-    .map(([id, value]) => ({ orderItemId: Number(id), quantity: Math.max(1, Number(value.quantity || 1)) })), [cancelModal.selected]);
+    .map(([id]) => ({ orderItemId: Number(id) })), [cancelModal.selected]);
 
   useEffect(() => {
     let cancelled = false;
@@ -856,7 +861,7 @@ export default function OrderConfirmation() {
             </button>
             <div className="cancel-modal-header">
               <h3>{getActionConfig(cancelModal.type).title}</h3>
-              <p>Select product and quantity for <strong>{cancelModal.itemName}</strong>.</p>
+              <p>Select product for <strong>{cancelModal.itemName}</strong>. Full quantity of each selected product will be processed.</p>
             </div>
             
             <form onSubmit={handleModalSubmit} className="cancel-modal-form">
@@ -870,34 +875,36 @@ export default function OrderConfirmation() {
                       setCancelModal((current) => ({
                         ...current,
                         type: "return",
-                        selected: eligible.reduce((map, item, index) => ({ ...map, [item.id]: { checked: index === 0, quantity: 1 } }), {}),
+                        selected: eligible.reduce((map, item, index) => ({ ...map, [item.id]: { checked: index === 0 } }), {}),
                       }));
                       setCancelForm({ reason: RETURN_REASONS[0], comments: "" });
                     }}
                   >
                     Return
                   </button>
-                  <button
-                    type="button"
-                    className={cancelModal.type === "exchange" ? "active" : ""}
-                    onClick={() => {
-                      const eligible = getEligibleActionItems(order, "exchange");
-                      setCancelModal((current) => ({
-                        ...current,
-                        type: "exchange",
-                        selected: eligible.reduce((map, item, index) => ({ ...map, [item.id]: { checked: index === 0, quantity: 1 } }), {}),
-                      }));
-                      setCancelForm({ reason: EXCHANGE_REASONS[0], comments: "" });
-                    }}
-                  >
-                    Exchange
-                  </button>
+                  {canSelectExchangeItems && (
+                    <button
+                      type="button"
+                      className={cancelModal.type === "exchange" ? "active" : ""}
+                      onClick={() => {
+                        const eligible = getEligibleActionItems(order, "exchange");
+                        setCancelModal((current) => ({
+                          ...current,
+                          type: "exchange",
+                          selected: eligible.reduce((map, item, index) => ({ ...map, [item.id]: { checked: index === 0 } }), {}),
+                        }));
+                        setCancelForm({ reason: EXCHANGE_REASONS[0], comments: "" });
+                      }}
+                    >
+                      Exchange
+                    </button>
+                  )}
                 </div>
               )}
 
               <div className="action-item-picker">
                 {getEligibleActionItems(order, cancelModal.type).map((item) => {
-                  const selected = cancelModal.selected?.[item.id] || { checked: false, quantity: 1 };
+                  const selected = cancelModal.selected?.[item.id] || { checked: false };
                   const maxQty = getActionableQty(item);
                   return (
                     <label className="action-item-row" key={item.id}>
@@ -914,22 +921,8 @@ export default function OrderConfirmation() {
                       />
                       <span className="action-item-info">
                         <strong>{item.product_name}</strong>
-                        <small>{getItemColor(item)} - Available qty {maxQty}</small>
+                        <small>{getItemColor(item)} - Full qty {maxQty}</small>
                       </span>
-                      <input
-                        type="number"
-                        min="1"
-                        max={maxQty}
-                        value={selected.quantity}
-                        disabled={!selected.checked}
-                        onChange={(event) => setCancelModal((current) => ({
-                          ...current,
-                          selected: {
-                            ...current.selected,
-                            [item.id]: { ...selected, quantity: Math.min(maxQty, Math.max(1, Number(event.target.value || 1))) },
-                          },
-                        }))}
-                      />
                     </label>
                   );
                 })}
