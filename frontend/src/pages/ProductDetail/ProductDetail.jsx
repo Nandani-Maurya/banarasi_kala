@@ -291,6 +291,15 @@ const ProductDetail = () => {
   const isSelectedLowStock = selectedStockInfo.isLowStock;
   const isChangingColor = Boolean(loadingColorId);
   const showThumbSkeletons = isChangingColor && visibleImages.length === 0;
+
+  const existingBagQuantity = useMemo(() => {
+    if (!product || !cart) return 0;
+    return cart
+      .filter((item) => Number(item.id) === Number(product.id) && String(item.colorId || "") === String(selectedColorId || ""))
+      .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  }, [cart, product, selectedColorId]);
+
+  const isGoToBagMode = existingBagQuantity > 0 && quantity <= existingBagQuantity;
   const canAddToBag = !isSelectedOutOfStock && !isChangingColor && quantity <= selectedStockInfo.quantity;
   const availableQuantity = isSelectedOutOfStock ? 0 : Math.max(0, Math.floor(Number(selectedStockInfo.quantity || 0)));
   const quantityOptions = availableQuantity > 0 ? Array.from({ length: availableQuantity }, (_, index) => index + 1) : [0];
@@ -517,6 +526,11 @@ const ProductDetail = () => {
   }, [buyNowOpen]);
 
   const handleAddToCart = async () => {
+    if (isGoToBagMode) {
+      navigate("/cart");
+      return;
+    }
+
     if (!user) {
       showNotification("Please login first", "info");
       navigate("/cart");
@@ -528,9 +542,6 @@ const ProductDetail = () => {
       return;
     }
 
-    const existingBagQuantity = cart
-      .filter((item) => Number(item.id) === Number(product.id) && String(item.colorId || "") === String(selectedColorId || ""))
-      .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
     const canAddMore = Math.max(0, selectedStockInfo.quantity - existingBagQuantity);
     if (quantity > canAddMore) {
       showNotification(
@@ -542,8 +553,17 @@ const ProductDetail = () => {
       return;
     }
 
+    const wasAlreadyInBag = existingBagQuantity > 0;
     const result = await addToCart(product, quantity, selectedColorId);
-    showNotification(result.success ? "Added to Bag!" : result.message, result.success ? "success" : "warning");
+    if (result.success) {
+      if (wasAlreadyInBag) {
+        showNotification(`Item already added to bag and we have increased the quantity by ${quantity}`, "success");
+      } else {
+        showNotification(`Item added to bag! Quantity: ${quantity}`, "success");
+      }
+    } else {
+      showNotification(result.message, "warning");
+    }
   };
 
   const resetBuyNowForm = () => {
@@ -1287,9 +1307,21 @@ const ProductDetail = () => {
                   ))}
                 </select>
               </div>
-              <button type="button" onClick={handleAddToCart} className="product-add-btn" disabled={!canAddToBag}>
-                <Icon icon="lucide:shopping-bag" />
-                {isSelectedOutOfStock ? "Out of Stock" : isChangingColor ? "Loading..." : "Add to Bag"}
+              <button 
+                type="button" 
+                onClick={handleAddToCart} 
+                className="product-add-btn" 
+                disabled={!isGoToBagMode && !canAddToBag}
+              >
+                <Icon icon={isGoToBagMode ? "lucide:arrow-right" : "lucide:shopping-bag"} />
+                {isGoToBagMode 
+                  ? "Go to Bag" 
+                  : isSelectedOutOfStock 
+                    ? "Out of Stock" 
+                    : isChangingColor 
+                      ? "Loading..." 
+                      : "Add to Bag"
+                }
               </button>
               <button type="button" onClick={openBuyNowModal} className="product-buy-btn" disabled={!canAddToBag}>
                 <Icon icon="lucide:zap" />
