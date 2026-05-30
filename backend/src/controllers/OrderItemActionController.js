@@ -333,6 +333,15 @@ class OrderItemActionController {
       await order.update(orderUpdate, { transaction });
       await transaction.commit();
 
+      if (actionType === ACTION_TYPES.CANCEL) {
+        const EmailService = require('../services/EmailService');
+        const remainingQty = getRemainingQuantityAfterCancellation(orderItems, cancelledSelections);
+        const emailStatus = remainingQty <= 0 ? 'Cancelled' : 'Partially Cancelled';
+        EmailService.sendOrderStatusUpdate(order, emailStatus).catch((error) => {
+          console.error(`[Email] Item action cancel email failed for status ${emailStatus}:`, error.message);
+        });
+      }
+
       return res.status(201).json({
         message: actionType === ACTION_TYPES.CANCEL
           ? 'Cancellation completed.'
@@ -446,6 +455,23 @@ class OrderItemActionController {
       }, { transaction });
 
       await transaction.commit();
+
+      // Send return or exchange completion email
+      if (nextStatus === ACTION_STATUS.COMPLETED) {
+        const EmailService = require('../services/EmailService');
+        // Load updated order for email context
+        Order.findByPk(action.order_id).then((fullOrder) => {
+          if (fullOrder) {
+            const emailStatus = action.action_type === ACTION_TYPES.RETURN ? 'Return Completed' : 'Exchange Completed';
+            EmailService.sendOrderStatusUpdate(fullOrder, emailStatus).catch((err) => {
+              console.error('[Email] Manual action complete email failed:', err.message);
+            });
+          }
+        }).catch((err) => {
+          console.error('[Email] Load order for completion email failed:', err.message);
+        });
+      }
+
       return res.status(200).json({ message: 'Request updated.', action: serializeAction(action) });
     } catch (error) {
       await transaction.rollback();

@@ -897,6 +897,11 @@ class OrderController {
       await order.update(updatePayload, { transaction: t });
       await t.commit();
 
+      const EmailService = require('../services/EmailService');
+      EmailService.sendOrderStatusUpdate(order, 'Cancelled').catch((error) => {
+        console.error('[Email] Order cancellation email failed:', error.message);
+      });
+
       const updatedOrder = await Order.findByPk(id, {
         include: [{
           model: OrderItem,
@@ -1067,6 +1072,12 @@ class OrderController {
       }
 
       await t.commit();
+
+      const EmailService = require('../services/EmailService');
+      const emailStatus = activeItems.length <= 1 ? 'Cancelled' : 'Partially Cancelled';
+      EmailService.sendOrderStatusUpdate(order, emailStatus).catch((error) => {
+        console.error(`[Email] Item cancellation email failed for status ${emailStatus}:`, error.message);
+      });
 
       const updatedOrder = await Order.findByPk(orderId, {
         include: [{

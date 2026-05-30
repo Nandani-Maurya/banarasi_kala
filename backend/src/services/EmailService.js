@@ -106,44 +106,56 @@ class EmailService {
   }
 
   async sendOrderStatusUpdate(order, status) {
-    if (!order?.customer_email) return;
-    const normalizedStatus = String(status || order.status || "Updated").trim();
-    const statusCopy = {
-      Shipped: "Your order has been shipped. Tracking will keep updating as the courier scans the shipment.",
-      "Out For Delivery": "Your order is out for delivery today.",
-      Delivered: "Your order has been delivered. We hope it brings a little Banaras into your day.",
-      Cancelled: "Your order has been cancelled.",
-      Processing: "Your order is being prepared with care.",
-      "AWB Assigned": "Your shipment tracking number has been assigned.",
-      Undelivered: "The courier could not complete the delivery attempt. We will keep you updated.",
-      "RTO Initiated": "Your shipment is being returned to seller after an unsuccessful delivery attempt.",
-      "RTO In Transit": "Your shipment is on its way back to seller.",
-      "RTO Delivered": "Your order has returned to seller. Please check My Orders for refund or re-dispatch details.",
-      "Seller Cancelled": "Your order has been cancelled due to unsuccessful delivery. Please place a new order if you still wish to purchase the product.",
-    };
-    const message = statusCopy[normalizedStatus] || `Your order status is now ${normalizedStatus}.`;
-    const orderNumber = order.order_number;
+    try {
+      if (!order?.customer_email) return;
+      const normalizedStatus = String(status || order.status || "Updated").trim();
+      const statusCopy = {
+        Shipped: "Your order has been shipped. Tracking will keep updating as the courier scans the shipment.",
+        "Out For Delivery": "Your order is out for delivery today.",
+        Delivered: "Your order has been delivered. We hope it brings a little Banaras into your day.",
+        Cancelled: "Your order has been cancelled.",
+        "Partially Cancelled": "One or more items in your order have been successfully cancelled. The remaining items are active and the total billing has been adjusted.",
+        Processing: "Your order is being prepared with care.",
+        "AWB Assigned": "Your shipment tracking number has been assigned.",
+        Undelivered: "The courier could not complete the delivery attempt. We will keep you updated.",
+        "RTO Initiated": "Your shipment is being returned to seller after an unsuccessful delivery attempt.",
+        "RTO In Transit": "Your shipment is on its way back to seller.",
+        "RTO Delivered": "Your order has returned to seller. Please check My Orders for refund or re-dispatch details.",
+        "Seller Cancelled": "Your order has been cancelled due to unsuccessful delivery. Please place a new order if you still wish to purchase the product.",
+        "Return Completed": "Your return has been successfully received and inspected. We have approved the return request and initiated your refund process. The refund will be credited shortly.",
+        "Return Picked Up": "Your return parcel has been successfully picked up by our courier partner and is on its way to our facility.",
+        "Return Initiated": "Your return request has been successfully registered. Our courier partner will schedule the return pickup soon.",
+        "Exchange Completed": "Your exchange request is complete. Your new exchange order has been created and will be dispatched shortly.",
+        "Exchange Picked Up": "Your exchange product has been successfully picked up and is on its way back to us for verification.",
+        "Exchange Initiated": "Your exchange request has been successfully registered. We will schedule the pickup for the exchange product soon.",
+      };
+      const message = statusCopy[normalizedStatus] || `Your order status is now ${normalizedStatus}.`;
+      const orderNumber = order.order_number;
 
-    const mailOptions = {
-      from: `"Banarasi Kala" <${config.emailUser}>`,
-      to: order.customer_email,
-      subject: `Order ${orderNumber} ${normalizedStatus} | Banarasi Kala`,
-      html: `
-        <div style="font-family: Arial, sans-serif; color: #3D2817; max-width: 600px; margin: auto; border: 1px solid #ead8b2; padding: 32px; background-color: #fffaf0;">
-          <h1 style="color: #800020; margin: 0 0 12px;">Banarasi Kala</h1>
-          <p style="font-size: 16px;">Dear ${order.customer_name || "Customer"},</p>
-          <p style="font-size: 15px; line-height: 1.6;">${message}</p>
-          <div style="margin: 24px 0; padding: 18px; border-radius: 10px; background: #ffffff; border: 1px solid #ead8b2;">
-            <p style="margin: 0 0 8px; color: #8a6a2a; font-size: 12px; letter-spacing: 1px; text-transform: uppercase;">Order status</p>
-            <p style="margin: 0; color: #800020; font-size: 22px; font-weight: 700;">${normalizedStatus}</p>
-            ${order.shiprocket_awb ? `<p style="margin: 12px 0 0; font-size: 14px;">AWB: <strong>${order.shiprocket_awb}</strong></p>` : ""}
+      const mailOptions = {
+        from: `"Banarasi Kala" <${config.emailUser}>`,
+        to: order.customer_email,
+        subject: `Order ${orderNumber} ${normalizedStatus} | Banarasi Kala`,
+        html: `
+          <div style="font-family: Arial, sans-serif; color: #3D2817; max-width: 600px; margin: auto; border: 1px solid #ead8b2; padding: 32px; background-color: #fffaf0;">
+            <h1 style="color: #800020; margin: 0 0 12px;">Banarasi Kala</h1>
+            <p style="font-size: 16px;">Dear ${order.customer_name || "Customer"},</p>
+            <p style="font-size: 15px; line-height: 1.6;">${message}</p>
+            <div style="margin: 24px 0; padding: 18px; border-radius: 10px; background: #ffffff; border: 1px solid #ead8b2;">
+              <p style="margin: 0 0 8px; color: #8a6a2a; font-size: 12px; letter-spacing: 1px; text-transform: uppercase;">Order status</p>
+              <p style="margin: 0; color: #800020; font-size: 22px; font-weight: 700;">${normalizedStatus}</p>
+              ${order.shiprocket_awb ? `<p style="margin: 12px 0 0; font-size: 14px;">AWB: <strong>${order.shiprocket_awb}</strong></p>` : ""}
+            </div>
+            <p style="font-size: 13px; color: #7b6d5d;">You can see live updates from your My Orders page.</p>
           </div>
-          <p style="font-size: 13px; color: #7b6d5d;">You can see live updates from your My Orders page.</p>
-        </div>
-      `,
-    };
+        `,
+      };
 
-    await transporter.sendMail(mailOptions);
+      await transporter.sendMail(mailOptions);
+      console.log(`Order status update email sent to ${order.customer_email} for status: ${normalizedStatus}`);
+    } catch (error) {
+      console.error('Error sending order status update email:', error);
+    }
   }
 
   async sendOTP(email, otp, name) {
