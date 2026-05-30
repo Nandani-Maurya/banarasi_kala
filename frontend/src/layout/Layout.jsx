@@ -6,7 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { useEffect, useState } from "react";
 import "./Layout.css";
 
-const WHATSAPP_NUMBER = "916307715455";
+const WHATSAPP_NUMBER = "919555098884";
 const WHATSAPP_TEXT = encodeURIComponent("Hi Banarasi Kala, I need quick help.");
 const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_TEXT}`;
 const SIGNUP_POPUP_INITIAL_DELAY = 10000;

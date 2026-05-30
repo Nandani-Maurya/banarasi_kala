@@ -63,6 +63,7 @@ class ShipRocketController {
 
       // Step 1: Create order on ShipRocket
       const srOrder = await ShipRocketService.createOrder({ order, items });
+      console.log('ShipRocket Order Created:', srOrder); 
       const shipmentId = srOrder.shipment_id;
       const srOrderId = srOrder.order_id;
 

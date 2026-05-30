@@ -369,6 +369,10 @@
   margin-top: 12px;
 }
 
+.order-action-list-standalone {
+  margin-top: 0;
+}
+
 .continue-shopping-link,
 .order-confirmation-state button {
   background: #800020;

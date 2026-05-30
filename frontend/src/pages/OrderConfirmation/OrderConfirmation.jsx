@@ -67,6 +67,7 @@ const canCancelOrder = (order) => {
 const getCustomerOrderStatusLabel = (status) => {
   const normalized = String(status || "Pending").toLowerCase();
   if (normalized === "seller cancelled") return "Cancelled by seller";
+  if (normalized.includes("cancel")) return normalized.includes("partial") ? "Partially cancelled" : "Cancelled";
   if (normalized === "rto delivered") return "Order returned to seller";
   if (normalized === "rto initiated" || normalized === "rto in transit") return "Returning to seller";
   if (normalized.includes("return completed")) return "Return completed";
@@ -78,7 +79,11 @@ const getCustomerOrderStatusLabel = (status) => {
   if (normalized.includes("exchange pickup scheduled")) return "Exchange pickup scheduled";
   if (normalized.includes("exchange initiated") || normalized.includes("exchange requested")) return "Exchange initiated";
   if (normalized === "undelivered") return "Delivery attempt failed";
-  if (normalized === "awb assigned") return "AWB assigned";
+  if (normalized === "delivered") return "Delivered";
+  if (normalized === "out for delivery" || normalized === "out_for_delivery") return "Out for delivery";
+  if (normalized === "shipped" || normalized.includes("in transit") || normalized.includes("manifest")) return "Shipped";
+  if (normalized === "picked up" || normalized === "picked_up" || normalized.includes("pickup") || normalized === "awb assigned" || normalized === "awb_assigned") return "Picked up";
+  if (normalized === "pending" || normalized === "processing" || normalized === "order placed" || normalized === "order_placed") return "Order placed";
   return status || "Pending";
 };
 
@@ -134,10 +139,11 @@ const getEligibleActionItems = (order, actionType) => {
   return (order?.OrderItems || []).filter((item) => {
     const itemStatus = normalizeStatus(item.status);
     if (getActionableQty(item) < 1) return false;
-    if (itemStatus.includes("requested") || itemStatus.includes("completed") || itemStatus.includes("cancelled")) return false;
+    if (itemStatus.includes("requested") || itemStatus.includes("initiated")) return false;
+    if (actionType === "cancel") return cancelAllowed && itemStatus !== "cancelled";
+    if (itemStatus === "cancelled") return false;
     if (actionType === "return" && hasClosedOrActiveAction(item, "return")) return false;
     if (actionType === "exchange" && hasClosedOrActiveAction(item, "exchange")) return false;
-    if (actionType === "cancel") return cancelAllowed;
     if (["return", "exchange"].includes(actionType)) return delivered;
     return false;
   });
@@ -145,7 +151,7 @@ const getEligibleActionItems = (order, actionType) => {
 
 const getItemDisplayStatus = (order, item) => {
   const status = normalizeStatus(item?.status);
-  if (status && status !== "active") return item.status;
+  if (status && status !== "active") return getCustomerOrderStatusLabel(item.status);
   return getCustomerOrderStatusLabel(order?.status);
 };
 
@@ -195,8 +201,8 @@ const buildTimeline = (order, tracking) => {
       icon: "lucide:check-circle-2",
     },
     {
-      title: status === "processing" ? "Preparation in progress" : "Artisan preparation",
-      detail: "Quality check and packing before dispatch",
+      title: "Picked up",
+      detail: "Courier pickup scheduled or completed",
       active: ["processing", "awb assigned", "shipped", "out for delivery", "delivered", "undelivered", "rto initiated", "rto in transit", "rto delivered", "seller cancelled"].includes(status),
       icon: "lucide:package",
     },
@@ -227,20 +233,11 @@ const buildTimeline = (order, tracking) => {
   ];
 };
 
-const buildOrderTimeline = (order, tracking) => {
+const buildOrderTimeline = (order) => {
   const status = String(order?.status || "Pending").toLowerCase();
-  const activities = tracking?.tracking?.tracking_data?.shipment_track_activities || [];
-  if (activities.length) {
-    return activities.map((activity, index) => ({
-      title: activity.activity || "Shipment update",
-      detail: [activity.location, activity.date].filter(Boolean).join(" - "),
-      state: index === 0 ? "current" : "done",
-      icon: index === 0 ? "lucide:radio" : "lucide:circle",
-    }));
-  }
 
   const forwardSteps = [
-    { title: "Order placed", detail: `${formatDate(order?.createdAt)} - Confirmation email sent`, icon: "lucide:check-circle-2", matches: ["pending", "order placed", "processing"] },
+    { title: "Order placed", detail: `${formatDate(order?.createdAt)} - Confirmation sent`, icon: "lucide:check-circle-2", matches: ["pending", "order placed", "processing"] },
     { title: "Picked up", detail: "Courier pickup scheduled or completed", icon: "lucide:package-check", matches: ["picked up", "pickup", "awb assigned"] },
     { title: "Shipped", detail: order?.shiprocket_awb ? `AWB ${order.shiprocket_awb}` : "Tracking appears after dispatch", icon: "lucide:truck", matches: ["shipped", "in transit"] },
     { title: "Out for delivery", detail: "Courier will attempt delivery at your address", icon: "lucide:navigation", matches: ["out for delivery"] },
@@ -253,6 +250,11 @@ const buildOrderTimeline = (order, tracking) => {
     { title: "RTO initiated", detail: "Shipment is returning to seller", icon: "lucide:undo-2", matches: ["rto initiated"] },
     { title: "RTO in transit", detail: "Shipment is on the way back", icon: "lucide:truck", matches: ["rto in transit"] },
     { title: "Order returned to seller", detail: order?.refund_note || "Order returned to seller", icon: "lucide:warehouse", matches: ["rto delivered", "seller cancelled"] },
+  ];
+
+  const cancelledSteps = [
+    { title: "Order placed", detail: `${formatDate(order?.createdAt)} - Confirmation sent`, icon: "lucide:check-circle-2", matches: ["order placed", "pending", "processing", "cancelled", "seller cancelled"] },
+    { title: status === "seller cancelled" ? "Cancelled by seller" : "Cancelled", detail: "This order has been cancelled", icon: "lucide:x-circle", matches: ["cancelled", "seller cancelled"] },
   ];
 
   const returnSteps = [
@@ -271,6 +273,7 @@ const buildOrderTimeline = (order, tracking) => {
 
   if (status.includes("exchange")) return buildSteps(status, exchangeSteps);
   if (status.includes("return")) return buildSteps(status, returnSteps);
+  if (status.includes("cancel")) return buildSteps(status, cancelledSteps);
   if (status.includes("rto") || status === "undelivered" || status === "seller cancelled") return buildSteps(status, rtoSteps);
   return buildSteps(status, forwardSteps);
 };
@@ -313,7 +316,6 @@ export default function OrderConfirmation() {
   const { showNotification } = useNotification();
   const orderId = searchParams.get("orderId");
   const [order, setOrder] = useState(null);
-  const [tracking, setTracking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   
@@ -343,7 +345,7 @@ export default function OrderConfirmation() {
   const [bankSaving, setBankSaving] = useState(false);
 
   const breakdown = useMemo(() => getBreakdown(order || {}), [order]);
-  const timeline = useMemo(() => buildOrderTimeline(order, tracking), [order, tracking]);
+  const timeline = useMemo(() => buildOrderTimeline(order), [order]);
   const orderActions = useMemo(() => getOrderActions(order), [order]);
   const orderNumber = getOrderDisplayNumber(order);
   const needsCodBankDetails = String(order?.payment_method || "").toUpperCase() === "COD"
@@ -365,12 +367,6 @@ export default function OrderConfirmation() {
         if (cancelled) return;
         setOrder(response.data);
 
-        try {
-          const trackRes = await api.get(`/api/orders/track/${orderId}`);
-          if (!cancelled) setTracking(trackRes.data);
-        } catch {
-          if (!cancelled) setTracking(null);
-        }
       } catch (err) {
         if (!cancelled) setError(err?.response?.data?.message || "Unable to load order details.");
       } finally {
@@ -647,9 +643,11 @@ export default function OrderConfirmation() {
                       </button>
                     </div>
                   )}
-                  {(item.actions || []).length > 0 && (
+                  {(item.actions || []).some((action) => String(action.action_type || "").toLowerCase() !== "cancel") && (
                     <div className="confirmation-item-actions">
-                      {(item.actions || []).map((action) => (
+                      {(item.actions || [])
+                        .filter((action) => String(action.action_type || "").toLowerCase() !== "cancel")
+                        .map((action) => (
                         <div key={action.id || `${action.action_type}-${action.created_at}`}>
                           <span>{getActionLabel(action)}</span>
                           <strong>{action.status || "Initiated"}</strong>
@@ -745,12 +743,8 @@ export default function OrderConfirmation() {
             </section>
           )}
 
-          <section className="order-panel order-actions-panel">
-            <h2>Order actions</h2>
-            <p className="policy-copy">
-              Manage cancellation, return or exchange from here. Final eligibility is checked when you submit the request.
-            </p>
-            <div className="order-action-list">
+          {Object.values(orderActions).some(Boolean) && (
+            <div className="order-action-list order-action-list-standalone">
               {orderActions.canCancel && (
                 <button className="cancel-order-btn" type="button" onClick={() => openActionModal("cancel")}>
                   Cancel products
@@ -761,11 +755,8 @@ export default function OrderConfirmation() {
                   Return / exchange products
                 </button>
               )}
-              {!Object.values(orderActions).some(Boolean) && (
-                <span className="cancel-disabled-note">No order action is available right now.</span>
-              )}
             </div>
-          </section>
+          )}
 
           <Link className="continue-shopping-link" to="/collection">
             <Icon icon="lucide:shopping-bag" />

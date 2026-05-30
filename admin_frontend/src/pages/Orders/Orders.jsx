@@ -7,8 +7,6 @@ const ORDER_STATUSES = [
   "all",
   "Pending",
   "Order Placed",
-  "Processing",
-  "AWB Assigned",
   "Picked Up",
   "Shipped",
   "Out For Delivery",
@@ -59,10 +57,25 @@ const formatDate = (value) => {
   return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
 
+const getCanonicalOrderStatus = (status) => {
+  const normalized = String(status || "Pending").toLowerCase();
+  if (normalized === "processing") return "Order Placed";
+  if (normalized === "awb assigned" || normalized === "awb_assigned") return "Picked Up";
+  return status || "Pending";
+};
+
 const getActionCounts = (order) => (order.OrderItems || []).flatMap((item) => item.actions || []).reduce((map, action) => ({
   ...map,
   [action.action_type]: (map[action.action_type] || 0) + 1,
 }), {});
+
+const getItemStatusLabel = (status) => {
+  const normalized = String(status || "Active").toLowerCase();
+  if (normalized === "active") return "Same as order";
+  if (normalized.includes("cancel")) return normalized.includes("partial") ? "Partially cancelled" : "Cancelled";
+  if (normalized.includes("return") || normalized.includes("exchange")) return status;
+  return status || "Same as order";
+};
 
 export default function Orders() {
   const [orders, setOrders] = useState([]);
@@ -75,7 +88,7 @@ export default function Orders() {
   const [savingStatusId, setSavingStatusId] = useState(null);
 
   const filteredStatusOptions = useMemo(() => {
-    const fromOrders = orders.map((order) => order.status).filter(Boolean);
+    const fromOrders = orders.map((order) => getCanonicalOrderStatus(order.status)).filter(Boolean);
     return Array.from(new Set([...ORDER_STATUSES, ...fromOrders]));
   }, [orders]);
 
@@ -231,9 +244,11 @@ export default function Orders() {
                     </td>
                     <td className="px-5 py-4">
                       {(order.OrderItems || []).slice(0, 2).map((item) => (
-                        <div key={item.id} className="mb-1">
-                          <span className="font-semibold text-[#4A3F35]">{item.product_name}</span>
-                          <span className="text-gray-400"> · Qty {item.quantity} · {item.status}</span>
+                        <div key={item.id} className="mb-2">
+                          <span className="block font-semibold text-[#4A3F35]">{item.product_name}</span>
+                          <span className="mt-1 inline-flex rounded-full bg-[#FAF8F6] px-2 py-0.5 text-[10px] font-semibold text-[#800020]">
+                            Qty {item.quantity} - {getItemStatusLabel(item.status)}
+                          </span>
                         </div>
                       ))}
                       {(order.OrderItems || []).length > 2 && <span className="text-[10px] text-gray-400">+{order.OrderItems.length - 2} more</span>}
@@ -242,7 +257,7 @@ export default function Orders() {
                     <td className="px-5 py-4">
                       <select
                         className="orders-status-select"
-                        value={order.status || "Pending"}
+                        value={getCanonicalOrderStatus(order.status)}
                         disabled={savingStatusId === order.id}
                         onChange={(event) => updateOrderStatus(order.id, event.target.value)}
                       >

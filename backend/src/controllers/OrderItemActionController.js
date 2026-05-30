@@ -3,6 +3,7 @@ const OrderItem = require('../models/OrderItem');
 const OrderItemAction = require('../models/OrderItemAction');
 const Product = require('../models/Product');
 const Color = require('../models/Color');
+const { Transaction } = require('sequelize');
 const { sequelize } = require('../config/db');
 const {
   ACTION_TYPES,
@@ -58,6 +59,37 @@ const actionOrderStatus = (actionType) => {
   if (actionType === ACTION_TYPES.RETURN) return 'Return Initiated';
   return 'Exchange Initiated';
 };
+
+const restockCancelledItem = async (item, quantity, transaction) => {
+  const product = await Product.findByPk(item.product_id, {
+    attributes: ['id', 'stock_quantity', 'color_stocks'],
+    transaction,
+    lock: Transaction.LOCK.UPDATE,
+  });
+  if (!product) return;
+
+  const colorId = item.colorId || item.color_id;
+  const nextStock = Number(product.stock_quantity || 0) + quantity;
+  const updatePayload = { stock_quantity: nextStock };
+
+  if (colorId !== null && colorId !== undefined && colorId !== '') {
+    const stocks = { ...(product.color_stocks || {}) };
+    const key = String(colorId);
+    stocks[key] = Number(stocks[key] || 0) + quantity;
+    updatePayload.color_stocks = stocks;
+  }
+
+  await product.update(updatePayload, { transaction });
+};
+
+const getRemainingQuantityAfterCancellation = (items = [], cancelledSelections = new Map()) => (
+  items.reduce((sum, item) => {
+    const selectedQty = Number(cancelledSelections.get(Number(item.id)) || 0);
+    const quantity = Number(item.quantity || 0);
+    const cancelled = Number(item.cancelled_quantity || 0) + selectedQty;
+    return sum + Math.max(0, quantity - cancelled);
+  }, 0)
+);
 
 const serializeAction = (action) => {
   const json = typeof action?.toJSON === 'function' ? action.toJSON() : action;
@@ -140,14 +172,30 @@ class OrderItemActionController {
       }
 
       const order = await Order.findByPk(req.params.orderId, {
-        include: [{ model: OrderItem, include: [OrderItemAction] }],
         transaction,
-        lock: transaction.LOCK.UPDATE,
+        lock: Transaction.LOCK.UPDATE,
       });
       if (!order) {
         await transaction.rollback();
         return res.status(404).json({ message: 'Order not found.' });
       }
+
+      const orderItems = await OrderItem.findAll({
+        where: { order_id: order.id },
+        transaction,
+        lock: Transaction.LOCK.UPDATE,
+      });
+      const itemActions = await OrderItemAction.findAll({
+        where: { order_id: order.id },
+        transaction,
+      });
+      orderItems.forEach((item) => {
+        item.setDataValue(
+          'OrderItemActions',
+          itemActions.filter((action) => Number(action.order_item_id) === Number(item.id)),
+        );
+      });
+      order.setDataValue('OrderItems', orderItems);
       if (req.userRole !== 'admin' && !customerOwnsOrder(order, req.user)) {
         await transaction.rollback();
         return res.status(403).json({ message: 'This order does not belong to this account.' });
@@ -168,9 +216,11 @@ class OrderItemActionController {
         return res.status(400).json({ message: 'Please select at least one product.' });
       }
 
-      const itemMap = new Map((order.OrderItems || []).map((item) => [Number(item.id), item]));
+      const itemMap = new Map(orderItems.map((item) => [Number(item.id), item]));
       const reason = String(req.body.reason || '').trim();
       const createdActions = [];
+      const cancelledSelections = new Map();
+      let cancelledAmount = 0;
 
       for (const selection of selections) {
         const item = itemMap.get(selection.orderItemId);
@@ -200,7 +250,7 @@ class OrderItemActionController {
           product_id: item.product_id,
           action_type: actionType,
           quantity: selection.quantity,
-          status: ACTION_STATUS.INITIATED,
+          status: actionType === ACTION_TYPES.CANCEL ? ACTION_STATUS.COMPLETED : ACTION_STATUS.INITIATED,
           reason,
           ...calculation,
           requested_by: req.userRole === 'admin' ? null : req.user?.id,
@@ -211,10 +261,23 @@ class OrderItemActionController {
           },
         }, { transaction });
 
-        await item.update({
-          status: statusForRequestedAction(actionType),
-          pending_action_quantity: Number(item.pending_action_quantity || 0) + selection.quantity,
-        }, { transaction });
+        if (actionType === ACTION_TYPES.CANCEL) {
+          const itemId = Number(item.id);
+          cancelledSelections.set(itemId, Number(cancelledSelections.get(itemId) || 0) + selection.quantity);
+          cancelledAmount += Number(calculation.item_amount || 0);
+          const itemUpdate = {
+            cancelled_quantity: Number(item.cancelled_quantity || 0) + selection.quantity,
+            pending_action_quantity: Number(item.pending_action_quantity || 0),
+          };
+          itemUpdate.status = statusAfterCompletedAction({ ...item.toJSON(), ...itemUpdate }, actionType);
+          await item.update(itemUpdate, { transaction });
+          await restockCancelledItem(item, selection.quantity, transaction);
+        } else {
+          await item.update({
+            status: statusForRequestedAction(actionType),
+            pending_action_quantity: Number(item.pending_action_quantity || 0) + selection.quantity,
+          }, { transaction });
+        }
 
         createdActions.push(action);
       }
@@ -227,9 +290,32 @@ class OrderItemActionController {
         orderUpdate.refund_note = paymentMethod === 'COD'
           ? 'Customer bank details are required before manual refund.'
           : 'Refund will be processed back to the original prepaid payment method.';
-      } else if (actionType === ACTION_TYPES.CANCEL && paymentMethod !== 'COD') {
-        orderUpdate.refund_status = 'Refund Pending';
-        orderUpdate.refund_amount = roundMoney(createdActions.reduce((sum, action) => sum + Number(action.estimated_refund_amount || 0), 0));
+      } else if (actionType === ACTION_TYPES.CANCEL) {
+        const remainingQty = getRemainingQuantityAfterCancellation(orderItems, cancelledSelections);
+        const isFullCancellation = remainingQty <= 0;
+        const paidAmount = roundMoney(Number(order.payable_amount ?? order.total_amount ?? 0));
+        const nextSubtotal = isFullCancellation
+          ? 0
+          : roundMoney(Math.max(0, Number(order.subtotal_amount || 0) - cancelledAmount));
+        const nextTotal = isFullCancellation
+          ? 0
+          : roundMoney(Math.max(0, Number(order.total_amount || 0) - cancelledAmount));
+        const nextPayable = isFullCancellation
+          ? 0
+          : roundMoney(Math.max(0, paidAmount - cancelledAmount));
+        orderUpdate.status = remainingQty > 0 ? 'Partially Cancelled' : 'Cancelled';
+        if (isFullCancellation) orderUpdate.cancelled_at = new Date();
+        orderUpdate.subtotal_amount = nextSubtotal;
+        orderUpdate.total_amount = nextTotal;
+        orderUpdate.payable_amount = nextPayable;
+        orderUpdate.refund_status = paymentMethod === 'COD' ? 'Not Required' : 'Refund Pending';
+        orderUpdate.refund_amount = paymentMethod === 'COD' ? 0 : (isFullCancellation ? paidAmount : roundMoney(cancelledAmount));
+        orderUpdate.payment_status = paymentMethod === 'COD'
+          ? (remainingQty > 0 ? order.payment_status : 'Cancelled')
+          : 'Refund Pending';
+        orderUpdate.refund_note = paymentMethod === 'COD'
+          ? `Cancellation completed. COD amount adjusted by Rs. ${roundMoney(cancelledAmount).toLocaleString('en-IN')}.`
+          : `Cancellation completed. Refund of Rs. ${roundMoney(orderUpdate.refund_amount).toLocaleString('en-IN')} will be processed.`;
       }
 
       await order.update(orderUpdate, { transaction });
@@ -237,7 +323,7 @@ class OrderItemActionController {
 
       return res.status(201).json({
         message: actionType === ACTION_TYPES.CANCEL
-          ? 'Cancellation request submitted.'
+          ? 'Cancellation completed.'
           : actionType === ACTION_TYPES.RETURN
             ? 'Return request submitted.'
             : 'Exchange request submitted.',
@@ -245,7 +331,7 @@ class OrderItemActionController {
       });
     } catch (error) {
       await transaction.rollback();
-      console.error('[OrderItemAction] create error:', error.message);
+      console.error('[OrderItemAction] create error:', error);
       return res.status(500).json({ message: 'Unable to submit this request right now.' });
     }
   }
@@ -291,9 +377,8 @@ class OrderItemActionController {
       }
 
       const action = await OrderItemAction.findByPk(req.params.actionId, {
-        include: [OrderItem, Order],
         transaction,
-        lock: transaction.LOCK.UPDATE,
+        lock: Transaction.LOCK.UPDATE,
       });
       if (!action) {
         await transaction.rollback();
@@ -304,7 +389,10 @@ class OrderItemActionController {
         return res.status(400).json({ message: 'This request has already been closed.' });
       }
 
-      const item = action.OrderItem;
+      const item = await OrderItem.findByPk(action.order_item_id, {
+        transaction,
+        lock: Transaction.LOCK.UPDATE,
+      });
       if (!item) {
         await transaction.rollback();
         return res.status(404).json({ message: 'Order item not found.' });
@@ -349,7 +437,7 @@ class OrderItemActionController {
       return res.status(200).json({ message: 'Request updated.', action: serializeAction(action) });
     } catch (error) {
       await transaction.rollback();
-      console.error('[OrderItemAction] admin update error:', error.message);
+      console.error('[OrderItemAction] admin update error:', error);
       return res.status(500).json({ message: 'Unable to update this request right now.' });
     }
   }

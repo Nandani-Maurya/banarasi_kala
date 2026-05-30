@@ -13,14 +13,12 @@ import "./MyOrders.css";
 const STATUS_CONFIG = {
   "Order Placed": { color: "#8a5a00", bg: "#fff6dc", icon: "lucide:clock-3", label: "Order placed" },
   Pending: { color: "#8a5a00", bg: "#fff6dc", icon: "lucide:clock-3", label: "Order placed" },
-  Processing: { color: "#2454a6", bg: "#eff5ff", icon: "lucide:package", label: "Processing" },
   "Picked Up": { color: "#6840aa", bg: "#f5f0ff", icon: "lucide:package-check", label: "Picked up" },
   Shipped: { color: "#6840aa", bg: "#f5f0ff", icon: "lucide:truck", label: "Shipped" },
   Delivered: { color: "#087a55", bg: "#edfdf5", icon: "lucide:check-circle", label: "Delivered" },
   Cancelled: { color: "#b42318", bg: "#fff0ee", icon: "lucide:x-circle", label: "Cancelled" },
   "Out For Delivery": { color: "#9a6200", bg: "#fff6dc", icon: "lucide:navigation", label: "Out for delivery" },
   Undelivered: { color: "#9a6200", bg: "#fff6dc", icon: "lucide:triangle-alert", label: "Delivery attempt failed" },
-  "AWB Assigned": { color: "#2454a6", bg: "#eff5ff", icon: "lucide:barcode", label: "AWB assigned" },
   "RTO Initiated": { color: "#9a6200", bg: "#fff6dc", icon: "lucide:undo-2", label: "Returning to seller" },
   "RTO In Transit": { color: "#9a6200", bg: "#fff6dc", icon: "lucide:truck", label: "Returning to seller" },
   "RTO Delivered": { color: "#7a3d00", bg: "#fff4e8", icon: "lucide:warehouse", label: "Order returned to seller" },
@@ -46,14 +44,14 @@ const getStatus = (status) => {
   const normalized = String(status).toLowerCase();
   if (normalized === "order placed" || normalized === "order_placed") return STATUS_CONFIG["Order Placed"];
   if (normalized === "pending") return STATUS_CONFIG.Pending;
-  if (normalized === "processing") return STATUS_CONFIG.Processing;
-  if (normalized === "picked up" || normalized === "picked_up") return STATUS_CONFIG["Picked Up"];
-  if (normalized === "shipped") return STATUS_CONFIG.Shipped;
+  if (normalized === "processing") return STATUS_CONFIG["Order Placed"];
+  if (normalized === "picked up" || normalized === "picked_up" || normalized === "awb assigned" || normalized === "awb_assigned") return STATUS_CONFIG["Picked Up"];
+  if (normalized === "shipped" || normalized.includes("in transit") || normalized.includes("manifest")) return STATUS_CONFIG.Shipped;
   if (normalized === "delivered") return STATUS_CONFIG.Delivered;
   if (normalized === "cancelled") return STATUS_CONFIG.Cancelled;
+  if (normalized.includes("cancel")) return STATUS_CONFIG.Cancelled;
   if (normalized === "out for delivery" || normalized === "out_for_delivery") return STATUS_CONFIG["Out For Delivery"];
   if (normalized === "undelivered") return STATUS_CONFIG.Undelivered;
-  if (normalized === "awb assigned" || normalized === "awb_assigned") return STATUS_CONFIG["AWB Assigned"];
   if (normalized === "rto initiated" || normalized === "rto_initiated") return STATUS_CONFIG["RTO Initiated"];
   if (normalized === "rto in transit" || normalized === "rto_in_transit") return STATUS_CONFIG["RTO In Transit"];
   if (normalized === "rto delivered" || normalized === "rto_delivered") return STATUS_CONFIG["RTO Delivered"];

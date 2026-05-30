@@ -3,7 +3,7 @@ import { Icon } from "@iconify/react";
 import { Clock, Mail, MapPin, Phone, Send } from "lucide-react";
 import "./Contact.css";
 
-const WHATSAPP_NUMBER = "916307715455";
+const WHATSAPP_NUMBER = "919555098884";
 const WHATSAPP_TEXT = encodeURIComponent("Hi Banarasi Kala, I need quick help.");
 const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_TEXT}`;
 
