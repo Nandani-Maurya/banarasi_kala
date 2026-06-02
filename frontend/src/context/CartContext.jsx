@@ -102,11 +102,12 @@ export const CartProvider = ({ children }) => {
 
   const removeFromCart = async (productId, colorId = null) => {
     if (!user) return;
+    const snapshot = cart;
+    setCart(prev => prev.filter(item => !(item.id === productId && item.colorId === colorId)));
     try {
-      setCart(prev => prev.filter(item => !(item.id === productId && item.colorId === colorId)));
       await api.delete(`${API_ENDPOINTS.cart}/${productId}`, { params: { colorId } });
-    } catch (error) {
-      console.error("Error removing from cart:", error);
+    } catch {
+      setCart(snapshot);
     }
   };
 

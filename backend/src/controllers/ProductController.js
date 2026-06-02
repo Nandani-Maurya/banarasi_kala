@@ -30,20 +30,18 @@ const buildProductPayloadWithImages = async (req) => {
   
   const existingImages = Array.isArray(productData.images) ? productData.images : [];
   
-  const newImages = [];
   const files = Array.isArray(req.files) ? req.files : [];
+  const uploadTargets = files
+    .map((file) => ({ file, match: /^color_(\d+)$/.exec(file.fieldname || "") }))
+    .filter(({ match }) => match !== null);
 
-  for (const file of files) {
-    const match = /^color_(\d+)$/.exec(file.fieldname || "");
-    if (!match) continue;
-
-    const colorId = parseInt(match[1], 10);
-    const uploadResult = await uploadBufferToCloudinary(file.buffer);
-    newImages.push({
-      color_id: colorId,
-      url: uploadResult.secure_url,
-    });
-  }
+  const newImages = await Promise.all(
+    uploadTargets.map(async ({ file, match }) => {
+      const colorId = parseInt(match[1], 10);
+      const uploadResult = await uploadBufferToCloudinary(file.buffer);
+      return { color_id: colorId, url: uploadResult.secure_url };
+    })
+  );
 
   const finalImages = [...existingImages, ...newImages];
   const selectedColorIds = Object.entries(productData.color_stocks || {})

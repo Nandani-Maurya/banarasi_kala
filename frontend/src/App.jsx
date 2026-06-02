@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
 import Layout from "./layout/Layout";
@@ -9,6 +9,7 @@ import { CartProvider } from "./context/CartContext";
 import { WishlistProvider } from "./context/WishlistContext";
 import { NotificationProvider } from "./context/NotificationContext";
 import PreLoader from "./components/PreLoader/PreLoader";
+import ErrorBoundary from "./components/ErrorBoundary/ErrorBoundary";
 import headerBackground from "./assets/header_backgroung.png";
 import "./App.css";
 
@@ -26,25 +27,11 @@ const MyOrders = lazy(() => import("./pages/MyOrders/MyOrders"));
 const Contact = lazy(() => import("./pages/Contact/Contact"));
 const Feedback = lazy(() => import("./pages/Feedback/Feedback"));
 const Profile = lazy(() => import("./pages/Profile/Profile"));
+const NotFound = lazy(() => import("./pages/NotFound/NotFound"));
 
 
 
 function App() {
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Simulate initial loading time
-    const timer = setTimeout(() => {
-      setLoading(false);
-    }, 2000);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (loading) {
-    return <PreLoader />;
-  }
-
   return (
     <AuthProvider>
       <NotificationProvider>
@@ -59,6 +46,7 @@ function App() {
                   "--bk-header-bg": `url(${headerBackground})`,
                 }}
               >
+                <ErrorBoundary>
                 <Suspense fallback={<PreLoader />}>
                   <Routes>
                     <Route element={<Layout />}>
@@ -114,27 +102,15 @@ function App() {
                         }
                       />
                       <Route path="/about" element={<About />} />
-                      <Route
-                        path="/contact"
-                        element={
-                          <ProtectedRoute>
-                            <Contact />
-                          </ProtectedRoute>
-                        }
-                      />
-                      <Route
-                        path="/feedback"
-                        element={
-                          <ProtectedRoute>
-                            <Feedback />
-                          </ProtectedRoute>
-                        }
-                      />
+                      <Route path="/contact" element={<Contact />} />
+                      <Route path="/feedback" element={<Feedback />} />
                       <Route path="/testimonials" element={<Testimonials />} />
                       <Route path="/login" element={<Auth />} />
                     </Route>
+                    <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>
+                </ErrorBoundary>
               </div>
             </Router>
           </CartProvider>

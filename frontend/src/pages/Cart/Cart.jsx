@@ -15,7 +15,7 @@ const Cart = () => {
     updateQuantity, 
     getSubtotal,
   } = useCart();
-  const { addToWishlist } = useWishlist();
+  const { toggleWishlist } = useWishlist();
   const { showNotification } = useNotification();
 
   const subtotal = getSubtotal();
@@ -87,7 +87,7 @@ const Cart = () => {
                         </p>
                       )}
                       <div className="cart-item-actions flex items-center justify-center sm:justify-start space-x-4 text-sm font-medium">
-                        <button onClick={() => addToWishlist(item)} className="text-gray-400 hover:text-[#800020] transition-colors">Save to Wishlist</button>
+                        <button onClick={() => toggleWishlist(item)} className="text-gray-400 hover:text-[#800020] transition-colors">Save to Wishlist</button>
                         <span className="text-gray-300">|</span>
                         <button onClick={() => removeFromCart(item.id, item.colorId)} className="text-red-700 hover:text-red-900 transition-colors">Remove</button>
                       </div>

@@ -445,11 +445,22 @@ class ProductService {
       queryOptions.where.stock_quantity = { [Op.and]: [{ [Op.gt]: 0 }, { [Op.lt]: 5 }] };
     }
 
-    const rows = await attachReviewSummaries((await Product.findAll(queryOptions)).map(normalizeProduct));
+    // For color-filtered queries, we must fetch all and filter in JS (color_stocks is JSONB).
+    // For all other queries, use DB-level pagination to avoid loading all rows.
     const targetColors = this.parseCommaSeparated(color);
+    const useDbPagination = !targetColors && (paginated === "true" || paginated === true);
+
+    if (useDbPagination) {
+      queryOptions.limit = limit;
+      queryOptions.offset = offset;
+    } else if (rawLimit && !targetColors) {
+      queryOptions.limit = Math.max(1, parseInt(rawLimit, 10) || 50);
+    }
+
+    const allRows = await attachReviewSummaries((await Product.findAll(queryOptions)).map(normalizeProduct));
     const filteredRows = targetColors
-      ? rows.filter((product) => targetColors.some((colorId) => toIntOrZero(product.color_stocks?.[String(colorId)]) > 0))
-      : rows;
+      ? allRows.filter((product) => targetColors.some((colorId) => toIntOrZero(product.color_stocks?.[String(colorId)]) > 0))
+      : allRows;
     const responseRows = view === "home"
       ? filteredRows.map(toHomeProduct)
       : view === "collection"
@@ -462,8 +473,17 @@ class ProductService {
 
     if (!paginated || paginated === "false") return limitedRows;
 
-    const count = responseRows.length;
-    const pagedItems = responseRows.slice(offset, offset + limit);
+    // For DB-paginated queries, get the total count separately
+    let count;
+    let pagedItems;
+    if (useDbPagination) {
+      const total = await Product.count({ where: queryOptions.where });
+      count = total;
+      pagedItems = responseRows;
+    } else {
+      count = responseRows.length;
+      pagedItems = responseRows.slice(offset, offset + limit);
+    }
 
     if (view === "collection") {
       return {

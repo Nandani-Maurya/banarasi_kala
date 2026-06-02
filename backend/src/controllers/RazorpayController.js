@@ -1,11 +1,6 @@
-const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const { config } = require('../config/env');
-
-const razorpay = new Razorpay({
-  key_id: config.razorpayKeyId,
-  key_secret: config.razorpayKeySecret,
-});
+const { createOrder: razorpayCreateOrder } = require('../services/RazorpayService');
 
 class RazorpayController {
   async createOrder(req, res) {
@@ -18,11 +13,7 @@ class RazorpayController {
         return res.status(400).json({ message: 'Online payment amount must be at least Rs. 1.' });
       }
 
-      const order = await razorpay.orders.create({
-        amount: Math.round(amount * 100),
-        currency: 'INR',
-        receipt: `bk_${Date.now()}`,
-      });
+      const order = await razorpayCreateOrder(amount);
 
       return res.status(200).json(order);
     } catch (error) {

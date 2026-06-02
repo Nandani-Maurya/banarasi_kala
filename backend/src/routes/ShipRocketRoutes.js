@@ -1,54 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const ShipRocketController = require('../controllers/ShipRocketController');
-const { authMiddleware } = require('../middleware/authMiddleware');
+const { authMiddleware, adminMiddleware } = require('../middleware/authMiddleware');
 
-// All ShipRocket routes are admin-only in production.
-// Add your admin auth middleware here when ready:
-// const { requireAdmin } = require('../middleware/auth');
-// router.use(requireAdmin);
-
-/**
- * POST /api/shiprocket/push-order
- * Body: { orderId: number, autoAssignCourier?: boolean }
- * Push a VNS Saree order to ShipRocket and optionally auto-assign AWB.
- */
-router.post('/push-order', ShipRocketController.pushOrder);
-
-/**
- * POST /api/shiprocket/assign-awb
- * Body: { shipment_id: string, courier_id?: string }
- * Manually assign a courier and generate AWB.
- */
-router.post('/assign-awb', ShipRocketController.assignAWB);
-
-/**
- * POST /api/shiprocket/generate-label
- * Body: { shipment_ids: string[] }
- * Returns a PDF label URL.
- */
-router.post('/generate-label', ShipRocketController.generateLabel);
-
-/**
- * POST /api/shiprocket/generate-manifest
- * Body: { shipment_ids: string[] }
- * Returns a manifest PDF URL.
- */
-router.post('/generate-manifest', ShipRocketController.generateManifest);
-
-/**
- * POST /api/shiprocket/schedule-pickup
- * Body: { shipment_ids: string[] }
- * Schedule a courier pickup.
- */
-router.post('/schedule-pickup', ShipRocketController.schedulePickup);
-
-/**
- * POST /api/shiprocket/cancel
- * Body: { shiprocket_order_ids: string[] }
- * Cancel orders on ShipRocket.
- */
-router.post('/cancel', ShipRocketController.cancelOrders);
+router.post('/push-order', authMiddleware, adminMiddleware, ShipRocketController.pushOrder);
+router.post('/assign-awb', authMiddleware, adminMiddleware, ShipRocketController.assignAWB);
+router.post('/generate-label', authMiddleware, adminMiddleware, ShipRocketController.generateLabel);
+router.post('/generate-manifest', authMiddleware, adminMiddleware, ShipRocketController.generateManifest);
+router.post('/schedule-pickup', authMiddleware, adminMiddleware, ShipRocketController.schedulePickup);
+router.post('/cancel', authMiddleware, adminMiddleware, ShipRocketController.cancelOrders);
 
 /**
  * GET /api/shiprocket/track/awb/:awb

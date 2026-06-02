@@ -2,12 +2,7 @@ const express = require('express');
 const router = express.Router();
 const FeedbackController = require('../controllers/FeedbackController');
 const { authMiddleware, adminMiddleware } = require('../middleware/authMiddleware');
-const multer = require('multer');
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024, files: 5 },
-});
+const { feedbackUpload: upload } = require('../config/multer');
 
 // Public route to get approved feedback
 router.get('/approved', FeedbackController.getApprovedFeedback);

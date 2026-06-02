@@ -7,6 +7,7 @@ import { useNotification } from "../../context/NotificationContext";
 import { API_ENDPOINTS } from "../../config/api";
 import api from "../../utils/api";
 import { validateCheckoutForm } from "../../utils/validation";
+import { unwrapApiData } from "../../utils/error";
 import { LocationPickerModal } from "../Profile/Profile";
 import CheckoutOrderPanel from "../../components/CheckoutOrderPanel";
 import { getProductStockInfo } from "../../utils/stockStatus";
@@ -59,7 +60,7 @@ const getCheckoutAddressLine = (address = {}) =>
     .join(", ");
 
 const Checkout = () => {
-  const { cart, clearCart } = useCart();
+  const { cart, clearCart, appliedCoupon, discountAmount, applyCoupon: cartApplyCoupon, removeCoupon: cartRemoveCoupon } = useCart();
   const { user } = useAuth();
   const { showNotification } = useNotification();
   const navigate = useNavigate();
@@ -83,9 +84,7 @@ const Checkout = () => {
   const [addresses, setAddresses] = useState([]);
   const [selectedAddressId, setSelectedAddressId] = useState("");
   const [availableCoupons, setAvailableCoupons] = useState([]);
-  const [couponCode, setCouponCode] = useState("");
-  const [appliedCoupon, setAppliedCoupon] = useState(null);
-  const [couponDiscount, setCouponDiscount] = useState(0);
+  const [couponCode, setCouponCode] = useState(appliedCoupon?.code || "");
   const [walletBalance, setWalletBalance] = useState(0);
   const [useWallet, setUseWallet] = useState(false);
   const [couponPanelOpen, setCouponPanelOpen] = useState(false);
@@ -99,6 +98,7 @@ const Checkout = () => {
   const [mapOpen, setMapOpen] = useState(false);
   const [addressSaving, setAddressSaving] = useState(false);
   const rootRef = useRef(null);
+  const orderingRef = useRef(false);
 
   const [formData, setFormData] = useState({
     fullName: user?.name || "",
@@ -117,13 +117,14 @@ const Checkout = () => {
   const platformFee = payableCart.length > 0 ? PLATFORM_FEE_AMOUNT : 0;
   const paymentDiscount = payableCart.length > 0 && activePayment === "online" ? Math.min(PREPAID_DISCOUNT_AMOUNT, subtotal + finalShippingCharge) : 0;
   const orderGrossTotal = Math.max(0, subtotal + finalShippingCharge + paymentFee + platformFee - paymentDiscount);
-  const effectiveCouponDiscount = Math.min(couponDiscount, orderGrossTotal);
+  const effectiveCouponDiscount = Math.min(discountAmount, orderGrossTotal);
   const grossAfterCoupon = Math.max(0, orderGrossTotal - effectiveCouponDiscount);
   const walletUsableAmount = useWallet ? Math.min(Number(walletBalance || 0), grossAfterCoupon) : 0;
   const total = Math.max(0, grossAfterCoupon - walletUsableAmount);
   const totalWeightKg = payableCart.reduce((sum, item) => {
     const qty = Math.max(1, Number(item.quantity || 1));
-    return sum + (PACKAGING_WEIGHT_KG * qty);
+    const productWeight = Math.max(0, Number(item.weight || 0));
+    return sum + ((productWeight + PACKAGING_WEIGHT_KG) * qty);
   }, 0);
 
   const getCouponSavingsText = (coupon) => {
@@ -152,7 +153,9 @@ const Checkout = () => {
           api.get(API_ENDPOINTS.coupons).catch(() => ({ data: [] })),
         ]);
         if (cancelled) return;
-        setIsFirstOrder(!Array.isArray(ordersRes.data) || ordersRes.data.length === 0);
+        const ordersData = unwrapApiData(ordersRes.data);
+        const ordersList = Array.isArray(ordersData) ? ordersData : [];
+        setIsFirstOrder(ordersList.length === 0);
         const nextAddresses = Array.isArray(addressRes.data) ? addressRes.data.map(cleanCheckoutAddress) : [];
         setAddresses(nextAddresses);
         const defaultAddress = nextAddresses.find((address) => address.is_default) || nextAddresses[0];
@@ -286,26 +289,21 @@ const Checkout = () => {
       showNotification("Coupon not found.", "warning");
       return;
     }
-    if (subtotal < Number(coupon.min_purchase_amount || 0)) {
-      showNotification(`Add Rs. ${(Number(coupon.min_purchase_amount || 0) - subtotal).toLocaleString("en-IN")} more to use this coupon.`, "warning");
-      return;
-    }
     const rawDiscount = coupon.discount_type === "percentage"
       ? subtotal * (Number(coupon.discount_percent || 0) / 100)
       : Number(coupon.discount_amount || 0);
     const nextDiscount = Math.min(rawDiscount, Number(coupon.max_discount_amount || rawDiscount), subtotal);
-    setAppliedCoupon({ ...coupon, discount: nextDiscount });
-    setCouponDiscount(nextDiscount);
-    setCouponCode(coupon.code);
-    setCouponPanelOpen(false);
-    setCouponModalOpen(false);
-    setCouponCelebration({ code: coupon.code, discount: nextDiscount });
-    showNotification(`Coupon ${coupon.code} applied.`, "success");
+    const applied = cartApplyCoupon(coupon);
+    if (applied) {
+      setCouponCode(coupon.code);
+      setCouponPanelOpen(false);
+      setCouponModalOpen(false);
+      setCouponCelebration({ code: coupon.code, discount: nextDiscount });
+    }
   };
 
   const removeCheckoutCoupon = () => {
-    setAppliedCoupon(null);
-    setCouponDiscount(0);
+    cartRemoveCoupon();
     setCouponCode("");
     setCouponCelebration(null);
   };
@@ -329,7 +327,7 @@ const Checkout = () => {
   };
 
   useEffect(() => {
-    if (cart.length === 0) {
+    if (cart.length === 0 && !orderingRef.current) {
       navigate("/cart");
     }
     if (rootRef.current) {
@@ -458,6 +456,7 @@ const Checkout = () => {
 
       if (activePayment === "cod" || total <= 0) {
         const dbRes = await api.post("/api/orders", finalOrderData);
+        orderingRef.current = true;
         clearCart();
         navigate(`/order-confirmation?orderId=${dbRes.data.orderId}`);
         return;
@@ -467,13 +466,9 @@ const Checkout = () => {
         throw new Error("Payment gateway is still loading. Please try again.");
       }
 
-      const orderResponse = await fetch(API_ENDPOINTS.razorpay.createOrder, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: total }),
-      });
-      const razorpayOrder = await orderResponse.json();
-      if (!orderResponse.ok) throw new Error(razorpayOrder.message || "Unable to start payment.");
+      const orderResponse = await api.post(API_ENDPOINTS.razorpay.createOrder, { amount: total });
+      const razorpayOrder = orderResponse.data;
+      if (!orderResponse.status || orderResponse.status >= 400) throw new Error(razorpayOrder.message || "Unable to start payment.");
 
       const razorpay = new window.Razorpay({
         key: requiredEnv("VITE_RAZORPAY_KEY_ID"),
@@ -490,13 +485,9 @@ const Checkout = () => {
         theme: { color: "#800020" },
         handler: async (response) => {
           try {
-            const verifyRes = await fetch(API_ENDPOINTS.razorpay.verifyPayment, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(response),
-            });
-            const verifyData = await verifyRes.json();
-            if (!verifyRes.ok || !verifyData.success) throw new Error(verifyData.message || "Payment verification failed.");
+            const verifyRes = await api.post(API_ENDPOINTS.razorpay.verifyPayment, response);
+            const verifyData = verifyRes.data;
+            if (!verifyData.success) throw new Error(verifyData.message || "Payment verification failed.");
 
             const dbRes = await api.post("/api/orders", {
               ...finalOrderData,
@@ -513,6 +504,7 @@ const Checkout = () => {
                 verification: verifyData,
               },
             });
+            orderingRef.current = true;
             clearCart();
             navigate(`/order-confirmation?orderId=${dbRes.data.orderId}`);
           } catch (error) {

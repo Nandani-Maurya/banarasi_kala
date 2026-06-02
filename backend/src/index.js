@@ -1,5 +1,7 @@
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
+const compression = require("compression");
 const { config } = require("./config/env");
 const requestLogger = require("./middleware/requestLogger");
 const errorHandler = require("./middleware/errorHandler");
@@ -24,6 +26,8 @@ const CustomerAddressRoutes = require("./routes/CustomerAddressRoutes");
 
 const app = express();
 
+app.use(helmet());
+app.use(compression());
 app.use(
   cors({
     origin: function (origin, callback) {

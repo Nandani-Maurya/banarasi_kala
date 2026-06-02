@@ -58,9 +58,10 @@ const getBreakdown = (order = {}) => {
 };
 
 const canCancelOrder = (order) => {
+  const rawDate = order?.createdAt || order?.created_at;
   const status = String(order?.status || "").toLowerCase();
-  if (!order?.createdAt || ["cancelled", "seller cancelled", "delivered", "shipped", "out for delivery", "rto delivered"].includes(status) || status.startsWith("rto ")) return false;
-  const createdAt = new Date(order.createdAt).getTime();
+  if (!rawDate || ["cancelled", "seller cancelled", "delivered", "shipped", "out for delivery", "rto delivered"].includes(status) || status.startsWith("rto ")) return false;
+  const createdAt = new Date(rawDate).getTime();
   return Number.isFinite(createdAt) && Date.now() - createdAt <= 24 * 60 * 60 * 1000;
 };
 

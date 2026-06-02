@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Banarasi Kala — ShipRocket Integration & Testing Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f1ec; color: #2d2218; font-size: 13px; line-height: 1.65; }
+
+  .cover { background: #1a1a2e; color: #fff; padding: 56px 80px 48px; }
+  .cover .brand { font-size: 32px; font-weight: 800; letter-spacing: 2px; color: #D4AF37; margin-bottom: 4px; }
+  .cover .sub { font-size: 10px; letter-spacing: 4px; text-transform: uppercase; color: #aaa; margin-bottom: 36px; }
+  .cover h1 { font-size: 26px; font-weight: 700; margin-bottom: 8px; }
+  .cover p { font-size: 13px; color: #bbb; }
+  .cover .meta { margin-top: 28px; font-size: 11px; color: #888; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 14px; }
+
+  .page { max-width: 980px; margin: 0 auto; padding: 0 40px 60px; }
+
+  .section-title { margin-top: 44px; margin-bottom: 18px; padding: 11px 20px; background: #1a1a2e; color: #D4AF37; font-size: 14px; font-weight: 700; letter-spacing: 1px; border-left: 5px solid #D4AF37; }
+  .section-subtitle { margin-top: 26px; margin-bottom: 10px; font-size: 13px; font-weight: 700; color: #1a1a2e; border-bottom: 2px solid #D4AF37; padding-bottom: 4px; }
+
+  .card { background: #fff; border: 1px solid #e0d8cc; border-radius: 6px; padding: 16px 20px; margin-bottom: 14px; }
+  .card-title { font-weight: 700; font-size: 13px; margin-bottom: 8px; color: #1a1a2e; }
+
+  table { width: 100%; border-collapse: collapse; margin-bottom: 16px; background: #fff; }
+  th { background: #1a1a2e; color: #D4AF37; padding: 9px 12px; font-size: 11px; text-align: left; letter-spacing: 0.5px; }
+  td { padding: 8px 12px; border-bottom: 1px solid #e8e2d8; vertical-align: top; font-size: 12px; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #faf7f2; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 700; }
+  .badge-green  { background: #d4edda; color: #155724; }
+  .badge-red    { background: #f8d7da; color: #721c24; }
+  .badge-yellow { background: #fff3cd; color: #856404; }
+  .badge-blue   { background: #cce5ff; color: #004085; }
+  .badge-grey   { background: #e2e3e5; color: #383d41; }
+  .badge-purple { background: #e2d9f3; color: #6f42c1; }
+  .badge-teal   { background: #d1ecf1; color: #0c5460; }
+
+  .alert { padding: 11px 16px; border-radius: 5px; margin-bottom: 14px; font-size: 12px; }
+  .alert-warning { background: #fff3cd; border-left: 4px solid #ffc107; }
+  .alert-danger  { background: #f8d7da; border-left: 4px solid #dc3545; }
+  .alert-info    { background: #cce5ff; border-left: 4px solid #007bff; }
+  .alert-success { background: #d4edda; border-left: 4px solid #28a745; }
+  .alert-dark    { background: #1a1a2e; border-left: 4px solid #D4AF37; color: #eee; }
+  .alert strong  { font-weight: 700; }
+
+  /* Code blocks */
+  pre {
+    background: #0d1117;
+    color: #c9d1d9;
+    padding: 14px 18px;
+    border-radius: 6px;
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    overflow-x: auto;
+    margin-bottom: 14px;
+    border: 1px solid #30363d;
+  }
+  .json-key   { color: #79c0ff; }
+  .json-str   { color: #a5d6ff; }
+  .json-num   { color: #f0883e; }
+  .json-comment { color: #8b949e; font-style: italic; }
+  code { background: #e8e4de; padding: 1px 5px; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 11px; color: #4a3f35; }
+
+  /* Step flow */
+  .steps { counter-reset: step; margin: 14px 0; }
+  .step { display: flex; gap: 14px; margin-bottom: 14px; align-items: flex-start; }
+  .step-num { background: #1a1a2e; color: #D4AF37; font-weight: 700; font-size: 12px; min-width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .step-body { flex: 1; }
+  .step-body strong { color: #1a1a2e; }
+
+  /* Scenario cards */
+  .scenario { border: 2px solid #1a1a2e; border-radius: 8px; margin-bottom: 24px; overflow: hidden; }
+  .scenario-header { background: #1a1a2e; color: #D4AF37; padding: 10px 18px; font-weight: 700; font-size: 13px; display: flex; align-items: center; gap: 10px; }
+  .scenario-header .letter { background: #D4AF37; color: #1a1a2e; font-size: 11px; font-weight: 900; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .scenario-body { padding: 16px 18px; background: #fff; }
+
+  /* Flow arrows */
+  .flow { display: flex; flex-wrap: wrap; gap: 0; margin: 12px 0 16px; align-items: center; }
+  .flow-box { background: #f4f1ec; border: 1px solid #d4c9b8; border-radius: 5px; padding: 8px 12px; font-size: 11px; text-align: center; flex-shrink: 0; }
+  .flow-box .label { font-weight: 700; font-size: 10px; color: #800020; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 2px; }
+  .flow-box.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
+  .flow-box.active .label { color: #D4AF37; }
+  .flow-box.done { background: #d4edda; border-color: #28a745; }
+  .flow-box.warn { background: #fff3cd; border-color: #ffc107; }
+  .flow-box.danger { background: #f8d7da; border-color: #dc3545; }
+  .flow-arr { padding: 0 5px; color: #888; font-size: 16px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+
+  .toc { background: #fff; border: 1px solid #e0d8cc; border-radius: 6px; padding: 18px 22px; margin: 22px 0; }
+  .toc h2 { font-size: 13px; font-weight: 700; color: #1a1a2e; margin-bottom: 10px; }
+  .toc ol { padding-left: 18px; }
+  .toc li { margin-bottom: 5px; font-size: 12px; }
+
+  hr { border: none; border-top: 1px solid #e0d8cc; margin: 24px 0; }
+
+  .url-pill { background: #0d1117; color: #79c0ff; padding: 6px 14px; border-radius: 4px; font-family: 'Courier New', monospace; font-size: 12px; display: inline-block; margin-bottom: 10px; }
+  .method { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 10px; font-weight: 900; margin-right: 6px; }
+  .method-post { background: #ffd700; color: #000; }
+  .method-get  { background: #61affe; color: #fff; }
+  .method-patch{ background: #50e3c2; color: #000; }
+  .method-del  { background: #f93e3e; color: #fff; }
+
+  @media print {
+    .cover { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .section-title { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .scenario-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    pre { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="brand">Banarasi Kala</div>
+  <div class="sub">Heritage Saree Store — Developer Guide</div>
+  <h1>ShipRocket Integration &amp; Complete Testing Guide</h1>
+  <p>Every endpoint, every status, every webhook payload — with exact Postman commands</p>
+  <div class="meta">Version 1.0 &nbsp;·&nbsp; June 2026 &nbsp;·&nbsp; Backend: Node.js / Express &nbsp;·&nbsp; Port: 5003</div>
+</div>
+
+<div class="page">
+
+<!-- TOC -->
+<div class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li>How ShipRocket Is Connected to Your Backend</li>
+    <li>Environment Variables — What Each One Does</li>
+    <li>All ShipRocket API Endpoints</li>
+    <li>How the Webhook Works (The Key to Testing)</li>
+    <li>Step-by-Step: Postman Setup</li>
+    <li>Complete Webhook Payloads — Every Delivery Scenario</li>
+    <li>Status Mapping — What ShipRocket Sends vs What You Store</li>
+    <li>Full Test Playbook — End-to-End Testing All Flows</li>
+    <li>Database Queries for Testing</li>
+    <li>Troubleshooting</li>
+  </ol>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 1
+════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">1. How ShipRocket Is Connected to Your Backend</div>
+
+<div class="card">
+  <div class="card-title">The Two-Way Connection</div>
+  <div class="flow">
+    <div class="flow-box"><div class="label">Customer</div>Places Order</div>
+    <div class="flow-arr">→</div>
+    <div class="flow-box active"><div class="label">Your Backend</div>createOrder()</div>
+    <div class="flow-arr">→</div>
+    <div class="flow-box"><div class="label">ShipRocket API</div>POST /orders/create/adhoc</div>
+    <div class="flow-arr">→</div>
+    <div class="flow-box done"><div class="label">Response</div>SR Order ID + Shipment ID</div>
+  </div>
+  <div class="flow">
+    <div class="flow-box"><div class="label">Courier scans parcel</div>"Out for delivery"</div>
+    <div class="flow-arr">→</div>
+    <div class="flow-box"><div class="label">ShipRocket</div>Fires webhook to your URL</div>
+    <div class="flow-arr">→</div>
+    <div class="flow-box active"><div class="label">Your Backend</div>POST /api/shiprocket/webhook</div>
+    <div class="flow-arr">→</div>
+    <div class="flow-box done"><div class="label">DB Updated</div>order.status = "Out For Delivery"</div>
+  </div>
+</div>
+
+<p style="font-size:12px; margin-top:8px;">
+  <strong>Key insight for testing:</strong> ShipRocket's webhook is just a normal HTTP POST to your server.
+  You can fire it yourself any time from Postman — you don't need a courier to physically move a package.
+  This is how you test all delivery scenarios instantly.
+</p>
+
+<div class="section-subtitle">What Happens Automatically When an Order is Placed</div>
+<table>
+  <tr><th>#</th><th>Step</th><th>Automatic?</th><th>Code Location</th></tr>
+  <tr><td>1</td><td>Order saved to your database</td><td><span class="badge badge-green">Yes</span></td><td>OrderController.createOrder()</td></tr>
+  <tr><td>2</td><td>Inventory decremented (stock_quantity, color_stocks)</td><td><span class="badge badge-green">Yes</span></td><td>decrementProductInventory()</td></tr>
+  <tr><td>3</td><td>Order confirmation email sent to customer</td><td><span class="badge badge-green">Yes</span></td><td>EmailService.sendOrderConfirmation()</td></tr>
+  <tr><td>4</td><td>Order pushed to ShipRocket (fire &amp; forget)</td><td><span class="badge badge-green">Yes</span></td><td>ShipRocketService.createOrder() — async, never blocks customer response</td></tr>
+  <tr><td>5</td><td>shiprocket_order_id + AWB saved to order row</td><td><span class="badge badge-green">Yes</span></td><td>Async update after SR responds</td></tr>
+  <tr><td>6</td><td>Status updates from courier</td><td><span class="badge badge-yellow">Via Webhook</span></td><td>ShipRocketController.webhook()</td></tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 2
+════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">2. Environment Variables — What Each One Does</div>
+
+<table>
+  <tr><th>Variable</th><th>What It Is</th><th>Where to Get It</th></tr>
+  <tr>
+    <td><code>SHIPROCKET_EMAIL</code></td>
+    <td>Your ShipRocket account login email</td>
+    <td>Your ShipRocket account → same as login</td>
+  </tr>
+  <tr>
+    <td><code>SHIPROCKET_PASSWORD</code></td>
+    <td>Your ShipRocket account password</td>
+    <td>Your ShipRocket account → same as login</td>
+  </tr>
+  <tr>
+    <td><code>SHIPROCKET_PICKUP_LOCATION</code></td>
+    <td>The name of your warehouse/pickup address in ShipRocket</td>
+    <td>ShipRocket Dashboard → Settings → Manage Pickup Addresses → copy the "Name" field exactly</td>
+  </tr>
+  <tr>
+    <td><code>SHIPROCKET_WEBHOOK_SECRET</code></td>
+    <td>A secret string you choose — ShipRocket sends it as a header with every webhook. Your backend verifies it to reject fake calls.</td>
+    <td>You set this yourself (any random string e.g. <code>bk_webhook_2026</code>). Then configure the same value in ShipRocket Dashboard → Settings → Webhooks → Secret Key</td>
+  </tr>
+  <tr>
+    <td><code>SHIPROCKET_GATEWAY_API_KEY</code></td>
+    <td>API key for ShipRocket Payment Gateway (if used)</td>
+    <td>ShipRocket Dashboard → Payment Gateway</td>
+  </tr>
+  <tr>
+    <td><code>SHIPROCKET_GATEWAY_API_SECRET</code></td>
+    <td>API secret for ShipRocket Payment Gateway</td>
+    <td>ShipRocket Dashboard → Payment Gateway</td>
+  </tr>
+  <tr>
+    <td><code>PACKAGE_WEIGHT_KG</code></td>
+    <td>Default box weight per item in kg (e.g. <code>0.7</code>). Multiplied by total quantity for multi-item orders.</td>
+    <td>Measure your actual packaging + saree weight</td>
+  </tr>
+  <tr>
+    <td><code>PACKAGE_LENGTH_CM</code></td>
+    <td>Box length in cm (fixed, not multiplied)</td>
+    <td>Measure your packaging</td>
+  </tr>
+  <tr>
+    <td><code>PACKAGE_BREADTH_CM</code></td>
+    <td>Box breadth/width in cm (fixed)</td>
+    <td>Measure your packaging</td>
+  </tr>
+  <tr>
+    <td><code>PACKAGE_HEIGHT_CM</code></td>
+    <td>Box height in cm per item (multiplied by quantity — items stacked)</td>
+    <td>Measure your packaging</td>
+  </tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 3
+════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">3. All ShipRocket API Endpoints</div>
+
+<p style="font-size:12px; margin-bottom:14px;">Base URL: <code>http://localhost:5003</code> (development)</p>
+
+<table>
+  <tr><th>Method</th><th>URL</th><th>Auth</th><th>Purpose</th></tr>
+  <tr>
+    <td><span class="method method-post">POST</span></td>
+    <td><code>/api/shiprocket/push-order</code></td>
+    <td><span class="badge badge-grey">None</span></td>
+    <td>Manually push an order to ShipRocket (already happens auto on order create). Body: <code>{ orderId, autoAssignCourier }</code></td>
+  </tr>
+  <tr>
+    <td><span class="method method-post">POST</span></td>
+    <td><code>/api/shiprocket/assign-awb</code></td>
+    <td><span class="badge badge-grey">None</span></td>
+    <td>Assign a courier and get an AWB number. Body: <code>{ shipment_id, courier_id }</code></td>
+  </tr>
+  <tr>
+    <td><span class="method method-post">POST</span></td>
+    <td><code>/api/shiprocket/generate-label</code></td>
+    <td><span class="badge badge-grey">None</span></td>
+    <td>Generate a shipping label PDF. Body: <code>{ shipment_ids: ["123"] }</code></td>
+  </tr>
+  <tr>
+    <td><span class="method method-post">POST</span></td>
+    <td><code>/api/shiprocket/generate-manifest</code></td>
+    <td><span class="badge badge-grey">None</span></td>
+    <td>Generate a manifest PDF. Body: <code>{ shipment_ids: ["123"] }</code></td>
+  </tr>
+  <tr>
+    <td><span class="method method-post">POST</span></td>
+    <td><code>/api/shiprocket/schedule-pickup</code></td>
+    <td><span class="badge badge-grey">None</span></td>
+    <td>Schedule a courier pickup. Body: <code>{ shipment_ids: ["123"] }</code></td>
+  </tr>
+  <tr>
+    <td><span class="method method-post">POST</span></td>
+    <td><code>/api/shiprocket/cancel</code></td>
+    <td><span class="badge badge-grey">None</span></td>
+    <td>Cancel orders on ShipRocket. Body: <code>{ shiprocket_order_ids: ["SR123"] }</code></td>
+  </tr>
+  <tr>
+    <td><span class="method method-get">GET</span></td>
+    <td><code>/api/shiprocket/track/awb/:awb</code></td>
+    <td><span class="badge badge-grey">None</span></td>
+    <td>Get live tracking data by AWB number</td>
+  </tr>
+  <tr>
+    <td><span class="method method-get">GET</span></td>
+    <td><code>/api/shiprocket/track/order/:orderId</code></td>
+    <td><span class="badge badge-grey">None</span></td>
+    <td>Get tracking data by your internal order ID (DB lookup)</td>
+  </tr>
+  <tr>
+    <td><span class="method method-get">GET</span></td>
+    <td><code>/api/shiprocket/serviceability?pincode=110001</code></td>
+    <td><span class="badge badge-grey">None</span></td>
+    <td>List available couriers for a pincode. Params: <code>pincode</code>, <code>weight</code>, <code>is_cod</code></td>
+  </tr>
+  <tr>
+    <td><span class="method method-post">POST</span></td>
+    <td><code>/api/shiprocket/create-return</code></td>
+    <td><span class="badge badge-blue">Customer JWT</span></td>
+    <td>Create a return shipment on ShipRocket. Body: <code>{ orderId, reason }</code></td>
+  </tr>
+  <tr>
+    <td><span class="method method-post">POST</span></td>
+    <td><code>/api/shiprocket/create-exchange</code></td>
+    <td><span class="badge badge-blue">Customer JWT</span></td>
+    <td>Create an exchange pickup on ShipRocket. Body: <code>{ orderId, reason }</code></td>
+  </tr>
+  <tr>
+    <td><span class="method method-post">POST</span></td>
+    <td><code>/api/shiprocket/cancel-return</code></td>
+    <td><span class="badge badge-blue">Customer JWT</span></td>
+    <td>Cancel an active return request. Body: <code>{ orderId, reason }</code></td>
+  </tr>
+  <tr>
+    <td><span class="method method-post">POST</span></td>
+    <td><code>/api/shiprocket/cancel-exchange</code></td>
+    <td><span class="badge badge-blue">Customer JWT</span></td>
+    <td>Cancel an active exchange request. Body: <code>{ orderId, reason }</code></td>
+  </tr>
+  <tr>
+    <td><span class="method method-post">POST</span></td>
+    <td><code>/api/shiprocket/webhook</code></td>
+    <td><span class="badge badge-yellow">x-api-key header</span></td>
+    <td><strong>ShipRocket posts here on every status change. You simulate this from Postman.</strong></td>
+  </tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 4
+════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">4. How the Webhook Works</div>
+
+<div class="card">
+  <div class="card-title">What the webhook does — step by step inside your backend</div>
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-body"><strong>Validates the secret.</strong> Checks the <code>x-api-key</code> header against <code>SHIPROCKET_WEBHOOK_SECRET</code> in your .env. If it doesn't match → 401 rejected.</div></div>
+    <div class="step"><div class="step-num">2</div><div class="step-body"><strong>Reads AWB + order ID + status</strong> from the payload. Tries multiple field names because ShipRocket sends different formats.</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-body"><strong>Finds the matching order</strong> in your DB — checks <code>shiprocket_order_id</code>, <code>shiprocket_return_order_id</code>, <code>shiprocket_exchange_order_id</code>, and all AWB fields.</div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-body"><strong>Detects forward vs reverse shipment</strong> — is this a delivery webhook or a return/exchange pickup webhook?</div></div>
+    <div class="step"><div class="step-num">5</div><div class="step-body"><strong>For RTO Delivered on a COD order:</strong> auto-cancels the order, blocks COD for that customer, sets refund_status = Not Required.</div></div>
+    <div class="step"><div class="step-num">6</div><div class="step-body"><strong>For RTO Delivered on a Prepaid order:</strong> calculates refund amount (paid − forward charge − RTO charge), sets refund_status = RTO Action Required.</div></div>
+    <div class="step"><div class="step-num">7</div><div class="step-body"><strong>Updates the order row</strong> in DB with new status, delivered_at (if Delivered), AWB codes etc.</div></div>
+    <div class="step"><div class="step-num">8</div><div class="step-body"><strong>Sends an email to the customer</strong> with the new status.</div></div>
+  </div>
+</div>
+
+<div class="alert alert-dark">
+  <strong>No Sandbox:</strong> ShipRocket does not have a test/sandbox environment. Their API always hits production. But since the webhook is just a POST to your server, you can simulate every single delivery event yourself without any courier involvement.
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 5
+════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">5. Postman Setup — Do This Once</div>
+
+<div class="steps">
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <strong>Download Postman</strong> from postman.com (free). Install and open it.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <strong>Create a new Collection</strong> called "Banarasi Kala — ShipRocket Tests". Use this to save all your test requests.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <strong>Create a new Request</strong> inside the collection:
+      <ul style="margin-top:6px; padding-left:18px; font-size:12px;">
+        <li>Method: <code>POST</code></li>
+        <li>URL: <code>http://localhost:5003/api/shiprocket/webhook</code></li>
+      </ul>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <strong>Add Headers</strong> (click the Headers tab):
+      <table style="margin-top:8px; width:auto;">
+        <tr><th>Key</th><th>Value</th></tr>
+        <tr><td><code>Content-Type</code></td><td><code>application/json</code></td></tr>
+        <tr><td><code>x-api-key</code></td><td>Paste your <code>SHIPROCKET_WEBHOOK_SECRET</code> value from backend/.env here</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <strong>Set Body</strong> → click Body tab → select <strong>raw</strong> → choose <strong>JSON</strong> from the dropdown → paste any payload from Section 6.
+    </div>
+  </div>
+  <div class="step">
+    <div class="step-num">6</div>
+    <div class="step-body">
+      <strong>Hit Send.</strong> You should see a response like:
+<pre>{"message": "Order status synced", "orderId": 42, "status": "Delivered"}</pre>
+    </div>
+  </div>
+</div>
+
+<div class="alert alert-info">
+  <strong>Make sure your backend is running</strong> before sending webhook requests: <code>cd backend &amp;&amp; npm run dev</code>
+</div>
+
+<div class="section-subtitle">Finding Your ShipRocket Order ID</div>
+<p style="font-size:12px; margin-bottom:8px;">After placing a test order, run this SQL to get the ShipRocket IDs:</p>
+<pre>SELECT
+  id,
+  order_number,
+  status,
+  payment_method,
+  shiprocket_order_id,
+  shiprocket_awb,
+  shiprocket_return_order_id,
+  shiprocket_exchange_order_id
+FROM vns_saree.orders
+ORDER BY id DESC
+LIMIT 10;</pre>
+<div class="alert alert-warning">
+  <strong>shiprocket_order_id may be NULL</strong> if ShipRocket push failed or the backend was offline when the order was placed. In that case use the <code>/api/shiprocket/push-order</code> endpoint first (see Section 3).
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 6
+════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">6. Complete Webhook Payloads — Every Delivery Scenario</div>
+
+<div class="alert alert-info">
+  In all payloads below, replace <strong>SR_ORDER_ID</strong> with the <code>shiprocket_order_id</code> from your database.<br/>
+  Send each payload separately and check the result before sending the next one.
+</div>
+
+<!-- SCENARIO A -->
+<div class="scenario">
+  <div class="scenario-header"><div class="letter">A</div>Normal Delivery — COD or Prepaid (Most Common)</div>
+  <div class="scenario-body">
+    <div class="flow">
+      <div class="flow-box"><div class="label">1</div>Picked Up</div>
+      <div class="flow-arr">→</div>
+      <div class="flow-box"><div class="label">2</div>Shipped</div>
+      <div class="flow-arr">→</div>
+      <div class="flow-box"><div class="label">3</div>Out for Delivery</div>
+      <div class="flow-arr">→</div>
+      <div class="flow-box done"><div class="label">4 ✅</div>Delivered</div>
+    </div>
+    <p style="font-size:11px; color:#666; margin-bottom:12px;">After "Delivered" — <code>delivered_at</code> is set. Return/Exchange buttons appear in My Orders. Referral milestone check runs.</p>
+
+    <strong style="font-size:12px;">Payload 1 — Picked Up by Courier</strong>
+<pre>{
+  <span class="json-key">"order_id"</span>: <span class="json-str">"SR_ORDER_ID"</span>,
+  <span class="json-key">"current_status"</span>: <span class="json-str">"Picked Up"</span>
+}</pre>
+
+    <strong style="font-size:12px;">Payload 2 — Shipped / In Transit</strong>
+<pre>{
+  <span class="json-key">"order_id"</span>: <span class="json-str">"SR_ORDER_ID"</span>,
+  <span class="json-key">"current_status"</span>: <span class="json-str">"Shipped"</span>
+}</pre>
+
+    <strong style="font-size:12px;">Payload 3 — Out for Delivery</strong>
+<pre>{
+  <span class="json-key">"order_id"</span>: <span class="json-str">"SR_ORDER_ID"</span>,
+  <span class="json-key">"current_status"</span>: <span class="json-str">"Out for delivery"</span>
+}</pre>
+
+    <strong style="font-size:12px;">Payload 4 — Delivered ✅ (unlocks return/exchange)</strong>
+<pre>{
+  <span class="json-key">"order_id"</span>: <span class="json-str">"SR_ORDER_ID"</span>,
+  <span class="json-key">"current_status"</span>: <span class="json-str">"Delivered"</span>
+}</pre>
+
+    <strong style="font-size:12px;">✅ What to verify after Payload 4:</strong>
+    <ul style="padding-left:18px; font-size:12px; margin-top:6px;">
+      <li>Order status in My Orders shows "Delivered"</li>
+      <li>Return and Exchange buttons are visible</li>
+      <li>DB: <code>delivered_at</code> column is now set</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SCENARIO B -->
+<div class="scenario">
+  <div class="scenario-header"><div class="letter">B</div>COD — Customer Unavailable → RTO → Auto Cancel + COD Block</div>
+  <div class="scenario-body">
+    <div class="flow">
+      <div class="flow-box warn"><div class="label">1</div>Undelivered</div>
+      <div class="flow-arr">→</div>
+      <div class="flow-box warn"><div class="label">2</div>RTO Initiated</div>
+      <div class="flow-arr">→</div>
+      <div class="flow-box warn"><div class="label">3</div>RTO In Transit</div>
+      <div class="flow-arr">→</div>
+      <div class="flow-box danger"><div class="label">4</div>RTO Delivered → Auto Cancelled + COD Blocked</div>
+    </div>
+    <div class="alert alert-warning" style="margin-top:12px;">Use a <strong>COD order's</strong> shiprocket_order_id for this test. Filter: <code>WHERE payment_method = 'COD'</code></div>
+
+    <strong style="font-size:12px;">Payload 1 — Delivery Failed</strong>
+<pre>{
+  <span class="json-key">"order_id"</span>: <span class="json-str">"SR_ORDER_ID"</span>,
+  <span class="json-key">"current_status"</span>: <span class="json-str">"Undelivered"</span>
+}</pre>
+
+    <strong style="font-size:12px;">Payload 2 — RTO Initiated (courier heading back)</strong>
+<pre>{
+  <span class="json-key">"order_id"</span>: <span class="json-str">"SR_ORDER_ID"</span>,
+  <span class="json-key">"current_status"</span>: <span class="json-str">"RTO Initiated"</span>
+}</pre>
+
+    <strong style="font-size:12px;">Payload 3 — RTO In Transit</strong>
+<pre>{
+  <span class="json-key">"order_id"</span>: <span class="json-str">"SR_ORDER_ID"</span>,
+  <span class="json-key">"current_status"</span>: <span class="json-str">"RTO In Transit"</span>
+}</pre>
+
+    <strong style="font-size:12px;">Payload 4 — RTO Delivered (parcel back at your warehouse) 🔴</strong>
+<pre>{
+  <span class="json-key">"order_id"</span>: <span class="json-str">"SR_ORDER_ID"</span>,
+  <span class="json-key">"current_status"</span>: <span class="json-str">"RTO Delivered"</span>
+}</pre>
+
+    <strong style="font-size:12px;">✅ What to verify after Payload 4:</strong>
+    <ul style="padding-left:18px; font-size:12px; margin-top:6px;">
+      <li>Order status → <code>Seller Cancelled</code></li>
+      <li><code>customer_cod_blocked = true</code> on the order row</li>
+      <li>DB: <code>customers.is_cod_blocked = true</code> for that customer</li>
+      <li>Customer receives cancellation email</li>
+      <li><strong>Verify COD block:</strong> Try placing a new order with the same email+phone using COD → should get "COD is not available for this account"</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SCENARIO C -->
+<div class="scenario">
+  <div class="scenario-header"><div class="letter">C</div>Prepaid — Customer Unavailable → RTO → Refund Calculation</div>
+  <div class="scenario-body">
+    <div class="flow">
+      <div class="flow-box warn"><div class="label">1</div>Undelivered</div>
+      <div class="flow-arr">→</div>
+      <div class="flow-box warn"><div class="label">2</div>RTO Initiated</div>
+      <div class="flow-arr">→</div>
+      <div class="flow-box warn"><div class="label">3</div>RTO In Transit</div>
+      <div class="flow-arr">→</div>
+      <div class="flow-box danger"><div class="label">4</div>RTO Delivered → Refund = Paid − Fwd − RTO Charges</div>
+    </div>
+    <div class="alert alert-warning" style="margin-top:12px;">Use a <strong>Prepaid order's</strong> shiprocket_order_id. Filter: <code>WHERE payment_method = 'Prepaid'</code></div>
+
+    <p style="font-size:12px; margin-bottom:10px;">Use the exact same 4 payloads as Scenario B — only the order ID changes.</p>
+
+    <strong style="font-size:12px;">✅ What to verify after Payload 4 (different from COD):</strong>
+    <ul style="padding-left:18px; font-size:12px; margin-top:6px;">
+      <li>Order status → <code>RTO Delivered</code> (not cancelled — customer can choose)</li>
+      <li><code>refund_status = 'RTO Action Required'</code></li>
+      <li><code>refund_amount</code> = paid amount minus forward shipping charge minus RTO charge</li>
+      <li>Customer can now go to My Orders → Submit Bank Details for refund</li>
+      <li>OR admin can offer re-dispatch</li>
+      <li><strong>COD is NOT blocked</strong> for Prepaid RTO customers</li>
+    </ul>
+
+    <strong style="font-size:12px; display:block; margin-top:12px;">Verify the refund amount with this SQL:</strong>
+<pre>SELECT
+  id, order_number, payment_method,
+  payable_amount, shipping_charge,
+  refund_amount, refund_status, refund_note,
+  selected_courier_data->>'rto_charges' AS rto_charge
+FROM vns_saree.orders
+WHERE id = YOUR_ORDER_ID;</pre>
+  </div>
+</div>
+
+<!-- SCENARIO D -->
+<div class="scenario">
+  <div class="scenario-header"><div class="letter">D</div>Return Pickup — Customer Sends Product Back</div>
+  <div class="scenario-body">
+    <p style="font-size:12px; margin-bottom:10px;"><strong>Prerequisite:</strong> Order must be Delivered. Customer must request return via My Orders first (calls <code>POST /api/shiprocket/create-return</code>). This creates a ShipRocket return order with a separate ID.</p>
+
+    <div class="flow">
+      <div class="flow-box done"><div class="label">Pre</div>Order Delivered</div>
+      <div class="flow-arr">→</div>
+      <div class="flow-box active"><div class="label">Pre</div>Customer Requests Return</div>
+      <div class="flow-arr">→</div>
+      <div class="flow-box"><div class="label">1</div>Pickup Scheduled</div>
+      <div class="flow-arr">→</div>
+      <div class="flow-box"><div class="label">2</div>Picked Up</div>
+      <div class="flow-arr">→</div>
+      <div class="flow-box done"><div class="label">3 ✅</div>Return Completed</div>
+    </div>
+
+    <strong style="font-size:12px; display:block; margin-top:10px;">Get the return order ID from DB:</strong>
+<pre>SELECT id, shiprocket_order_id, shiprocket_return_order_id, status
+FROM vns_saree.orders
+WHERE id = YOUR_ORDER_ID;</pre>
+
+    <strong style="font-size:12px;">Payload 1 — Pickup Scheduled</strong>
+<pre>{
+  <span class="json-key">"order_id"</span>: <span class="json-str">"SR_RETURN_ORDER_ID"</span>,
+  <span class="json-key">"current_status"</span>: <span class="json-str">"Pickup Scheduled"</span>
+}</pre>
+
+    <strong style="font-size:12px;">Payload 2 — Courier Picked Up the Package</strong>
+<pre>{
+  <span class="json-key">"order_id"</span>: <span class="json-str">"SR_RETURN_ORDER_ID"</span>,
+  <span class="json-key">"current_status"</span>: <span class="json-str">"Picked up"</span>
+}</pre>
+
+    <strong style="font-size:12px;">Payload 3 — Package Returned to Seller ✅</strong>
+<pre>{
+  <span class="json-key">"order_id"</span>: <span class="json-str">"SR_RETURN_ORDER_ID"</span>,
+  <span class="json-key">"current_status"</span>: <span class="json-str">"Returned"</span>
+}</pre>
+
+    <strong style="font-size:12px;">✅ What to verify:</strong>
+    <ul style="padding-left:18px; font-size:12px; margin-top:6px;">
+      <li>Order status → <code>Return Completed</code></li>
+      <li>Admin can now process the refund</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SCENARIO E -->
+<div class="scenario">
+  <div class="scenario-header"><div class="letter">E</div>Exchange Pickup — Customer Sends Product Back for Exchange</div>
+  <div class="scenario-body">
+    <p style="font-size:12px; margin-bottom:10px;"><strong>Prerequisite:</strong> Order must be Delivered. Customer requests exchange via My Orders. Uses <code>shiprocket_exchange_order_id</code> — not the return order ID.</p>
+
+    <strong style="font-size:12px;">Get the exchange order ID:</strong>
+<pre>SELECT id, shiprocket_exchange_order_id, status
+FROM vns_saree.orders WHERE id = YOUR_ORDER_ID;</pre>
+
+    <strong style="font-size:12px;">Payload 1</strong>
+<pre>{
+  <span class="json-key">"order_id"</span>: <span class="json-str">"SR_EXCHANGE_ORDER_ID"</span>,
+  <span class="json-key">"current_status"</span>: <span class="json-str">"Pickup Scheduled"</span>
+}</pre>
+
+    <strong style="font-size:12px;">Payload 2</strong>
+<pre>{
+  <span class="json-key">"order_id"</span>: <span class="json-str">"SR_EXCHANGE_ORDER_ID"</span>,
+  <span class="json-key">"current_status"</span>: <span class="json-str">"Picked up"</span>
+}</pre>
+
+    <strong style="font-size:12px;">Payload 3 — Exchange Completed ✅</strong>
+<pre>{
+  <span class="json-key">"order_id"</span>: <span class="json-str">"SR_EXCHANGE_ORDER_ID"</span>,
+  <span class="json-key">"current_status"</span>: <span class="json-str">"Returned"</span>
+}</pre>
+
+    <strong style="font-size:12px;">✅ What to verify:</strong>
+    <ul style="padding-left:18px; font-size:12px; margin-top:6px;">
+      <li>Order status → <code>Exchange Completed</code></li>
+      <li>Admin dispatches replacement product as new forward shipment</li>
+    </ul>
+  </div>
+</div>
+
+<!-- SCENARIO F -->
+<div class="scenario">
+  <div class="scenario-header"><div class="letter">F</div>AWB Assigned (Order Just Created — Courier Assigned)</div>
+  <div class="scenario-body">
+    <p style="font-size:12px; margin-bottom:10px;">This is often the first webhook after order creation. ShipRocket sends this when a courier is auto-assigned.</p>
+<pre>{
+  <span class="json-key">"order_id"</span>: <span class="json-str">"SR_ORDER_ID"</span>,
+  <span class="json-key">"awb_code"</span>: <span class="json-str">"1234567890"</span>,
+  <span class="json-key">"current_status"</span>: <span class="json-str">"AWB Assigned"</span>
+}</pre>
+    <p style="font-size:11px; color:#666; margin-top:6px;">This saves the AWB number to your order row, enabling live tracking.</p>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 7
+════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">7. Status Mapping — ShipRocket Sends → What Your DB Stores</div>
+
+<p style="font-size:12px; margin-bottom:12px;">The <code>mapShiprocketStatus()</code> function in ShipRocketController.js converts ShipRocket's raw status strings to your internal status values. Any string containing the listed keywords is matched.</p>
+
+<table>
+  <tr><th>ShipRocket Status (keyword match)</th><th>Your DB Status</th><th>Type</th></tr>
+  <tr><td><code>AWB Assigned</code></td><td>AWB Assigned</td><td><span class="badge badge-grey">Forward</span></td></tr>
+  <tr><td><code>Picked Up</code> / <code>Manifest</code> / <code>In Transit</code></td><td>Shipped</td><td><span class="badge badge-grey">Forward</span></td></tr>
+  <tr><td><code>Out for delivery</code></td><td>Out For Delivery</td><td><span class="badge badge-grey">Forward</span></td></tr>
+  <tr><td><code>Delivered</code></td><td>Delivered</td><td><span class="badge badge-green">Forward</span></td></tr>
+  <tr><td><code>Undelivered</code> / <code>Delivery failed</code> / <code>Customer unavailable</code> / <code>Address issue</code></td><td>Undelivered</td><td><span class="badge badge-yellow">Forward</span></td></tr>
+  <tr><td><code>RTO Initiated</code></td><td>RTO Initiated</td><td><span class="badge badge-red">RTO</span></td></tr>
+  <tr><td><code>RTO In Transit</code></td><td>RTO In Transit</td><td><span class="badge badge-red">RTO</span></td></tr>
+  <tr><td><code>RTO Delivered</code> / <code>Return to origin delivered</code></td><td>RTO Delivered → triggers COD block OR prepaid refund calc</td><td><span class="badge badge-red">RTO</span></td></tr>
+  <tr><td><code>Cancel</code></td><td>Cancelled</td><td><span class="badge badge-grey">Admin</span></td></tr>
+  <tr><td><code>Pickup Scheduled</code> / <code>Pickup Queued</code></td><td>Return/Exchange Pickup Scheduled</td><td><span class="badge badge-purple">Reverse</span></td></tr>
+  <tr><td><code>Picked up</code> / <code>Out for pickup</code></td><td>Return/Exchange Picked Up</td><td><span class="badge badge-purple">Reverse</span></td></tr>
+  <tr><td><code>Returned</code> / <code>RTO Delivered</code> (on reverse)</td><td>Return Completed / Exchange Completed</td><td><span class="badge badge-purple">Reverse</span></td></tr>
+</table>
+
+<div class="alert alert-info">
+  <strong>How the system knows if it's a return/exchange webhook vs a forward delivery webhook:</strong><br/>
+  It checks if the <code>order_id</code> in the payload matches <code>shiprocket_return_order_id</code> or <code>shiprocket_exchange_order_id</code>. If yes → reverse logic. If it matches <code>shiprocket_order_id</code> → forward logic.
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 8
+════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">8. Full Test Playbook — End-to-End Testing All Flows</div>
+
+<table>
+  <tr><th>Test</th><th>Steps</th><th>What to Verify</th></tr>
+  <tr>
+    <td><strong>Test 1</strong><br/>Prepaid Purchase + Delivery</td>
+    <td>
+      1. Add product to cart<br/>
+      2. Checkout with Razorpay test card <code>4111111111111111</code><br/>
+      3. Send webhook: Shipped → Out for delivery → Delivered
+    </td>
+    <td>
+      • Order confirmation email received<br/>
+      • Status updates in My Orders<br/>
+      • Return/Exchange buttons appear after Delivered<br/>
+      • <code>delivered_at</code> set in DB
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Test 2</strong><br/>COD Purchase + Delivery</td>
+    <td>
+      1. Add product, checkout with COD<br/>
+      2. Send webhook: Shipped → Delivered
+    </td>
+    <td>
+      • No Razorpay popup<br/>
+      • Order created with payment_status = Pending<br/>
+      • Status updates correctly
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Test 3</strong><br/>24-hour Cancellation</td>
+    <td>
+      1. Place order<br/>
+      2. Immediately cancel from My Orders
+    </td>
+    <td>
+      • Order status → Cancelled<br/>
+      • Cancellation email sent<br/>
+      • Stock restocked in DB
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Test 4</strong><br/>Cancellation after 24h blocked</td>
+    <td>
+      1. Place order<br/>
+      2. Update <code>created_at</code> in DB to 25 hours ago:<br/>
+      <code>UPDATE vns_saree.orders SET created_at = NOW() - INTERVAL '25 hours' WHERE id = X;</code><br/>
+      3. Try to cancel from My Orders
+    </td>
+    <td>
+      • Error: "Cancellation is available only within 24 hours"
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Test 5</strong><br/>COD RTO + COD Block</td>
+    <td>
+      1. Place COD order<br/>
+      2. Send RTO webhooks (Scenario B)<br/>
+      3. Try placing another COD order with same email+phone
+    </td>
+    <td>
+      • Original order → Seller Cancelled<br/>
+      • New COD order → blocked with message
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Test 6</strong><br/>Prepaid RTO + Refund</td>
+    <td>
+      1. Place Prepaid order<br/>
+      2. Send RTO webhooks (Scenario C)<br/>
+      3. Submit bank details from My Orders
+    </td>
+    <td>
+      • refund_amount calculated correctly<br/>
+      • Bank details saved<br/>
+      • refund_status = Bank Details Submitted
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Test 7</strong><br/>Return after Delivery</td>
+    <td>
+      1. Place + deliver order (Scenario A)<br/>
+      2. Request return from My Orders<br/>
+      3. Send return pickup webhooks (Scenario D)
+    </td>
+    <td>
+      • shiprocket_return_order_id saved<br/>
+      • Status → Return Completed<br/>
+      • Admin can process refund
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Test 8</strong><br/>Exchange after Delivery</td>
+    <td>
+      1. Place + deliver order<br/>
+      2. Request exchange from My Orders<br/>
+      3. Send exchange pickup webhooks (Scenario E)
+    </td>
+    <td>
+      • shiprocket_exchange_order_id saved<br/>
+      • Status → Exchange Completed<br/>
+      • Second exchange attempt blocked
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Test 9</strong><br/>Return window expired (7 days)</td>
+    <td>
+      1. Place + deliver order<br/>
+      2. Update <code>delivered_at</code> to 8 days ago in DB:<br/>
+      <code>UPDATE vns_saree.orders SET delivered_at = NOW() - INTERVAL '8 days' WHERE id = X;</code><br/>
+      3. Try to request return
+    </td>
+    <td>
+      • Error: "Return window expired"<br/>
+      (handled in ShipRocketController.createReturn)
+    </td>
+  </tr>
+  <tr>
+    <td><strong>Test 10</strong><br/>Pincode Serviceability</td>
+    <td>
+      Visit: <code>GET /api/shiprocket/serviceability?pincode=221001&amp;is_cod=true</code>
+    </td>
+    <td>
+      • List of available couriers with rates for that pincode
+    </td>
+  </tr>
+</table>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 9
+════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">9. Useful Database Queries for Testing</div>
+
+<strong style="font-size:12px;">Get latest orders with all ShipRocket IDs</strong>
+<pre>SELECT id, order_number, status, payment_method, payable_amount,
+       shiprocket_order_id, shiprocket_awb,
+       shiprocket_return_order_id, shiprocket_return_awb,
+       shiprocket_exchange_order_id, shiprocket_exchange_awb,
+       is_rto, rto_count, refund_status, refund_amount,
+       delivered_at, created_at
+FROM vns_saree.orders
+ORDER BY id DESC LIMIT 10;</pre>
+
+<strong style="font-size:12px;">Check if COD is blocked for a customer</strong>
+<pre>SELECT id, email, phone, is_cod_blocked, cod_block_reason
+FROM vns_saree.customers
+WHERE email = 'customer@example.com';</pre>
+
+<strong style="font-size:12px;">Manually set an order to Delivered (to test return/exchange)</strong>
+<pre>UPDATE vns_saree.orders
+SET status = 'Delivered',
+    delivered_at = NOW()
+WHERE id = YOUR_ORDER_ID;</pre>
+
+<strong style="font-size:12px;">Manually unblock COD for a customer (to reset after testing)</strong>
+<pre>UPDATE vns_saree.customers
+SET is_cod_blocked = false,
+    cod_block_reason = NULL,
+    blocked_at = NULL
+WHERE email = 'customer@example.com';</pre>
+
+<strong style="font-size:12px;">Check order item actions (return/exchange/cancel requests)</strong>
+<pre>SELECT oia.id, oia.action_type, oia.status, oia.quantity,
+       oia.item_amount, oia.estimated_refund_amount,
+       oi.product_name, oia.created_at
+FROM vns_saree.order_item_actions oia
+JOIN vns_saree.order_items oi ON oia.order_item_id = oi.id
+WHERE oia.order_id = YOUR_ORDER_ID;</pre>
+
+<strong style="font-size:12px;">Reset an order for re-testing (use carefully)</strong>
+<pre>-- Reset to fresh "Pending" state for re-testing
+UPDATE vns_saree.orders
+SET status = 'Pending',
+    delivered_at = NULL,
+    is_rto = false, rto_count = 0,
+    return_requested_at = NULL,
+    exchange_requested_at = NULL,
+    refund_status = NULL, refund_amount = 0, refund_note = NULL,
+    shiprocket_return_order_id = NULL, shiprocket_return_awb = NULL,
+    shiprocket_exchange_order_id = NULL, shiprocket_exchange_awb = NULL
+WHERE id = YOUR_ORDER_ID;</pre>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     SECTION 10
+════════════════════════════════════════════════════════════════════ -->
+<div class="section-title">10. Troubleshooting</div>
+
+<table>
+  <tr><th>Problem</th><th>Cause</th><th>Fix</th></tr>
+  <tr>
+    <td>Webhook returns <code>401 Invalid webhook secret</code></td>
+    <td>The <code>x-api-key</code> header value doesn't match <code>SHIPROCKET_WEBHOOK_SECRET</code> in .env</td>
+    <td>Open <code>backend/.env</code>, copy the exact value of <code>SHIPROCKET_WEBHOOK_SECRET</code>, paste it in Postman header</td>
+  </tr>
+  <tr>
+    <td>Webhook returns <code>"Order not found locally"</code></td>
+    <td>The <code>order_id</code> in your JSON doesn't match any <code>shiprocket_order_id</code> in the DB</td>
+    <td>Run the SQL from Section 9 to get the correct value. Also try using AWB: <code>{ "awb_code": "123", "current_status": "..." }</code></td>
+  </tr>
+  <tr>
+    <td>Webhook returns <code>"Webhook ignored"</code></td>
+    <td>The <code>current_status</code> string doesn't match any keyword in <code>mapShiprocketStatus()</code></td>
+    <td>Use one of the exact status strings from Section 7. Even small spelling differences matter — e.g. "Picked up" not "Pickup"</td>
+  </tr>
+  <tr>
+    <td><code>shiprocket_order_id</code> is NULL in DB after placing order</td>
+    <td>ShipRocket API call failed (wrong credentials, pickup location name doesn't match, or backend offline)</td>
+    <td>Check backend console for <code>[ShipRocket] ⚠️</code> error. Then call <code>POST /api/shiprocket/push-order</code> with <code>{ "orderId": X }</code> manually</td>
+  </tr>
+  <tr>
+    <td>COD not blocked after RTO Delivered webhook</td>
+    <td>Either the order is Prepaid (COD block only happens for COD orders) or the customer row doesn't exist</td>
+    <td>Verify <code>payment_method = 'COD'</code> in DB. Check backend logs for <code>[ShipRocket] webhook</code> output</td>
+  </tr>
+  <tr>
+    <td>Return/exchange webhook not changing status correctly</td>
+    <td>The <code>order_id</code> in payload is the forward shipment ID, not the return shipment ID</td>
+    <td>Use <code>shiprocket_return_order_id</code> or <code>shiprocket_exchange_order_id</code> from DB, not the main <code>shiprocket_order_id</code></td>
+  </tr>
+  <tr>
+    <td>"Return is allowed only after delivery" error</td>
+    <td>Order is not in Delivered status</td>
+    <td>Run SQL: <code>UPDATE vns_saree.orders SET status='Delivered', delivered_at=NOW() WHERE id=X;</code></td>
+  </tr>
+  <tr>
+    <td>Order not being pushed to ShipRocket at all</td>
+    <td>ShipRocket credentials wrong or pickup location name mismatch</td>
+    <td>Check <code>SHIPROCKET_PICKUP_LOCATION</code> in .env — must exactly match the name in ShipRocket Dashboard → Settings → Manage Pickup Addresses</td>
+  </tr>
+</table>
+
+<hr/>
+
+<div class="card" style="background:#0d1117; color:#c9d1d9; border-color:#30363d;">
+  <div class="card-title" style="color:#D4AF37;">Quick Reference — One Page Cheatsheet</div>
+  <table style="background: transparent;">
+    <tr style="background:transparent;"><th style="background:#1a1a2e;">Webhook URL</th><td style="color:#79c0ff; background:transparent;"><code style="background:transparent; color:#a5d6ff;">POST http://localhost:5003/api/shiprocket/webhook</code></td></tr>
+    <tr><th style="background:#1a1a2e;">Auth Header</th><td style="color:#c9d1d9; background:#0d1117;"><code style="background:transparent; color:#a5d6ff;">x-api-key: &lt;SHIPROCKET_WEBHOOK_SECRET from .env&gt;</code></td></tr>
+    <tr><th style="background:#1a1a2e;">Normal delivery</th><td style="color:#c9d1d9; background:transparent;"><code style="background:transparent; color:#a5d6ff;">"current_status": "Delivered"</code></td></tr>
+    <tr><th style="background:#1a1a2e;">RTO</th><td style="color:#c9d1d9; background:#0d1117;"><code style="background:transparent; color:#a5d6ff;">"current_status": "RTO Delivered"</code></td></tr>
+    <tr><th style="background:#1a1a2e;">Return complete</th><td style="color:#c9d1d9; background:transparent;"><code style="background:transparent; color:#a5d6ff;">"current_status": "Returned"</code> + use <code style="background:transparent; color:#a5d6ff;">shiprocket_return_order_id</code></td></tr>
+    <tr><th style="background:#1a1a2e;">Exchange complete</th><td style="color:#c9d1d9; background:#0d1117;"><code style="background:transparent; color:#a5d6ff;">"current_status": "Returned"</code> + use <code style="background:transparent; color:#a5d6ff;">shiprocket_exchange_order_id</code></td></tr>
+    <tr><th style="background:#1a1a2e;">Get order IDs</th><td style="color:#c9d1d9; background:transparent;"><code style="background:transparent; color:#a5d6ff;">SELECT shiprocket_order_id FROM vns_saree.orders ORDER BY id DESC LIMIT 5;</code></td></tr>
+  </table>
+</div>
+
+</div><!-- /page -->
+</body>
+</html>

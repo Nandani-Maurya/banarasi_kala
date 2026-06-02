@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const EmailService = require('../services/EmailService');
 const ShipRocketService = require('../services/ShipRocketService');
 const WalletService = require('../services/WalletService');
+const { refundPayment: razorpayRefund } = require('../services/RazorpayService');
 const { config } = require('../config/env');
 const { Op } = require("sequelize");
 const { AppError } = require('../utils/http');
@@ -277,6 +278,15 @@ class OrderController {
         return res.status(400).json({ message: 'Order items are required' });
       }
 
+      // Idempotency: prevent duplicate orders from network retries
+      if (gateway_payment_id) {
+        const existing = await Order.findOne({ where: { gateway_payment_id }, transaction: t });
+        if (existing) {
+          await t.rollback();
+          return res.status(200).json({ orderId: existing.id, order_number: existing.order_number, duplicate: true });
+        }
+      }
+
       const productIds = [...new Set(items.map((item) => item.id).filter(Boolean))];
       const products = await Product.findAll({
         where: { id: productIds },
@@ -290,14 +300,32 @@ class OrderController {
         await t.rollback();
         return res.status(400).json({ message: `Invalid product in cart: ${missingProductId}` });
       }
+      // Pre-validate all items before any stock decrement
+      const stockErrors = [];
       for (const item of items) {
         const productForStock = productMap[item.id];
         if (productForStock.status !== 'active') {
-          await t.rollback();
-          return res.status(400).json({ message: `${productForStock.name} is currently unavailable.` });
+          stockErrors.push(`${productForStock.name} is currently unavailable.`);
+          continue;
         }
+        const colorId = item.colorId || item.color_id || null;
+        const available = Math.min(
+          getColorStockValue(productForStock, colorId),
+          Number(productForStock.stock_quantity || 0)
+        );
+        const qty = Math.max(1, Number(item.quantity || 1));
+        if (available < qty) {
+          stockErrors.push(`Only ${Math.max(0, available)} item(s) available for ${productForStock.name}.`);
+        }
+      }
+      if (stockErrors.length > 0) {
+        await t.rollback();
+        return res.status(400).json({ message: stockErrors[0], errors: stockErrors });
+      }
+
+      for (const item of items) {
         await decrementProductInventory({
-          product: productForStock,
+          product: productMap[item.id],
           colorId: item.colorId || item.color_id || null,
           quantity: item.quantity,
           transaction: t,
@@ -368,9 +396,16 @@ class OrderController {
 
       if (coupon_code) {
         const Coupon = require('../models/Coupon');
-        const coupon = await Coupon.findOne({ where: { code: coupon_code, is_active: true } });
+        const coupon = await Coupon.findOne({
+          where: { code: coupon_code, is_active: true },
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        });
         if (coupon) {
-          // Double check validity (simple check here)
+          if (coupon.max_usage && Number(coupon.usage_count || 0) >= Number(coupon.max_usage)) {
+            await t.rollback();
+            return res.status(400).json({ message: 'This coupon has reached its usage limit.' });
+          }
           if (coupon.discount_type === 'percentage') {
             discount_amount = (final_total * coupon.discount_percent) / 100;
             if (coupon.max_discount_amount) {
@@ -380,8 +415,6 @@ class OrderController {
             discount_amount = coupon.discount_amount;
           }
           final_total = Math.max(0, final_total - discount_amount);
-          
-          // Increment usage
           await coupon.increment('usage_count', { by: 1, transaction: t });
         }
       }
@@ -581,7 +614,11 @@ class OrderController {
     try {
       await ensureOrderAccountingColumns();
       await ensureOrderItemActionSchema();
-      const { status, paymentMethod, customer, q } = req.query;
+      const { status, paymentMethod, customer, q, page, limit: rawLimit } = req.query;
+      const pageNum = Math.max(1, parseInt(page, 10) || 1);
+      const pageSize = Math.min(100, Math.max(1, parseInt(rawLimit, 10) || 50));
+      const offset = (pageNum - 1) * pageSize;
+
       const where = {};
       if (status && status !== 'all') where.status = status;
       if (paymentMethod && paymentMethod !== 'all') where.payment_method = paymentMethod;
@@ -594,7 +631,7 @@ class OrderController {
           { order_number: { [Op.iLike]: `%${customerSearch}%` } },
         ];
       }
-      const orders = await Order.findAll({
+      const { count, rows } = await Order.findAndCountAll({
         where,
         include: [{
           model: OrderItem,
@@ -605,8 +642,14 @@ class OrderController {
           ],
         }],
         order: [['createdAt', 'DESC']],
+        limit: pageSize,
+        offset,
+        distinct: true,
       });
-      res.status(200).json(orders.map((order) => serializeOrder(order)));
+      res.status(200).json({
+        orders: rows.map((order) => serializeOrder(order)),
+        pagination: { total: count, page: pageNum, limit: pageSize, pages: Math.ceil(count / pageSize) },
+      });
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
@@ -764,7 +807,11 @@ class OrderController {
         return res.status(401).json({ message: 'Customer authentication required' });
       }
 
-      const orders = await Order.findAll({
+      const pageNum = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const pageSize = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20));
+      const offset = (pageNum - 1) * pageSize;
+
+      const { count, rows: orders } = await Order.findAndCountAll({
         where: {
           [Op.or]: [
             { customer_id: req.user.id },
@@ -780,6 +827,9 @@ class OrderController {
           ],
         }],
         order: [['createdAt', 'DESC']],
+        limit: pageSize,
+        offset,
+        distinct: true,
       });
       const orderIds = orders.map((order) => order.id);
       const feedbacks = orderIds.length
@@ -788,7 +838,8 @@ class OrderController {
           attributes: ['id', 'order_id', 'order_item_id', 'product_id', 'rating', 'comment', 'title', 'images', 'is_approved'],
         })
         : [];
-      res.status(200).json(orders.map((order) => serializeOrder(order, feedbacks.map((item) => item.toJSON()))));
+      const serialized = orders.map((order) => serializeOrder(order, feedbacks.map((item) => item.toJSON())));
+      res.status(200).json(serialized);
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
@@ -897,7 +948,16 @@ class OrderController {
       await order.update(updatePayload, { transaction: t });
       await t.commit();
 
-      const EmailService = require('../services/EmailService');
+      // Initiate Razorpay refund for prepaid orders (fire & forget — wallet credit already given)
+      if (paymentMethod.toUpperCase() !== 'COD' && order.gateway_payment_id) {
+        razorpayRefund(order.gateway_payment_id, paidAmount, {
+          reason: 'Customer cancellation',
+          orderId: String(order.id),
+        }).catch((err) => {
+          console.error(`[Razorpay] Refund failed for order #${order.id}:`, err?.message || err);
+        });
+      }
+
       EmailService.sendOrderStatusUpdate(order, 'Cancelled').catch((error) => {
         console.error('[Email] Order cancellation email failed:', error.message);
       });

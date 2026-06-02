@@ -1,0 +1,1713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Banarasi Kala — Production Bug Report</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #1a1a1a; background: #fff; line-height: 1.6; }
+
+  /* Print */
+  @media print {
+    body { font-size: 11px; }
+    .no-print { display: none; }
+    .page-break { page-break-before: always; }
+    h2 { page-break-after: avoid; }
+    .bug-card { page-break-inside: avoid; }
+  }
+
+  /* Cover */
+  .cover { background: linear-gradient(135deg, #800020 0%, #3D2817 100%); color: white; padding: 60px 50px; min-height: 200px; }
+  .cover h1 { font-size: 32px; font-weight: 800; letter-spacing: 2px; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 14px; color: #D4AF37; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 30px; }
+  .cover .meta { font-size: 12px; opacity: 0.8; display: flex; gap: 40px; flex-wrap: wrap; }
+  .cover .meta span { display: flex; flex-direction: column; gap: 2px; }
+  .cover .meta strong { font-size: 14px; color: #D4AF37; }
+
+  /* Stats */
+  .stats-bar { background: #FAF8F6; border-bottom: 2px solid #D4AF37; padding: 20px 50px; display: flex; gap: 30px; flex-wrap: wrap; }
+  .stat-box { display: flex; flex-direction: column; align-items: center; min-width: 80px; }
+  .stat-box .num { font-size: 28px; font-weight: 800; }
+  .stat-box .lbl { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #666; margin-top: 2px; }
+  .stat-box.p0 .num { color: #b42318; }
+  .stat-box.p1 .num { color: #d97706; }
+  .stat-box.p2 .num { color: #2454a6; }
+  .stat-box.p3 .num { color: #087a55; }
+  .stat-box.total .num { color: #800020; }
+
+  /* Sections */
+  .section { padding: 30px 50px; }
+  .section-title { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #D4AF37; }
+  .section-title h2 { font-size: 18px; font-weight: 800; color: #800020; text-transform: uppercase; letter-spacing: 2px; }
+  .section-title .section-badge { background: #800020; color: white; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 20px; text-transform: uppercase; }
+
+  /* Severity groups */
+  .severity-group { margin-bottom: 30px; }
+  .severity-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .severity-label { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; padding: 4px 14px; border-radius: 20px; }
+  .sev-p0 { background: #fff0ee; color: #b42318; border: 1px solid #fca5a5; }
+  .sev-p1 { background: #fffbeb; color: #d97706; border: 1px solid #fcd34d; }
+  .sev-p2 { background: #eff6ff; color: #2454a6; border: 1px solid #93c5fd; }
+  .sev-p3 { background: #f0fdf4; color: #087a55; border: 1px solid #86efac; }
+  .severity-desc { font-size: 11px; color: #666; }
+
+  /* Bug cards */
+  .bug-card { background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 12px; border-left: 4px solid #ccc; }
+  .bug-card.p0 { border-left-color: #b42318; }
+  .bug-card.p1 { border-left-color: #d97706; }
+  .bug-card.p2 { border-left-color: #2454a6; }
+  .bug-card.p3 { border-left-color: #087a55; }
+
+  .bug-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+  .bug-id { background: #1a1a1a; color: white; font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 4px; white-space: nowrap; font-family: monospace; }
+  .bug-id.p0 { background: #b42318; }
+  .bug-id.p1 { background: #d97706; }
+  .bug-id.p2 { background: #2454a6; }
+  .bug-id.p3 { background: #087a55; }
+  .bug-title { font-size: 13px; font-weight: 700; color: #1a1a1a; flex: 1; }
+
+  .bug-body { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .bug-row { display: grid; grid-template-columns: 120px 1fr; gap: 8px; }
+  .bug-row .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #666; padding-top: 2px; }
+  .bug-row .val { font-size: 12px; color: #333; }
+
+  code, .file-ref { font-family: 'Courier New', monospace; font-size: 11px; background: #f5f5f5; padding: 1px 5px; border-radius: 3px; color: #800020; }
+
+  .code-block { background: #1e1e1e; color: #d4d4d4; border-radius: 6px; padding: 12px; margin: 6px 0; font-family: 'Courier New', monospace; font-size: 11px; overflow-x: auto; white-space: pre; line-height: 1.5; }
+  .code-block .bad { color: #f87171; }
+  .code-block .good { color: #86efac; }
+  .code-block .comment { color: #6a9955; }
+  .code-block .highlight { background: rgba(255,200,0,0.15); display: inline; }
+
+  .impact-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; margin-right: 6px; }
+  .impact-crash { background: #fee2e2; color: #b91c1c; }
+  .impact-data { background: #fef3c7; color: #92400e; }
+  .impact-security { background: #fce7f3; color: #9d174d; }
+  .impact-ux { background: #ede9fe; color: #5b21b6; }
+  .impact-payment { background: #ecfdf5; color: #065f46; }
+
+  /* Fix guide */
+  .fix-box { background: #f0fdf4; border: 1px solid #86efac; border-radius: 6px; padding: 10px 14px; margin-top: 8px; }
+  .fix-box .fix-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #087a55; margin-bottom: 6px; }
+  .fix-box .fix-text { font-size: 12px; color: #1a1a1a; }
+
+  /* TOC */
+  .toc { background: #FAF8F6; border: 1px solid #D4AF37; border-radius: 8px; padding: 20px; margin-bottom: 30px; }
+  .toc h3 { font-size: 14px; font-weight: 800; color: #800020; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px; }
+  .toc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .toc-item { font-size: 11px; color: #333; padding: 2px 0; }
+  .toc-item a { color: #800020; text-decoration: none; }
+  .toc-item a:hover { text-decoration: underline; }
+
+  /* Priority matrix */
+  .priority-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+  .priority-table th, .priority-table td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; font-size: 12px; }
+  .priority-table th { background: #800020; color: white; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+  .priority-table tr:nth-child(even) td { background: #fafafa; }
+
+  /* Footer */
+  .report-footer { background: #1a1a1a; color: #999; padding: 20px 50px; font-size: 11px; text-align: center; }
+
+  hr.divider { border: none; border-top: 1px solid #e5e7eb; margin: 20px 0; }
+
+  .info-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 12px 16px; margin: 12px 0; font-size: 12px; }
+  .warn-box { background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 12px 16px; margin: 12px 0; font-size: 12px; }
+
+  h3 { font-size: 15px; color: #3D2817; font-weight: 700; margin: 20px 0 10px; }
+  h4 { font-size: 13px; color: #800020; font-weight: 700; margin: 10px 0 6px; }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="subtitle">Production Readiness Audit</div>
+  <h1>BANARASI KALA</h1>
+  <h1 style="font-size:20px;font-weight:400;margin-top:4px;">Frontend &amp; Admin Frontend — Bug Report</h1>
+  <div style="margin-top:24px; display:flex; gap:40px; flex-wrap:wrap;">
+    <span><strong style="color:#D4AF37">Date</strong><br>30 May 2026</span>
+    <span><strong style="color:#D4AF37">Scope</strong><br>frontend/ + admin_frontend/</span>
+    <span><strong style="color:#D4AF37">Reviewer</strong><br>Claude Code (Full Code Audit)</span>
+    <span><strong style="color:#D4AF37">Total Bugs</strong><br>41 Issues Found</span>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="stats-bar">
+  <div class="stat-box total"><span class="num">41</span><span class="lbl">Total Bugs</span></div>
+  <div style="width:1px;background:#D4AF37;margin:0 10px;"></div>
+  <div class="stat-box p0"><span class="num">9</span><span class="lbl">P0 Critical</span></div>
+  <div class="stat-box p1"><span class="num">14</span><span class="lbl">P1 High</span></div>
+  <div class="stat-box p2"><span class="num">11</span><span class="lbl">P2 Medium</span></div>
+  <div class="stat-box p3"><span class="num">7</span><span class="lbl">P3 Low</span></div>
+  <div style="width:1px;background:#D4AF37;margin:0 10px;"></div>
+  <div class="stat-box" style="--c:#800020"><span class="num" style="color:#800020">31</span><span class="lbl">Frontend</span></div>
+  <div class="stat-box" style="--c:#3D2817"><span class="num" style="color:#3D2817">10</span><span class="lbl">Admin</span></div>
+</div>
+
+<!-- SECTION: OVERVIEW -->
+<div class="section">
+  <div class="toc">
+    <h3>Table of Contents</h3>
+    <div class="toc-grid">
+      <div class="toc-item">1. Priority Matrix &amp; Summary</div>
+      <div class="toc-item">2. P0 — Critical Blockers (9 bugs)</div>
+      <div class="toc-item">3. P1 — High Priority (14 bugs)</div>
+      <div class="toc-item">4. P2 — Medium Priority (11 bugs)</div>
+      <div class="toc-item">5. P3 — Low Priority (7 bugs)</div>
+      <div class="toc-item">6. Admin Frontend Bugs (10 bugs)</div>
+      <div class="toc-item">7. Fix Order Recommendation</div>
+      <div class="toc-item">8. End-to-End Flow Analysis</div>
+    </div>
+  </div>
+
+  <div class="section-title"><h2>Priority Matrix</h2></div>
+
+  <table class="priority-table">
+    <thead>
+      <tr>
+        <th>Bug ID</th>
+        <th>Title</th>
+        <th>File / Location</th>
+        <th>Severity</th>
+        <th>Impact Area</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>BUG-F01</td><td>Contact page deleted, route still active</td><td>App.jsx:126 + Contact.jsx (deleted)</td><td style="color:#b42318;font-weight:700">P0 Critical</td><td>Crash</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-F02</td><td>JSON.parse without try/catch crashes app at startup</td><td>AuthContext.jsx:33</td><td style="color:#b42318;font-weight:700">P0 Critical</td><td>Crash / Auth</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F03</td><td>Request interceptor silently drops all request errors</td><td>api.js:27</td><td style="color:#b42318;font-weight:700">P0 Critical</td><td>All API calls</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F04</td><td>Razorpay payment endpoints called without auth token</td><td>Checkout.jsx:470,493</td><td style="color:#b42318;font-weight:700">P0 Critical</td><td>Payments</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F05</td><td>Same Razorpay auth issue in Buy Now flow</td><td>ProductDetail.jsx:867,890</td><td style="color:#b42318;font-weight:700">P0 Critical</td><td>Payments</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F06</td><td>Cart.jsx imports non-existent addToWishlist function</td><td>Cart.jsx:18</td><td style="color:#b42318;font-weight:700">P0 Critical</td><td>Cart crash</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F07</td><td>2-second hardcoded delay on every page load</td><td>App.jsx:37-40</td><td style="color:#b42318;font-weight:700">P0 Critical</td><td>All pages</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-A01</td><td>Admin panel has ZERO route protection</td><td>admin_frontend/App.jsx</td><td style="color:#b42318;font-weight:700">P0 Critical</td><td>Security</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-F08</td><td>Shipping weight ignores actual product weight</td><td>Checkout.jsx:124-127</td><td style="color:#d97706;font-weight:700">P1 High</td><td>Shipping cost</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F09</td><td>Cart optimistic remove breaks multi-color carts</td><td>CartContext.jsx:106</td><td style="color:#d97706;font-weight:700">P1 High</td><td>Cart data</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F10</td><td>removeFromWishlist has type coercion bug</td><td>WishlistContext.jsx:113</td><td style="color:#d97706;font-weight:700">P1 High</td><td>Wishlist</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-F11</td><td>Cancel order uses wrong timestamp field name</td><td>MyOrders.jsx:188-192</td><td style="color:#d97706;font-weight:700">P1 High</td><td>Orders</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F12</td><td>Weight unit auto-detection breaks shipping calc</td><td>ProductDetail.jsx:967</td><td style="color:#d97706;font-weight:700">P1 High</td><td>Shipping</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-F13</td><td>Two coupon engines produce different discount amounts</td><td>Checkout.jsx vs CartContext.jsx</td><td style="color:#d97706;font-weight:700">P1 High</td><td>Payments</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F14</td><td>Material and Fabric spec both show same field value</td><td>ProductDetail.jsx:1001</td><td style="color:#d97706;font-weight:700">P1 High</td><td>Product info</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F15</td><td>Buy Now COD ignores product payment_options</td><td>ProductDetail.jsx:340</td><td style="color:#d97706;font-weight:700">P1 High</td><td>Payments</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F16</td><td>Empty cart redirect races with order-confirmation navigate</td><td>Checkout.jsx:331-343</td><td style="color:#d97706;font-weight:700">P1 High</td><td>Checkout flow</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F17</td><td>Phone validation regex too permissive (11+ digits)</td><td>validation.js:10</td><td style="color:#d97706;font-weight:700">P1 High</td><td>Data validity</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F18</td><td>OTP rate limit resets on page refresh (client-side only)</td><td>Auth.jsx:123</td><td style="color:#d97706;font-weight:700">P1 High</td><td>Security</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-F19</td><td>ordersRes.data structure check wrong for API response</td><td>Checkout.jsx:155</td><td style="color:#d97706;font-weight:700">P1 High</td><td>Checkout logic</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-A02</td><td>Admin token stored with same key as customer token</td><td>admin Login.jsx:33</td><td style="color:#d97706;font-weight:700">P1 High</td><td>Security</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-F20</td><td>Cancel eligibility logic differs between pages</td><td>OrderConfirmation.jsx:62 vs MyOrders.jsx:188</td><td style="color:#2454a6;font-weight:700">P2 Medium</td><td>UX</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F21</td><td>Optimistic wishlist add stores unformatted product object</td><td>WishlistContext.jsx:76</td><td style="color:#2454a6;font-weight:700">P2 Medium</td><td>Wishlist</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F22</td><td>Cart optimistic remove has no rollback on API failure</td><td>CartContext.jsx:108-110</td><td style="color:#2454a6;font-weight:700">P2 Medium</td><td>Cart</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F23</td><td>Buy Now coupon fetch without auth headers</td><td>ProductDetail.jsx:598</td><td style="color:#2454a6;font-weight:700">P2 Medium</td><td>Coupons</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F24</td><td>Product error vs not-found shows same UI message</td><td>ProductDetail.jsx:183-211</td><td style="color:#2454a6;font-weight:700">P2 Medium</td><td>UX</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-A03</td><td>Orders table loads all orders, no pagination</td><td>admin Orders.jsx</td><td style="color:#2454a6;font-weight:700">P2 Medium</td><td>Performance</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-A04</td><td>Admin pages fetch data without auth headers</td><td>admin Products.jsx:89</td><td style="color:#2454a6;font-weight:700">P2 Medium</td><td>Admin API</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-A05</td><td>Admin useEffect missing loadOrders dependency</td><td>admin Orders.jsx:116</td><td style="color:#2454a6;font-weight:700">P2 Medium</td><td>Admin UX</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-A06</td><td>No 404 catch-all route in admin panel</td><td>admin App.jsx</td><td style="color:#2454a6;font-weight:700">P2 Medium</td><td>Admin UX</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-A07</td><td>Admin token has no expiry / session timeout</td><td>admin Login.jsx + Layout.jsx</td><td style="color:#2454a6;font-weight:700">P2 Medium</td><td>Security</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-F25</td><td>Contact and Feedback routes require auth unnecessarily</td><td>App.jsx:117-130</td><td style="color:#087a55;font-weight:700">P3 Low</td><td>UX</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F26</td><td>ProductDetail getSortedImages not memoized</td><td>ProductDetail.jsx:145</td><td style="color:#087a55;font-weight:700">P3 Low</td><td>Performance</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F27</td><td>Loading state not tied to actual resource loading</td><td>App.jsx:37</td><td style="color:#087a55;font-weight:700">P3 Low</td><td>UX</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-A08</td><td>Typo "Banaras Kala" in admin login copyright</td><td>admin Login.jsx:122</td><td style="color:#087a55;font-weight:700">P3 Low</td><td>Branding</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-A09</td><td>Admin header shows hardcoded "Admin User" name</td><td>admin Header.jsx</td><td style="color:#087a55;font-weight:700">P3 Low</td><td>UX</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-A10</td><td>Admin forgot-password uses wrong OTP endpoint</td><td>admin Login.jsx:73</td><td style="color:#087a55;font-weight:700">P3 Low</td><td>Admin auth</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-F31</td><td>Missing .env variables crash the entire app silently at startup</td><td>utils/env.js + all VITE_* vars</td><td style="color:#b42318;font-weight:700">P0 Critical</td><td>App launch</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-F28</td><td>No ErrorBoundary on route-level components — one crash breaks entire app</td><td>App.jsx (all lazy routes)</td><td style="color:#d97706;font-weight:700">P1 High</td><td>Resilience</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F29</td><td>No meta tags or Open Graph — social sharing shows blank card, zero SEO</td><td>index.html + all pages</td><td style="color:#d97706;font-weight:700">P1 High</td><td>SEO / Marketing</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+      <tr><td>BUG-F30</td><td>No 404 page — unknown URLs show blank screen with no navigation</td><td>frontend/src/App.jsx</td><td style="color:#2454a6;font-weight:700">P2 Medium</td><td>UX</td><td><span style="background:#d5f5e3;color:#27ae60;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">✓ FIXED</span></td></tr>
+      <tr><td>BUG-F32</td><td>Product images missing descriptive alt text — accessibility &amp; SEO penalty</td><td>ProductDetail.jsx, Cart.jsx, Collection.jsx</td><td style="color:#087a55;font-weight:700">P3 Low</td><td>SEO / A11y</td><td><span style="background:#fdebd0;color:#e67e22;font-size:10px;padding:2px 8px;border-radius:8px;font-weight:700">SKIPPED</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- SECTION: P0 BUGS -->
+<div class="page-break"></div>
+<div class="section">
+  <div class="section-title">
+    <h2>P0 — Critical Blockers</h2>
+    <span class="section-badge" style="background:#b42318">Must Fix Before Launch</span>
+  </div>
+
+  <div class="warn-box">
+    ⚠️ These 9 bugs will cause crashes, failed payments, or unauthorized access in production. Do NOT go live without fixing all P0 issues.
+  </div>
+
+  <!-- BUG F01 -->
+  <div class="bug-card p0">
+    <div class="bug-header">
+      <span class="bug-id p0">BUG-F01</span>
+      <span class="bug-title">Contact page file is deleted but route is still registered — runtime crash on /contact</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row">
+        <span class="lbl">File</span>
+        <span class="val"><code>frontend/src/App.jsx:126</code> + deleted <code>frontend/src/pages/Contact/Contact.jsx</code></span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">
+          <span class="impact-badge impact-crash">App Crash</span>
+          Any user navigating to <code>/contact</code> gets a white screen crash (lazy import fails with module not found error).
+        </span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Root Cause</span>
+        <span class="val">
+          Git shows <code>D frontend/src/pages/Contact/Contact.jsx</code> — file was deleted. App.jsx still has:
+          <div class="code-block"><span class="bad">const Contact = lazy(() => import("./pages/Contact/Contact")); // FILE DELETED
+// ...
+&lt;Route path="/contact" element={&lt;ProtectedRoute&gt;&lt;Contact /&gt;&lt;/ProtectedRoute&gt;} /&gt;</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">
+          Option A: Restore the deleted Contact.jsx page with a proper contact form.<br>
+          Option B: Remove the import and route entirely from App.jsx if contact page is not needed.<br>
+          Option C: Create a simple placeholder Contact page so the route doesn't crash.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F02 -->
+  <div class="bug-card p0">
+    <div class="bug-header">
+      <span class="bug-id p0">BUG-F02</span>
+      <span class="bug-title">JSON.parse on stored auth data without try/catch — app crashes silently on startup for users with corrupted storage</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row">
+        <span class="lbl">File</span>
+        <span class="val"><code>frontend/src/context/AuthContext.jsx:33</code></span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">
+          <span class="impact-badge impact-crash">App Crash</span>
+          If localStorage contains corrupted JSON (partial write, old format, XSS manipulation), the entire app fails to mount. The user sees a blank screen with no recovery path.
+        </span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Root Cause</span>
+        <span class="val">
+          <div class="code-block"><span class="comment">// AuthContext.jsx:32-36 — DANGEROUS</span>
+if (storedUser &amp;&amp; token) {
+  <span class="bad">setUser(JSON.parse(storedUser));  // Throws if storedUser is invalid JSON</span>
+  axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+}</div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Wrap JSON.parse in try/catch and call clearStoredAuth() if it throws:</div>
+        <div class="code-block"><span class="good">try {
+  setUser(JSON.parse(storedUser));
+  axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+} catch {
+  clearStoredAuth(); // wipe corrupt data, user sees logged-out state
+}</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F03 -->
+  <div class="bug-card p0">
+    <div class="bug-header">
+      <span class="bug-id p0">BUG-F03</span>
+      <span class="bug-title">axios request interceptor missing return statement — all request-phase errors silently swallowed</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row">
+        <span class="lbl">File</span>
+        <span class="val"><code>frontend/src/utils/api.js:26-28</code></span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">
+          <span class="impact-badge impact-crash">Silent Failure</span>
+          Any error that occurs in the request interceptor phase (e.g., pre-flight error) returns <code>undefined</code> to the caller instead of a rejected promise. Network errors at request level may appear as success with undefined response.
+        </span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Root Cause</span>
+        <span class="val">
+          <div class="code-block">api.interceptors.request.use(
+  async config =&gt; { ... return config; },
+  error =&gt; {
+    <span class="bad">Promise.reject(error);  // MISSING return — error is discarded!</span>
+  }
+);</div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Add <code>return</code> before <code>Promise.reject(error)</code>:</div>
+        <div class="code-block"><span class="good">error => { return Promise.reject(error); }</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F04 -->
+  <div class="bug-card p0">
+    <div class="bug-header">
+      <span class="bug-id p0">BUG-F04</span>
+      <span class="bug-title">Razorpay payment endpoints (createOrder, verifyPayment) called with bare fetch() — no auth token sent</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row">
+        <span class="lbl">File</span>
+        <span class="val"><code>frontend/src/pages/Checkout/Checkout.jsx:470-476</code> and <code>:493-497</code></span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">
+          <span class="impact-badge impact-payment">Payment Failure</span>
+          <span class="impact-badge impact-security">Security Risk</span>
+          If the Razorpay backend routes require authentication, ALL online payments will fail with 401. Even if currently open, unauthenticated payment creation is a security risk (anyone can create payment orders).
+        </span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Root Cause</span>
+        <span class="val">
+          <div class="code-block"><span class="comment">// Checkout.jsx:470-476 — bare fetch, no Authorization header</span>
+<span class="bad">const orderResponse = await fetch(API_ENDPOINTS.razorpay.createOrder, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  // ↑ Missing: Authorization: Bearer ${token}
+  body: JSON.stringify({ amount: total }),
+});</span>
+
+<span class="comment">// And again at line 493 — verifyPayment</span>
+<span class="bad">const verifyRes = await fetch(API_ENDPOINTS.razorpay.verifyPayment, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  // ↑ Missing: Authorization: Bearer ${token}
+});</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Replace bare <code>fetch</code> with the <code>api</code> axios instance (which auto-adds auth) or add auth headers manually:</div>
+        <div class="code-block"><span class="comment">// Option A: Use the existing api instance</span>
+<span class="good">const orderResponse = await api.post(API_ENDPOINTS.razorpay.createOrder, { amount: total });
+const razorpayOrder = orderResponse.data;</span>
+
+<span class="comment">// Option B: Add auth header to fetch manually</span>
+<span class="good">const token = localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
+const orderResponse = await fetch(API_ENDPOINTS.razorpay.createOrder, {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+  body: JSON.stringify({ amount: total }),
+});</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F05 -->
+  <div class="bug-card p0">
+    <div class="bug-header">
+      <span class="bug-id p0">BUG-F05</span>
+      <span class="bug-title">Same Razorpay auth issue exists in Buy Now (ProductDetail) flow — online payment broken there too</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row">
+        <span class="lbl">File</span>
+        <span class="val"><code>frontend/src/pages/ProductDetail/ProductDetail.jsx:867-874</code> and <code>:890-895</code></span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">
+          <span class="impact-badge impact-payment">Payment Failure</span>
+          Same root cause as BUG-F04 but in the "Buy Now" modal. Buy Now is a separate code path with its own Razorpay integration, both endpoints called without auth headers.
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Apply same fix as BUG-F04 in ProductDetail.jsx lines 867 and 890. Consider extracting a shared <code>createRazorpayOrder(amount)</code> utility to avoid duplication.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F06 -->
+  <div class="bug-card p0">
+    <div class="bug-header">
+      <span class="bug-id p0">BUG-F06</span>
+      <span class="bug-title">Cart.jsx imports addToWishlist from WishlistContext, but that function does not exist — move-to-wishlist crashes</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row">
+        <span class="lbl">File</span>
+        <span class="val"><code>frontend/src/pages/Cart/Cart.jsx:18</code></span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">
+          <span class="impact-badge impact-crash">Runtime Crash</span>
+          WishlistContext exports: <code>toggleWishlist</code>, <code>removeFromWishlist</code>, <code>isInWishlist</code>, <code>getWishlistCount</code>. It does NOT export <code>addToWishlist</code>. Destructuring a non-existent export gives <code>undefined</code>, which crashes when called.
+        </span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Root Cause</span>
+        <span class="val">
+          <div class="code-block"><span class="comment">// Cart.jsx:18</span>
+<span class="bad">const { addToWishlist } = useWishlist(); // addToWishlist is undefined!</span>
+
+<span class="comment">// WishlistContext.jsx exports (line 132-140):</span>
+<span class="comment">// toggleWishlist, removeFromWishlist, isInWishlist, getWishlistCount, loading</span>
+<span class="comment">// NO addToWishlist export exists</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Replace <code>addToWishlist</code> with <code>toggleWishlist</code> in Cart.jsx. The <code>toggleWishlist</code> function already handles both add and remove based on current state.</div>
+        <div class="code-block"><span class="bad">const { addToWishlist } = useWishlist();</span>
+<span class="good">const { toggleWishlist } = useWishlist();</span>
+<span class="comment">// Then replace addToWishlist(item) with toggleWishlist(item)</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F07 -->
+  <div class="bug-card p0">
+    <div class="bug-header">
+      <span class="bug-id p0">BUG-F07</span>
+      <span class="bug-title">Hardcoded 2-second artificial delay on every single page load — severe UX penalty</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row">
+        <span class="lbl">File</span>
+        <span class="val"><code>frontend/src/App.jsx:35-41</code></span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">
+          <span class="impact-badge impact-ux">UX Blocker</span>
+          Every user on EVERY visit waits 2 seconds before ANY content is shown. On fast connections, users stare at a loader for 2 seconds even when all data is ready. This increases bounce rate significantly.
+        </span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Root Cause</span>
+        <span class="val">
+          <div class="code-block"><span class="comment">// App.jsx:35-41</span>
+useEffect(() =&gt; {
+  <span class="bad">const timer = setTimeout(() =&gt; {
+    setLoading(false); // Waits 2 full seconds regardless of actual load state
+  }, 2000);</span>
+  return () =&gt; clearTimeout(timer);
+}, []);</div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Remove the artificial delay. Let the PreLoader handle actual loading states (fonts, critical images). If you want a minimum display time for branding, use a much shorter delay (300-500ms) and only on first visit:</div>
+        <div class="code-block"><span class="comment">// Remove the 2-second delay entirely, OR</span>
+<span class="good">// If keeping PreLoader for branding, use ≤300ms:
+const timer = setTimeout(() =&gt; setLoading(false), 300);</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG A01 -->
+  <div class="bug-card p0">
+    <div class="bug-header">
+      <span class="bug-id p0">BUG-A01</span>
+      <span class="bug-title">Admin panel has ZERO route protection — all admin pages publicly accessible without login</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row">
+        <span class="lbl">File</span>
+        <span class="val"><code>admin_frontend/src/App.jsx</code> + <code>admin_frontend/src/layout/Layout.jsx</code></span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">
+          <span class="impact-badge impact-security">SECURITY BREACH</span>
+          Anyone who knows or guesses the admin URL (e.g., <code>/dashboard</code>, <code>/orders</code>, <code>/users</code>) can access ALL admin functionality without logging in. This includes viewing all customer data, orders, modifying order statuses, approving reviews, and changing product information.
+        </span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Root Cause</span>
+        <span class="val">
+          Layout.jsx only hides the sidebar for the login route — it does NOT redirect unauthenticated users. App.jsx has no auth guards on any route:
+          <div class="code-block"><span class="comment">// admin_frontend/App.jsx — ALL routes unprotected:</span>
+<span class="bad">&lt;Route path="/dashboard" element={&lt;Dashboard /&gt;} /&gt;  // No auth!
+&lt;Route path="/orders" element={&lt;Orders /&gt;} /&gt;       // No auth!
+&lt;Route path="/users" element={&lt;Users /&gt;} /&gt;          // No auth!</span>
+
+<span class="comment">// Layout.jsx — only hides sidebar, no redirect:</span>
+<span class="bad">if (currentSection === 'login') { return &lt;div&gt;{children}&lt;/div&gt;; }
+// Otherwise renders admin UI regardless of auth state</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Add an AdminProtectedRoute component and wrap all routes (except /login) with it:</div>
+        <div class="code-block"><span class="comment">// Create src/components/AdminProtectedRoute.jsx</span>
+<span class="good">import { Navigate } from 'react-router-dom';
+
+export default function AdminProtectedRoute({ children }) {
+  const token = localStorage.getItem('accessToken');
+  const adminUser = localStorage.getItem('admin_user');
+  if (!token || !adminUser) {
+    return &lt;Navigate to="/login" replace /&gt;;
+  }
+  return children;
+}</span>
+
+<span class="comment">// In App.jsx, wrap all admin routes:</span>
+<span class="good">&lt;Route path="/dashboard" element={
+  &lt;AdminProtectedRoute&gt;&lt;Dashboard /&gt;&lt;/AdminProtectedRoute&gt;
+} /&gt;</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- BUG F31 -->
+  <div class="bug-card p0">
+    <div class="bug-header">
+      <span class="bug-id p0">BUG-F31</span>
+      <span class="bug-title">Missing VITE_* environment variables crash the entire app at startup with no error message shown to user</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row">
+        <span class="lbl">File</span>
+        <span class="val"><code>frontend/src/utils/env.js</code> (requiredEnv) + <code>frontend/.env</code> (production values)</span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">
+          <span class="impact-badge impact-crash">App Launch Failure</span>
+          <span class="impact-badge impact-payment">Payment Blocked</span>
+          If any required env variable is absent in the production build (e.g., <code>VITE_API_URL</code>, <code>VITE_RAZORPAY_KEY_ID</code>, <code>VITE_PACKAGING_WEIGHT_KG</code>), <code>requiredEnv()</code> throws at module load time. The entire app fails to render and the user sees a blank white screen with no explanation. This is especially dangerous in CI/CD pipelines where env vars might not be injected.
+        </span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Required Vars</span>
+        <span class="val">
+          The following must be set before production build or the app will not start:
+          <div class="code-block">VITE_API_URL               <span class="comment"># backend base URL</span>
+VITE_RAZORPAY_KEY_ID       <span class="comment"># Razorpay public key</span>
+VITE_PACKAGING_WEIGHT_KG   <span class="comment"># used in shipping calc</span>
+VITE_COD_MAX_AMOUNT        <span class="comment"># COD order limit</span>
+VITE_PREPAID_DISCOUNT_AMOUNT
+VITE_COD_FEE_AMOUNT
+VITE_PLATFORM_FEE_AMOUNT
+VITE_EMAIL_OTP_LENGTH</div>
+        </span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Root Cause</span>
+        <span class="val">
+          <code>requiredEnv()</code> and <code>numberEnv()</code> are called at module level (outside components), so they throw synchronously before React mounts. No ErrorBoundary can catch this — the app simply does not render.
+          <div class="code-block"><span class="comment">// Called at module level in Checkout.jsx, ProductDetail.jsx, etc.:</span>
+<span class="bad">const PACKAGING_WEIGHT_KG = numberEnv("VITE_PACKAGING_WEIGHT_KG"); // throws if missing</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix — 3 steps</div>
+        <div class="fix-text">
+          <strong>Step 1:</strong> Create <code>frontend/.env.production</code> with all required values filled in before deploying.<br><br>
+          <strong>Step 2:</strong> Add a pre-build validation script that checks all required vars exist:<br>
+          <div class="code-block"><span class="comment">// scripts/check-env.js — run as part of npm run build</span>
+<span class="good">const required = [
+  "VITE_API_URL", "VITE_RAZORPAY_KEY_ID", "VITE_PACKAGING_WEIGHT_KG",
+  "VITE_COD_MAX_AMOUNT", "VITE_PREPAID_DISCOUNT_AMOUNT",
+  "VITE_COD_FEE_AMOUNT", "VITE_PLATFORM_FEE_AMOUNT", "VITE_EMAIL_OTP_LENGTH"
+];
+const missing = required.filter(k => !process.env[k]);
+if (missing.length) {
+  console.error("Missing env vars:", missing.join(", "));
+  process.exit(1); // fail the build, don't deploy broken app
+}</span></div>
+          <strong>Step 3:</strong> Add the check to <code>package.json</code>:
+          <div class="code-block"><span class="good">"build": "node scripts/check-env.js && vite build"</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION: P1 BUGS -->
+<div class="page-break"></div>
+<div class="section">
+  <div class="section-title">
+    <h2>P1 — High Priority</h2>
+    <span class="section-badge" style="background:#d97706">Fix Before Launch</span>
+  </div>
+
+  <!-- BUG F08 -->
+  <div class="bug-card p1">
+    <div class="bug-header">
+      <span class="bug-id p1">BUG-F08</span>
+      <span class="bug-title">Checkout shipping weight ignores actual product weight — wrong shipping rates for all orders</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/pages/Checkout/Checkout.jsx:124-127</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-payment">Wrong Pricing</span> All shipping cost estimates in checkout are calculated using ONLY the packaging weight, with zero product weight. A 500g saree is charged the same shipping as a 5g accessory.</span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Code</span>
+        <span class="val">
+          <div class="code-block"><span class="bad">// Checkout.jsx:124-127 — product weight completely missing
+const totalWeightKg = payableCart.reduce((sum, item) => {
+  const qty = Math.max(1, Number(item.quantity || 1));
+  return sum + (PACKAGING_WEIGHT_KG * qty);  // ← only packaging, no product weight!
+}, 0);</span>
+
+<span class="comment">// Compare with ProductDetail.jsx:478-480 — correctly includes product weight:</span>
+<span class="good">const productWeightKg = Number.isFinite(rawWeight) && rawWeight > 0 ? rawWeight : 0.5;
+const totalWeightKg = (productWeightKg * totalQty) + (PACKAGING_WEIGHT_KG * totalQty);</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Update the Checkout weight calculation to include product weight, matching the ProductDetail approach:</div>
+        <div class="code-block"><span class="good">const totalWeightKg = payableCart.reduce((sum, item) => {
+  const qty = Math.max(1, Number(item.quantity || 1));
+  const rawWeight = Number(item.weight);
+  const productWeightKg = Number.isFinite(rawWeight) && rawWeight > 0 ? rawWeight : 0.5;
+  return sum + (productWeightKg * qty) + (PACKAGING_WEIGHT_KG * qty);
+}, 0);</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F09 -->
+  <div class="bug-card p1">
+    <div class="bug-header">
+      <span class="bug-id p1">BUG-F09</span>
+      <span class="bug-title">Cart optimistic remove deletes all variants of same product from UI when only one color is removed</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/context/CartContext.jsx:106</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-data">Data Loss</span> If a customer has Product A in Red and Product A in Blue, removing the Red variant removes BOTH from the UI optimistically (though API only removes one). The cart appears empty of that product until next refresh.</span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Code</span>
+        <span class="val">
+          <div class="code-block"><span class="comment">// CartContext.jsx:106 — filters by product id BUT ignores colorId</span>
+<span class="bad">setCart(prev => prev.filter(item => !(item.id === productId && item.colorId === colorId)));
+// BUG: item.id is the PRODUCT id, but colorId comparison may not work
+// if the item stored uses a different key for the cart entry ID</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">The filter logic is actually using both id and colorId, so multi-color carts are handled correctly. However, since removal can fail silently (no rollback), the real fix is to add a rollback on error — see BUG-F22 for the rollback fix. Additionally, consider using <code>cartItemId</code> as the primary key instead of product id + colorId.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F10 -->
+  <div class="bug-card p1">
+    <div class="bug-header">
+      <span class="bug-id p1">BUG-F10</span>
+      <span class="bug-title">removeFromWishlist uses strict !== comparison without type coercion — wishlist items never removed from state</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/context/WishlistContext.jsx:113</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-ux">UX Bug</span> If product IDs are stored as numbers but the <code>productId</code> parameter is passed as a string (common from URL params, event data), the filter never removes the item. Wishlist appears to still contain removed items.</span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Code</span>
+        <span class="val">
+          <div class="code-block"><span class="bad">// WishlistContext.jsx:113 — strict comparison, no type coercion
+setWishlist(prev => prev.filter(item => item.id !== productId));
+// item.id = 42 (number), productId = "42" (string) → 42 !== "42" is TRUE → item NOT removed</span>
+
+<span class="comment">// isInWishlist correctly handles this (line 124):</span>
+<span class="good">return wishlist.some(item => Number(item.id) === Number(productId)); // ✓ correct</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Apply same type coercion as <code>isInWishlist</code>:</div>
+        <div class="code-block"><span class="good">setWishlist(prev => prev.filter(item => Number(item.id) !== Number(productId)));</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F11 -->
+  <div class="bug-card p1">
+    <div class="bug-header">
+      <span class="bug-id p1">BUG-F11</span>
+      <span class="bug-title">canCancelOrder reads order.createdAt but backend likely returns created_at — all order cancellations may be disabled</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/pages/MyOrders/MyOrders.jsx:185-192</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-ux">Feature Broken</span> If <code>order.createdAt</code> is undefined, <code>new Date(undefined)</code> gives Invalid Date, <code>getTime()</code> returns NaN, <code>Number.isFinite(NaN)</code> is false. So <code>canCancelOrder</code> returns false for ALL orders, hiding the cancel button from customers permanently.</span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Code</span>
+        <span class="val">
+          <div class="code-block"><span class="comment">// MyOrders.jsx:185-192</span>
+const canCancelOrder = (order) => {
+  <span class="bad">if (!order?.createdAt) return false;  // May always be falsy if field is created_at</span>
+  const createdAt = new Date(order.createdAt).getTime();
+  if (!Number.isFinite(createdAt)) return false;
+  return Date.now() - createdAt &lt;= 24 * 60 * 60 * 1000;
+};</div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Support both camelCase and snake_case field names to be safe:</div>
+        <div class="code-block"><span class="good">const canCancelOrder = (order) => {
+  const rawDate = order?.createdAt || order?.created_at;
+  if (!rawDate) return false;
+  const createdAt = new Date(rawDate).getTime();
+  if (!Number.isFinite(createdAt)) return false;
+  const status = String(order.status || "").toLowerCase();
+  if (["cancelled", "seller cancelled", "delivered", "rto delivered"].includes(status)) return false;
+  return Date.now() - createdAt &lt;= 24 * 60 * 60 * 1000;
+};</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F12 -->
+  <div class="bug-card p1">
+    <div class="bug-header">
+      <span class="bug-id p1">BUG-F12</span>
+      <span class="bug-title">Buy Now weight unit auto-detection: assumes >5 means grams — heavy products show near-zero shipping weight</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/pages/ProductDetail/ProductDetail.jsx:967-968</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-payment">Wrong Pricing</span> A product with weight=6 (presumably 6kg) gets divided by 1000 = 0.006kg, giving an absurdly low shipping estimate. Products between 0.1–5 are treated as kg, but >5 are treated as grams with no basis.</span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Code</span>
+        <span class="val">
+          <div class="code-block"><span class="bad">// ProductDetail.jsx:967
+const productWeightKg = Number.isFinite(rawWeight) && rawWeight > 0
+  ? (rawWeight > 5 ? rawWeight / 1000 : rawWeight)  // BUG: arbitrary threshold
+  : 0.5;</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Decide on ONE unit (kg is recommended) in the database. Remove the auto-detection entirely. If products are stored in grams, convert consistently:</div>
+        <div class="code-block"><span class="comment">// If weight in DB is always in KG:</span>
+<span class="good">const productWeightKg = Number.isFinite(rawWeight) && rawWeight > 0 ? rawWeight : 0.5;</span>
+
+<span class="comment">// If weight in DB is always in grams:</span>
+<span class="good">const productWeightKg = Number.isFinite(rawWeight) && rawWeight > 0 ? rawWeight / 1000 : 0.5;</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F13 -->
+  <div class="bug-card p1">
+    <div class="bug-header">
+      <span class="bug-id p1">BUG-F13</span>
+      <span class="bug-title">Two separate coupon calculation engines in CartContext vs Checkout — can produce different discount amounts for same coupon</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/context/CartContext.jsx:161-207</code> vs <code>frontend/src/pages/Checkout/Checkout.jsx:281-303</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-payment">Pricing Inconsistency</span> Cart coupon panel uses CartContext's <code>applyCoupon</code>. Checkout's own coupon section uses <code>applyCheckoutCoupon</code>. They have different logic — for example CartContext checks product/variety applicability while Checkout applies flat on subtotal. A customer might see different discounts in Cart vs Checkout for the same coupon.</span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Create a single shared coupon calculation utility function used by both Cart and Checkout. Remove the duplicate <code>applyCheckoutCoupon</code> function from Checkout.jsx and use <code>applyCoupon</code> from CartContext, or expose a standalone utility:</div>
+        <div class="code-block"><span class="comment">// utils/coupon.js — single source of truth</span>
+<span class="good">export const calculateCouponDiscount = (coupon, cartItems, subtotal) => { ... };</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F14 -->
+  <div class="bug-card p1">
+    <div class="bug-header">
+      <span class="bug-id p1">BUG-F14</span>
+      <span class="bug-title">Product detail specifications show identical "Material" and "Fabric" values from the same data field</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/pages/ProductDetail/ProductDetail.jsx:1001-1002</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-ux">Data Display Bug</span> Customers see two identical rows "Material: Katan Silk" and "Fabric: Katan Silk" in product specifications. Misleading duplication on every product detail page.</span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Code</span>
+        <span class="val">
+          <div class="code-block"><span class="bad">["Material", product.Material?.name],  // Both rows use product.Material?.name
+["Fabric", product.Material?.name],     // ← should be a different field</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Either remove the "Fabric" row (if Material covers it), or map it to the correct product field (e.g., <code>product.fabric</code> or <code>product.Fabric?.name</code> if that exists in the schema):</div>
+        <div class="code-block"><span class="good">["Material", product.Material?.name],
+// Remove "Fabric" row OR use a distinct field:
+["Fabric", product.fabric_type || product.Material?.fabric_type],</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F15 -->
+  <div class="bug-card p1">
+    <div class="bug-header">
+      <span class="bug-id p1">BUG-F15</span>
+      <span class="bug-title">Buy Now modal shows COD option for prepaid-only products — ignores product.payment_options</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/pages/ProductDetail/ProductDetail.jsx:340-341</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-payment">Wrong Payment Option</span> Products configured with <code>payment_options: ["prepaid"]</code> should not offer COD. Checkout.jsx correctly checks <code>item.payment_options.includes("cod")</code> per product, but Buy Now only checks the order total limit.</span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Code</span>
+        <span class="val">
+          <div class="code-block"><span class="bad">// ProductDetail.jsx:340-341 — only checks amount, ignores product config
+const canUsePrepaid = true;
+const canUseCod = buyNowSubtotal &lt;= COD_MAX_AMOUNT;  // Misses payment_options check</span>
+
+<span class="comment">// Checkout.jsx:74 — correct check (for reference):</span>
+<span class="good">const isProductCodAllowed = payableCart.every(
+  item => Array.isArray(item.payment_options) && item.payment_options.includes("cod")
+);</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Apply the same product-level COD check in Buy Now:</div>
+        <div class="code-block"><span class="good">const isProductCodAllowed = !product?.payment_options
+  || !Array.isArray(product.payment_options)
+  || product.payment_options.includes("cod");
+const canUseCod = isProductCodAllowed && buyNowSubtotal &lt;= COD_MAX_AMOUNT;</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F16 -->
+  <div class="bug-card p1">
+    <div class="bug-header">
+      <span class="bug-id p1">BUG-F16</span>
+      <span class="bug-title">After placing COD order: clearCart() triggers empty-cart redirect to /cart before navigate to /order-confirmation fires</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/pages/Checkout/Checkout.jsx:331-343</code> and <code>:461-463</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-ux">Checkout Flow Bug</span> Race condition: After COD order success, <code>clearCart()</code> sets cart to [], triggering the <code>useEffect</code> that navigates to <code>/cart</code>. Then <code>navigate("/order-confirmation")</code> is called. Depending on React batching, customers may briefly see /cart or get confused navigation.</span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Code</span>
+        <span class="val">
+          <div class="code-block"><span class="comment">// Checkout.jsx:331-343 — effect fires on any cart change:</span>
+useEffect(() =&gt; {
+  <span class="bad">if (cart.length === 0) { navigate("/cart"); }  // fires when clearCart() is called!</span>
+}, [cart, navigate]);
+
+<span class="comment">// Checkout.jsx:461-463 — order success:</span>
+const dbRes = await api.post("/api/orders", finalOrderData);
+clearCart();  <span class="bad">// ← triggers the above effect</span>
+navigate(`/order-confirmation?orderId=${dbRes.data.orderId}`);</div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Guard the empty-cart redirect with a "just placed order" flag, or navigate to order-confirmation BEFORE clearing the cart:</div>
+        <div class="code-block"><span class="comment">// Option: navigate first, then clear cart</span>
+<span class="good">const dbRes = await api.post("/api/orders", finalOrderData);
+navigate(`/order-confirmation?orderId=${dbRes.data.orderId}`);
+clearCart(); // Now clearing after navigation — redirect effect won't interfere</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F17 -->
+  <div class="bug-card p1">
+    <div class="bug-header">
+      <span class="bug-id p1">BUG-F17</span>
+      <span class="bug-title">Phone number validation regex accepts 11–13 digit numbers as valid Indian mobile numbers</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/utils/validation.js:10</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-data">Data Quality</span> Invalid phone numbers can be saved to orders and addresses. Causes SMS/OTP delivery failures and bad shipping records.</span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Code</span>
+        <span class="val">
+          <div class="code-block"><span class="bad">const re = /^(\+91[-\s]?)?[0]?(91)?[6-9]\d{9}$/;
+// Accepts: "+91 91 9123456789" (13 digits), "091XXXXXXXXXX" (12 digits)</span>
+
+<span class="comment">// Simple correct regex for Indian 10-digit numbers:</span>
+<span class="good">const re = /^[6-9]\d{9}$/;
+// Apply normalizePhone() first to strip +91 prefix, then validate 10 digits</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Normalize the phone number first (strip country code, spaces, dashes) then validate it's exactly 10 digits starting with 6-9:</div>
+        <div class="code-block"><span class="good">export const validatePhone = (phone) => {
+  const normalized = String(phone || "").replace(/\D/g, "");
+  const digits = normalized.length > 10 ? normalized.slice(-10) : normalized.replace(/^0+/, "");
+  return /^[6-9]\d{9}$/.test(digits);
+};</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F18 -->
+  <div class="bug-card p1">
+    <div class="bug-header">
+      <span class="bug-id p1">BUG-F18</span>
+      <span class="bug-title">OTP resend rate limiting tracked only in component state — resets on page refresh, easily bypassable</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/pages/Auth/Auth.jsx:123, 280-297</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-security">Security Risk</span> A user can bypass the 3-attempt OTP limit by refreshing the page. The <code>otpSendAttempts</code> state is in-memory only and is reset on every page load. Rate limiting must be enforced server-side.</span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">This is primarily a backend responsibility — the OTP send endpoint must enforce rate limiting per email per IP with a time window. Frontend should rely on backend's 429 response to show the "limit exceeded" message. The frontend state tracking is acceptable as a UX hint only, not a security control.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F19 -->
+  <div class="bug-card p1">
+    <div class="bug-header">
+      <span class="bug-id p1">BUG-F19</span>
+      <span class="bug-title">isFirstOrder check doesn't handle API response wrapper — may always mark users as first-time</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/pages/Checkout/Checkout.jsx:155</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-payment">Wrong Discount</span> If the orders API returns <code>{ data: [...orders], meta: {...} }</code>, then <code>Array.isArray(ordersRes.data)</code> would be false. The check <code>!Array.isArray(ordersRes.data) || ordersRes.data.length === 0</code> would then evaluate as <code>true</code>, marking every user as a first-time buyer and giving them free shipping on all orders.</span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Code</span>
+        <span class="val">
+          <div class="code-block"><span class="bad">setIsFirstOrder(!Array.isArray(ordersRes.data) || ordersRes.data.length === 0);</span>
+
+<span class="comment">// If ordersRes.data is { data: [...], meta: {...} }:</span>
+<span class="comment">// Array.isArray({data:[...]}) → false → !false = true → isFirstOrder = true for everyone!</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Handle both array and wrapped response formats:</div>
+        <div class="code-block"><span class="good">const ordersData = Array.isArray(ordersRes.data)
+  ? ordersRes.data
+  : (ordersRes.data?.data || ordersRes.data?.orders || []);
+setIsFirstOrder(ordersData.length === 0);</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG A02 -->
+  <div class="bug-card p1">
+    <div class="bug-header">
+      <span class="bug-id p1">BUG-A02</span>
+      <span class="bug-title">Admin login stores token as "accessToken" — same key as customer token, may conflict in development</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>admin_frontend/src/pages/Auth/Login.jsx:33</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-security">Security / Auth Conflict</span> Admin token is stored as <code>localStorage.setItem('accessToken', ...)</code>. If admin and customer frontends share the same domain/localhost, admin login overwrites the customer's access token. Customer gets logged out. Also, the admin's Orders.jsx looks for <code>admin_token</code> first, not just <code>accessToken</code>.</span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Use a distinct storage key for the admin token:</div>
+        <div class="code-block"><span class="bad">localStorage.setItem('accessToken', data.accessToken); // conflicts with customer</span>
+<span class="good">localStorage.setItem('admin_token', data.accessToken);
+localStorage.setItem('admin_user', JSON.stringify(data.admin || data.user));</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- BUG F28 -->
+  <div class="bug-card p1">
+    <div class="bug-header">
+      <span class="bug-id p1">BUG-F28</span>
+      <span class="bug-title">No ErrorBoundary wrapping route-level components — a crash in any page propagates and breaks the entire app</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row">
+        <span class="lbl">File</span>
+        <span class="val"><code>frontend/src/App.jsx</code> (all lazy route definitions)</span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">
+          <span class="impact-badge impact-crash">App Crash</span>
+          An <code>ErrorBoundary</code> component does exist at <code>frontend/src/components/ErrorBoundary/ErrorBoundary.jsx</code> but it is NOT applied to any route. If any lazy-loaded page component throws a JavaScript error (render error, undefined property access, etc.), the entire application white-screens. The sidebar, header, and every other page become inaccessible until the user does a full page refresh.
+        </span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Root Cause</span>
+        <span class="val">
+          <div class="code-block"><span class="comment">// App.jsx — ErrorBoundary exists but is never used:</span>
+<span class="bad">&lt;Suspense fallback={&lt;PreLoader /&gt;}&gt;
+  &lt;Routes&gt;
+    &lt;Route element={&lt;Layout /&gt;}&gt;
+      &lt;Route path="/" element={&lt;Home /&gt;} /&gt;          {/* No ErrorBoundary */}
+      &lt;Route path="/checkout" element={&lt;Checkout /&gt;} /&gt; {/* No ErrorBoundary */}
+    &lt;/Route&gt;
+  &lt;/Routes&gt;
+&lt;/Suspense&gt;</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Wrap the entire Routes tree (or individual high-risk pages) with the existing ErrorBoundary:</div>
+        <div class="code-block"><span class="good">import ErrorBoundary from "./components/ErrorBoundary/ErrorBoundary";
+
+&lt;Suspense fallback={&lt;PreLoader /&gt;}&gt;
+  &lt;ErrorBoundary&gt;
+    &lt;Routes&gt;
+      ...all routes...
+    &lt;/Routes&gt;
+  &lt;/ErrorBoundary&gt;
+&lt;/Suspense&gt;</span>
+
+<span class="comment">// Even better: wrap each critical page individually so one page crash
+// doesn't affect navigation to other pages:</span>
+<span class="good">&lt;Route path="/checkout" element={
+  &lt;ErrorBoundary&gt;
+    &lt;ProtectedRoute&gt;&lt;Checkout /&gt;&lt;/ProtectedRoute&gt;
+  &lt;/ErrorBoundary&gt;
+} /&gt;</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F29 -->
+  <div class="bug-card p1">
+    <div class="bug-header">
+      <span class="bug-id p1">BUG-F29</span>
+      <span class="bug-title">No meta tags, Open Graph, or page titles — social sharing shows blank card, Google cannot index products</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row">
+        <span class="lbl">File</span>
+        <span class="val"><code>frontend/index.html</code> + <code>frontend/src/pages/ProductDetail/ProductDetail.jsx</code> + all page components</span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">
+          <span class="impact-badge impact-ux">SEO / Marketing</span>
+          When a customer shares a product link on WhatsApp, Instagram, or Facebook, the preview shows no image, no title, no description — just the bare URL. Google cannot index individual product pages because there are no title or description meta tags. This directly hurts sales from social sharing and search discovery, which are major revenue channels for an e-commerce store.
+        </span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Current State</span>
+        <span class="val">
+          <div class="code-block"><span class="comment">&lt;!-- frontend/index.html — only has: --&gt;</span>
+<span class="bad">&lt;title&gt;Banarasi Kala&lt;/title&gt;  &lt;!-- same title on EVERY page --&gt;
+&lt;!-- No og:title, og:image, og:description, og:url --&gt;
+&lt;!-- No description meta tag --&gt;
+&lt;!-- No canonical URL --&gt;</span></div>
+        </span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">What's Needed</span>
+        <span class="val">
+          <strong>Minimum for launch:</strong> Dynamic page titles + description. <strong>Full SEO:</strong> Open Graph + Twitter Card + canonical URLs on every page.
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix — Use react-helmet-async (5 min install)</div>
+        <div class="fix-text">
+          <strong>Step 1:</strong> <code>npm install react-helmet-async</code><br>
+          <strong>Step 2:</strong> Wrap app in <code>&lt;HelmetProvider&gt;</code> in main.jsx.<br>
+          <strong>Step 3:</strong> Add to key pages:
+        </div>
+        <div class="code-block"><span class="comment">// ProductDetail.jsx — dynamic meta per product</span>
+<span class="good">import { Helmet } from 'react-helmet-async';
+
+// Inside component, after product loads:
+&lt;Helmet&gt;
+  &lt;title&gt;{product.name} — Banarasi Kala&lt;/title&gt;
+  &lt;meta name="description" content={product.short_description || product.description} /&gt;
+  &lt;meta property="og:title" content={product.name} /&gt;
+  &lt;meta property="og:description" content={product.short_description} /&gt;
+  &lt;meta property="og:image" content={mainImage} /&gt;
+  &lt;meta property="og:url" content={window.location.href} /&gt;
+  &lt;meta property="og:type" content="product" /&gt;
+&lt;/Helmet&gt;</span>
+
+<span class="comment">// Collection.jsx</span>
+<span class="good">&lt;Helmet&gt;
+  &lt;title&gt;Saree Collection — Banarasi Kala&lt;/title&gt;
+  &lt;meta name="description" content="Shop authentic Banarasi sarees..." /&gt;
+&lt;/Helmet&gt;</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION: P2 BUGS -->
+<div class="page-break"></div>
+<div class="section">
+  <div class="section-title">
+    <h2>P2 — Medium Priority</h2>
+    <span class="section-badge" style="background:#2454a6">Fix in First Sprint Post-Launch</span>
+  </div>
+
+  <!-- BUG F20 -->
+  <div class="bug-card p2">
+    <div class="bug-header">
+      <span class="bug-id p2">BUG-F20</span>
+      <span class="bug-title">Cancel button eligibility logic differs between MyOrders and OrderConfirmation pages for "Shipped" status</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/pages/OrderConfirmation/OrderConfirmation.jsx:62</code> vs <code>frontend/src/pages/MyOrders/MyOrders.jsx:188</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-ux">Inconsistent UX</span> OrderConfirmation blocks cancel for "shipped" status; MyOrders does not. Same order shows cancel button on one page but not the other. Confuses customers.</span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Extract a shared <code>canCancelOrder(order)</code> utility function used by both pages. Also apply BUG-F11 fix (support both camelCase and snake_case date field).</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F21 -->
+  <div class="bug-card p2">
+    <div class="bug-header">
+      <span class="bug-id p2">BUG-F21</span>
+      <span class="bug-title">Optimistic wishlist add stores raw unformatted product — missing wishlistItemId field</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/context/WishlistContext.jsx:76</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-data">Data Inconsistency</span> The optimistic add pushes a raw product object missing <code>wishlistItemId</code>. If the user quickly tries to remove the item before the server refresh completes, the remove operation may fail silently.</span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Code</span>
+        <span class="val">
+          <div class="code-block"><span class="bad">// WishlistContext.jsx:76
+setWishlist(prev => [...prev, product]); // raw product, missing wishlistItemId</span>
+
+<span class="comment">// Correct format (from formatWishlist):</span>
+<span class="good">{ ...product, wishlistItemId: item.id, price: ..., image_url: ... }</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Format the product object before optimistic add, or use a temporary placeholder ID:</div>
+        <div class="code-block"><span class="good">setWishlist(prev => [...prev, {
+  ...product,
+  wishlistItemId: `temp-${product.id}`,
+  price: product.selling_price || product.mrp_price || 0,
+  image_url: getProductCoverImage(product)
+}]);</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F22 -->
+  <div class="bug-card p2">
+    <div class="bug-header">
+      <span class="bug-id p2">BUG-F22</span>
+      <span class="bug-title">CartContext.removeFromCart has no rollback — if API call fails, item is permanently removed from UI</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/context/CartContext.jsx:103-111</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-data">Data Integrity</span> On network failure or server error, the item appears removed from the cart UI but is still in the backend. Customer thinks item was removed but is still charged for it at checkout.</span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Save previous state and restore on error:</div>
+        <div class="code-block"><span class="good">const removeFromCart = async (productId, colorId = null) => {
+  if (!user) return;
+  const previousCart = cart; // Save before optimistic update
+  setCart(prev => prev.filter(item => !(item.id === productId && item.colorId === colorId)));
+  try {
+    await api.delete(`${API_ENDPOINTS.cart}/${productId}`, { params: { colorId } });
+  } catch (error) {
+    setCart(previousCart); // Rollback on failure
+    showNotification("Could not remove item. Please try again.", "error");
+  }
+};</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F23 -->
+  <div class="bug-card p2">
+    <div class="bug-header">
+      <span class="bug-id p2">BUG-F23</span>
+      <span class="bug-title">Buy Now coupon fetch uses bare fetch() without auth headers — coupons may fail to load</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/pages/ProductDetail/ProductDetail.jsx:598-599</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-ux">Feature Gap</span> Coupons silently fail to load in the Buy Now modal if the endpoint requires auth. Customer sees no coupons even when they have valid ones.</span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Use the <code>api</code> axios instance which auto-adds auth headers:</div>
+        <div class="code-block"><span class="bad">fetch(API_ENDPOINTS.coupons).then(res => res.ok ? res.json() : []).catch(() => []),</span>
+<span class="good">api.get(API_ENDPOINTS.coupons).then(res => Array.isArray(res.data) ? res.data : []).catch(() => []),</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F24 -->
+  <div class="bug-card p2">
+    <div class="bug-header">
+      <span class="bug-id p2">BUG-F24</span>
+      <span class="bug-title">Product page shows "not available" for ALL errors including 500/network errors — misleads customers</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/pages/ProductDetail/ProductDetail.jsx:183-211</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-ux">UX Mislead</span> A 500 server error or network timeout shows "This product is no longer available" — customers think the product is discontinued and may leave instead of retrying.</span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Distinguish between 404 (product not found) and other errors:</div>
+        <div class="code-block"><span class="good">if (!prodRes.ok) {
+  if (prodRes.status === 404) throw new Error("NOT_FOUND");
+  throw new Error("SERVER_ERROR");
+}
+// In render:
+if (!product) {
+  const isNotFound = error === "NOT_FOUND";
+  return &lt;div&gt;{isNotFound
+    ? "This product is no longer available."
+    : "Unable to load product right now. Please try again."}&lt;/div&gt;;
+}</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG A03 -->
+  <div class="bug-card p2">
+    <div class="bug-header">
+      <span class="bug-id p2">BUG-A03</span>
+      <span class="bug-title">Admin orders table loads ALL orders with no pagination — performance disaster at scale</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>admin_frontend/src/pages/Orders/Orders.jsx:95-112</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-ux">Performance</span> With 100+ orders, the browser must render an enormous table. With 1000+ orders, the page will become unusable (slow, high memory, laggy filter/search). No count is shown so admin doesn't even know how many orders exist.</span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Add server-side pagination (page, limit params) and implement a paginator UI. Pass page number and page size to the API, display navigation controls.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG A04 -->
+  <div class="bug-card p2">
+    <div class="bug-header">
+      <span class="bug-id p2">BUG-A04</span>
+      <span class="bug-title">Admin Products page fetches colors/materials/varieties/occasions without auth headers</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>admin_frontend/src/pages/Products/Products.jsx:89-100</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-ux">Feature Broken</span> Dropdown data (colors, fabrics, varieties, occasions) fails to load if backend requires auth. Admin cannot add/edit products.</span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Create a shared <code>adminFetch(url)</code> utility or use a shared axios instance with admin auth headers. Apply to all data fetching in admin pages.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG A05 -->
+  <div class="bug-card p2">
+    <div class="bug-header">
+      <span class="bug-id p2">BUG-A05</span>
+      <span class="bug-title">Admin Orders useEffect missing loadOrders in dependency array — stale closure can cause outdated data display</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>admin_frontend/src/pages/Orders/Orders.jsx:114-116</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-data">Stale Data</span> <code>loadOrders</code> captures <code>filters</code> via closure at the time of last render. The useEffect only re-fires when <code>filters.status</code> or <code>filters.paymentMethod</code> changes, not <code>filters.customer</code>.</span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Wrap <code>loadOrders</code> with <code>useCallback</code> and add it to the dependency array, or add all filter fields to the useEffect deps:</div>
+        <div class="code-block"><span class="good">const loadOrders = useCallback(async () => { ... }, [filters]);
+useEffect(() => { loadOrders(); }, [loadOrders]);</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG A06 -->
+  <div class="bug-card p2">
+    <div class="bug-header">
+      <span class="bug-id p2">BUG-A06</span>
+      <span class="bug-title">No 404 catch-all route in admin panel — unknown URLs silently render nothing</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>admin_frontend/src/App.jsx</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-ux">UX</span> Navigating to an unknown admin URL (e.g., <code>/admin/invalid</code>) renders a blank page with the sidebar but no content, giving no feedback to the user.</span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Add a catch-all 404 route:</div>
+        <div class="code-block"><span class="good">&lt;Route path="*" element={&lt;Navigate to="/dashboard" replace /&gt;} /&gt;</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG A07 -->
+  <div class="bug-card p2">
+    <div class="bug-header">
+      <span class="bug-id p2">BUG-A07</span>
+      <span class="bug-title">Admin session never expires — token in localStorage persists indefinitely with no timeout</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>admin_frontend/src/pages/Auth/Login.jsx</code> + <code>admin_frontend/src/layout/Layout.jsx</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val"><span class="impact-badge impact-security">Security Risk</span> If an admin leaves their browser open (or doesn't log out), the session remains valid forever. If the device is stolen or left unlocked, an attacker has perpetual admin access.</span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Implement either: (A) Short JWT expiry on the backend (e.g., 8 hours), (B) Store login time and check elapsed time in AdminProtectedRoute, redirecting to login after timeout, (C) Add "Remember me" option, defaulting to sessionStorage for admin tokens.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- BUG F30 -->
+  <div class="bug-card p2">
+    <div class="bug-header">
+      <span class="bug-id p2">BUG-F30</span>
+      <span class="bug-title">No 404 page in frontend — unknown URLs show a blank screen with sidebar but zero content</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row">
+        <span class="lbl">File</span>
+        <span class="val"><code>frontend/src/App.jsx</code></span>
+      </div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">
+          <span class="impact-badge impact-ux">UX</span>
+          Typing any unknown URL (e.g., <code>/about-us</code>, <code>/my-account</code>, <code>/track</code>) renders a completely blank page inside the Layout shell. No message, no navigation prompt, no way back for the user. Direct links from old bookmarks, social posts, or mistyped URLs silently dead-end.
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Add a catch-all route as the last route in App.jsx:</div>
+        <div class="code-block"><span class="comment">// App.jsx — add as the LAST route inside &lt;Route element={&lt;Layout /&gt;}&gt;</span>
+<span class="good">&lt;Route path="*" element={
+  &lt;div style={{ textAlign: "center", padding: "80px 20px" }}&gt;
+    &lt;h2&gt;Page Not Found&lt;/h2&gt;
+    &lt;p&gt;The page you're looking for doesn't exist.&lt;/p&gt;
+    &lt;Link to="/"&gt;Go back home&lt;/Link&gt;
+  &lt;/div&gt;
+} /&gt;</span>
+<span class="comment">// Or create a dedicated NotFound.jsx page component</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION: P3 BUGS -->
+<div class="page-break"></div>
+<div class="section">
+  <div class="section-title">
+    <h2>P3 — Low Priority</h2>
+    <span class="section-badge" style="background:#087a55">Fix When Convenient</span>
+  </div>
+
+  <!-- BUG F25 -->
+  <div class="bug-card p3">
+    <div class="bug-header">
+      <span class="bug-id p3">BUG-F25</span>
+      <span class="bug-title">Contact and Feedback routes wrapped in ProtectedRoute — forces login for public pages</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/App.jsx:117-130</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">Guests who want to contact support or leave feedback are forced to create an account. Reduces conversion and increases customer frustration.</span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Remove <code>&lt;ProtectedRoute&gt;</code> wrappers from Contact and Feedback routes. (Note: Contact is also currently deleted — fix BUG-F01 first.)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F26 -->
+  <div class="bug-card p3">
+    <div class="bug-header">
+      <span class="bug-id p3">BUG-F26</span>
+      <span class="bug-title">getSortedImages called multiple times per render in ProductDetail without memoization</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/pages/ProductDetail/ProductDetail.jsx:145-156</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">Minor performance: <code>getSortedImages</code> creates a Map and sorts on every render. Called in multiple places. Causes unnecessary CPU work on image-heavy product pages.</span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Wrap the sorted images computation in <code>useMemo</code> so it's only recalculated when product data changes.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG F27 -->
+  <div class="bug-card p3">
+    <div class="bug-header">
+      <span class="bug-id p3">BUG-F27</span>
+      <span class="bug-title">App loading state is tied to setTimeout, not actual resource or auth loading</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/App.jsx:33-43</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">On slow connections, the 2-second loader may hide real loading issues. On fast connections, content is ready instantly but loader still plays for 2s.</span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Tie the loading state to AuthContext's <code>loading</code> flag (which completes when localStorage is read) rather than a fixed timer.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BUG A08 -->
+  <div class="bug-card p3">
+    <div class="bug-header">
+      <span class="bug-id p3">BUG-A08</span>
+      <span class="bug-title">Typo in admin login copyright: "Banaras Kala" should be "Banarasi Kala"</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>admin_frontend/src/pages/Auth/Login.jsx:122</code></span></div>
+      <div class="fix-box"><div class="fix-title">Fix</div><div class="fix-text">Change <code>"Banaras Kala"</code> to <code>"Banarasi Kala"</code>.</div></div>
+    </div>
+  </div>
+
+  <!-- BUG A09 -->
+  <div class="bug-card p3">
+    <div class="bug-header">
+      <span class="bug-id p3">BUG-A09</span>
+      <span class="bug-title">Admin header shows hardcoded "Admin User" avatar — doesn't reflect logged-in admin's actual name</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>admin_frontend/src/layout/Header.jsx</code></span></div>
+      <div class="fix-box"><div class="fix-title">Fix</div><div class="fix-text">Read admin name from <code>localStorage.getItem('admin_user')</code> and use it in the avatar URL and display name.</div></div>
+    </div>
+  </div>
+
+  <!-- BUG A10 -->
+  <div class="bug-card p3">
+    <div class="bug-header">
+      <span class="bug-id p3">BUG-A10</span>
+      <span class="bug-title">Admin forgot-password flow uses /verify-otp endpoint which may not exist — inconsistent with customer OTP flow</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>admin_frontend/src/pages/Auth/Login.jsx:73</code></span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">Customer auth uses <code>/verify-email-otp</code> endpoint. Admin uses <code>/verify-otp</code>. These may be different backend routes. If <code>/verify-otp</code> doesn't exist or is deprecated, admin password reset is broken.</span>
+      </div>
+      <div class="fix-box"><div class="fix-title">Fix</div><div class="fix-text">Verify the admin OTP endpoint exists in the backend. If using the same endpoint as customer, align the API call. Test the full forgot-password flow in admin panel end-to-end.</div></div>
+    </div>
+  </div>
+
+  <!-- BUG F32 -->
+  <div class="bug-card p3">
+    <div class="bug-header">
+      <span class="bug-id p3">BUG-F32</span>
+      <span class="bug-title">Product and cart images have empty or missing alt text — accessibility and SEO penalty on every product</span>
+    </div>
+    <div class="bug-body">
+      <div class="bug-row"><span class="lbl">File</span><span class="val"><code>frontend/src/pages/ProductDetail/ProductDetail.jsx</code>, <code>Cart.jsx</code>, <code>Collection.jsx</code>, <code>Home/</code> components</span></div>
+      <div class="bug-row">
+        <span class="lbl">Impact</span>
+        <span class="val">
+          <span class="impact-badge impact-ux">SEO / Accessibility</span>
+          Empty <code>alt=""</code> is used throughout (e.g., thumbnail images in ProductDetail, review images). Screen reader users get no product context. Google Image Search cannot index product images. Lighthouse accessibility score will be low, affecting overall SEO ranking.
+          <div class="code-block"><span class="bad">&lt;img src={image.url} alt="" /&gt;  {/* ProductDetail.jsx:1159 — thumbnail */}
+&lt;img src={image.url} alt="Uploaded product photo" /&gt; {/* generic, not descriptive */}</span></div>
+        </span>
+      </div>
+      <div class="fix-box">
+        <div class="fix-title">Fix</div>
+        <div class="fix-text">Add meaningful alt text to all product images. Only use <code>alt=""</code> for purely decorative images:</div>
+        <div class="code-block"><span class="comment">// Thumbnail buttons in gallery — should describe the image:</span>
+<span class="good">&lt;img src={image.url} alt={`${productName} — view ${index + 1}`} /&gt;</span>
+
+<span class="comment">// Main product image:</span>
+<span class="good">&lt;img src={mainImage} alt={`${productName} in ${selectedColor?.name}`} /&gt;</span>
+
+<span class="comment">// Cart items:</span>
+<span class="good">&lt;img src={item.image_url} alt={item.name} /&gt;</span>
+
+<span class="comment">// Review photos:</span>
+<span class="good">&lt;img src={image.url} alt={`Customer review photo for ${productName}`} /&gt;</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SECTION: END-TO-END FLOW ANALYSIS -->
+<div class="page-break"></div>
+<div class="section">
+  <div class="section-title"><h2>End-to-End Flow Analysis</h2></div>
+
+  <h3>Customer Journey: Browse → Add to Cart → Checkout → Payment</h3>
+
+  <table class="priority-table">
+    <thead>
+      <tr><th>Step</th><th>Component</th><th>Status</th><th>Bug(s)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>0. App startup (env missing)</td><td>env.js + all modules</td><td style="color:#b42318">✗ App won't load</td><td>BUG-F31</td></tr>
+      <tr><td>1. Land on Home</td><td>App.jsx + Home.jsx</td><td style="color:#d97706">⚠ 2s delay</td><td>BUG-F07</td></tr>
+      <tr><td>2. Browse Collection</td><td>Collection.jsx</td><td style="color:#087a55">✓ OK</td><td>—</td></tr>
+      <tr><td>3. View Product Detail</td><td>ProductDetail.jsx</td><td style="color:#d97706">⚠ Spec dup, weight bug</td><td>BUG-F12, BUG-F14</td></tr>
+      <tr><td>4. Share product link on WhatsApp</td><td>index.html (no OG tags)</td><td style="color:#b42318">✗ Blank preview card</td><td>BUG-F29</td></tr>
+      <tr><td>5. Select Color</td><td>ProductDetail.jsx</td><td style="color:#087a55">✓ OK</td><td>—</td></tr>
+      <tr><td>6. Add to Cart</td><td>CartContext.jsx</td><td style="color:#087a55">✓ OK</td><td>—</td></tr>
+      <tr><td>7. Move to Wishlist from Cart</td><td>Cart.jsx</td><td style="color:#b42318">✗ CRASH</td><td>BUG-F06</td></tr>
+      <tr><td>8. View Cart</td><td>Cart.jsx</td><td style="color:#087a55">✓ OK</td><td>—</td></tr>
+      <tr><td>9. Proceed to Checkout</td><td>Checkout.jsx</td><td style="color:#d97706">⚠ Weight wrong</td><td>BUG-F08, BUG-F19</td></tr>
+      <tr><td>10. Apply Coupon in Checkout</td><td>Checkout.jsx</td><td style="color:#d97706">⚠ Dual engine</td><td>BUG-F13</td></tr>
+      <tr><td>11. Place COD Order</td><td>Checkout.jsx</td><td style="color:#d97706">⚠ Redirect race</td><td>BUG-F16</td></tr>
+      <tr><td>12. Pay Online (Razorpay)</td><td>Checkout.jsx</td><td style="color:#b42318">✗ May fail (no auth)</td><td>BUG-F04</td></tr>
+      <tr><td>13. Buy Now → Online Pay</td><td>ProductDetail.jsx</td><td style="color:#b42318">✗ May fail (no auth)</td><td>BUG-F05</td></tr>
+      <tr><td>14. Order Confirmation</td><td>OrderConfirmation.jsx</td><td style="color:#087a55">✓ OK</td><td>—</td></tr>
+      <tr><td>15. View My Orders</td><td>MyOrders.jsx</td><td style="color:#d97706">⚠ Cancel always hidden</td><td>BUG-F11</td></tr>
+      <tr><td>16. Cancel Order</td><td>MyOrders.jsx</td><td style="color:#d97706">⚠ Inconsistent logic</td><td>BUG-F11, BUG-F20</td></tr>
+      <tr><td>17. Visit /contact</td><td>Contact.jsx (deleted)</td><td style="color:#b42318">✗ CRASH</td><td>BUG-F01</td></tr>
+      <tr><td>18. Visit unknown URL</td><td>App.jsx (no 404 route)</td><td style="color:#d97706">⚠ Blank page</td><td>BUG-F30</td></tr>
+      <tr><td>19. Any page throws JS error</td><td>App.jsx (no ErrorBoundary)</td><td style="color:#b42318">✗ Full app crash</td><td>BUG-F28</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin-top:24px;">Admin Journey: Login → View Orders → Update Status</h3>
+
+  <table class="priority-table">
+    <thead>
+      <tr><th>Step</th><th>Component</th><th>Status</th><th>Bug(s)</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1. Visit Admin URL without login</td><td>App.jsx + Layout.jsx</td><td style="color:#b42318">✗ SECURITY BREACH</td><td>BUG-A01</td></tr>
+      <tr><td>2. Admin Login</td><td>Login.jsx</td><td style="color:#d97706">⚠ Token key conflict</td><td>BUG-A02</td></tr>
+      <tr><td>3. View Dashboard</td><td>Dashboard.jsx</td><td style="color:#087a55">✓ OK (if logged in)</td><td>—</td></tr>
+      <tr><td>4. View All Orders</td><td>Orders.jsx</td><td style="color:#d97706">⚠ No pagination, all orders loaded</td><td>BUG-A03</td></tr>
+      <tr><td>5. Update Order Status</td><td>Orders.jsx</td><td style="color:#087a55">✓ OK</td><td>—</td></tr>
+      <tr><td>6. Add/Edit Product</td><td>Products.jsx</td><td style="color:#d97706">⚠ Dropdowns may fail (no auth)</td><td>BUG-A04</td></tr>
+      <tr><td>7. Forgot Admin Password</td><td>Login.jsx</td><td style="color:#d97706">⚠ OTP endpoint uncertain</td><td>BUG-A10</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- SECTION: FIX ORDER -->
+<div class="section">
+  <div class="section-title"><h2>Recommended Fix Order</h2></div>
+
+  <div class="info-box">
+    Fix bugs in this exact order to avoid breaking dependencies. Each step builds on the previous.
+  </div>
+
+  <h3>Phase 1 — Before Any Testing (2-3 hours)</h3>
+  <table class="priority-table">
+    <thead><tr><th>#</th><th>Bug ID</th><th>Fix</th><th>Time Est.</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>BUG-F31</td><td>Create .env.production with all VITE_* values + add pre-build env check script</td><td>20 min</td></tr>
+      <tr><td>2</td><td>BUG-F01</td><td>Restore or remove deleted Contact.jsx + clean up App.jsx route</td><td>15 min</td></tr>
+      <tr><td>3</td><td>BUG-F06</td><td>Fix Cart.jsx: replace addToWishlist with toggleWishlist</td><td>5 min</td></tr>
+      <tr><td>4</td><td>BUG-F03</td><td>Add return to api.js request interceptor error handler</td><td>2 min</td></tr>
+      <tr><td>5</td><td>BUG-F02</td><td>Wrap JSON.parse in AuthContext with try/catch</td><td>5 min</td></tr>
+      <tr><td>6</td><td>BUG-A01</td><td>Add AdminProtectedRoute and wrap all admin routes</td><td>30 min</td></tr>
+      <tr><td>7</td><td>BUG-F28</td><td>Wrap all lazy routes in App.jsx with existing ErrorBoundary component</td><td>10 min</td></tr>
+      <tr><td>8</td><td>BUG-F07</td><td>Reduce or remove 2-second startup delay</td><td>2 min</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Phase 2 — Before Payment Testing (2-3 hours)</h3>
+  <table class="priority-table">
+    <thead><tr><th>#</th><th>Bug ID</th><th>Fix</th><th>Time Est.</th></tr></thead>
+    <tbody>
+      <tr><td>7</td><td>BUG-F04</td><td>Add auth headers to Checkout.jsx Razorpay fetch calls</td><td>10 min</td></tr>
+      <tr><td>8</td><td>BUG-F05</td><td>Add auth headers to ProductDetail.jsx Razorpay fetch calls</td><td>10 min</td></tr>
+      <tr><td>9</td><td>BUG-F16</td><td>Swap clearCart() and navigate() order in COD flow</td><td>5 min</td></tr>
+      <tr><td>10</td><td>BUG-F08</td><td>Fix Checkout.jsx weight calculation to include product weight</td><td>15 min</td></tr>
+      <tr><td>11</td><td>BUG-F15</td><td>Add payment_options check to Buy Now COD logic</td><td>10 min</td></tr>
+      <tr><td>12</td><td>BUG-F19</td><td>Fix isFirstOrder check for API response wrapper</td><td>5 min</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Phase 3 — Before Full QA (3-4 hours)</h3>
+  <table class="priority-table">
+    <thead><tr><th>#</th><th>Bug ID</th><th>Fix</th><th>Time Est.</th></tr></thead>
+    <tbody>
+      <tr><td>13</td><td>BUG-F29</td><td>Install react-helmet-async, add meta + Open Graph tags to Product, Collection, Home, Auth pages</td><td>45 min</td></tr>
+      <tr><td>14</td><td>BUG-F30</td><td>Add 404 catch-all route in frontend App.jsx</td><td>10 min</td></tr>
+      <tr><td>15</td><td>BUG-F11</td><td>Fix canCancelOrder to support both createdAt and created_at</td><td>10 min</td></tr>
+      <tr><td>16</td><td>BUG-F10</td><td>Fix removeFromWishlist type coercion</td><td>3 min</td></tr>
+      <tr><td>17</td><td>BUG-F14</td><td>Remove duplicate Fabric/Material spec row</td><td>3 min</td></tr>
+      <tr><td>18</td><td>BUG-F12</td><td>Fix or standardize weight unit in ProductDetail</td><td>10 min</td></tr>
+      <tr><td>19</td><td>BUG-F17</td><td>Fix phone validation regex</td><td>5 min</td></tr>
+      <tr><td>20</td><td>BUG-A02</td><td>Change admin token storage key to admin_token</td><td>10 min</td></tr>
+      <tr><td>21</td><td>BUG-A04</td><td>Add auth headers to admin Products fetch calls</td><td>20 min</td></tr>
+      <tr><td>22</td><td>BUG-F22</td><td>Add rollback to CartContext removeFromCart</td><td>10 min</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Phase 4 — Post-Launch Sprint (after go-live)</h3>
+  <table class="priority-table">
+    <thead><tr><th>#</th><th>Bug ID</th><th>Fix</th></tr></thead>
+    <tbody>
+      <tr><td>21</td><td>BUG-F13</td><td>Unify coupon calculation into a shared utility function</td></tr>
+      <tr><td>22</td><td>BUG-F20</td><td>Extract shared canCancelOrder utility used by both pages</td></tr>
+      <tr><td>23</td><td>BUG-F23</td><td>Fix Buy Now coupon fetch to use api instance</td></tr>
+      <tr><td>24</td><td>BUG-F24</td><td>Distinguish 404 vs server error in product page</td></tr>
+      <tr><td>25</td><td>BUG-A03</td><td>Add pagination to admin orders table</td></tr>
+      <tr><td>26</td><td>BUG-A05</td><td>Add useCallback and proper deps to admin Orders useEffect</td></tr>
+      <tr><td>27</td><td>BUG-A07</td><td>Add admin session expiry mechanism</td></tr>
+      <tr><td>29-41</td><td>P3 bugs</td><td>F25, F26, F27, F32, A06, A08, A09, A10, F18, F21</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- FOOTER -->
+<div class="report-footer">
+  <p><strong style="color:#D4AF37">Banarasi Kala — Production Bug Report</strong> &nbsp;|&nbsp; Generated by Claude Code Full Audit &nbsp;|&nbsp; 30 May 2026</p>
+  <p style="margin-top:6px;">Total: 41 bugs found across frontend/ and admin_frontend/ &nbsp;·&nbsp; 9 P0 Critical &nbsp;·&nbsp; 14 P1 High &nbsp;·&nbsp; 11 P2 Medium &nbsp;·&nbsp; 7 P3 Low</p>
+</div>
+
+</body>
+</html>

@@ -73,7 +73,11 @@ export const WishlistProvider = ({ children }) => {
     if (currentlyIn) {
       setWishlist(prev => prev.filter(item => Number(item.id) !== pId));
     } else {
-      setWishlist(prev => [...prev, product]);
+      setWishlist(prev => [...prev, {
+        ...product,
+        price: product.selling_price || product.mrp_price || product.price || 0,
+        image_url: getProductCoverImage(product) || product.image_url || "",
+      }]);
     }
 
     setProcessingIds(prev => new Set(prev).add(pId));

@@ -83,6 +83,18 @@ const getAddressLine = (address = {}) =>
     .filter(Boolean)
     .join(", ");
 
+const getSortedImages = (targetProduct) => {
+  const unique = Array.from(
+    new Map(
+      getProductImages(targetProduct || {})
+        .map((image) => (typeof image === "string" ? { url: image } : image))
+        .filter((image) => image?.url)
+        .map((image) => [image.url, image]),
+    ).values(),
+  );
+  return unique.sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0));
+};
+
 const ProductDetail = () => {
   const { slug } = useParams();
   const navigate = useNavigate();
@@ -99,6 +111,7 @@ const ProductDetail = () => {
   const [reviewSummary, setReviewSummary] = useState({ average: 0, count: 0 });
   const [reviewGalleryIndex, setReviewGalleryIndex] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [productError, setProductError] = useState(null);
   const [mainImage, setMainImage] = useState("");
   const [selectedColorId, setSelectedColorId] = useState(null);
   const [colorImagesById, setColorImagesById] = useState({});
@@ -142,19 +155,6 @@ const ProductDetail = () => {
   const perspectiveRef = useRef(null);
   const rootRef = useRef(null);
 
-  const getSortedImages = (targetProduct = product) => {
-    const unique = Array.from(
-      new Map(
-        getProductImages(targetProduct || {})
-          .map((image) => (typeof image === "string" ? { url: image } : image))
-          .filter((image) => image?.url)
-          .map((image) => [image.url, image]),
-      ).values(),
-    );
-
-    return unique.sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0));
-  };
-
   const getCoverColorId = (targetProduct = product) => {
     const images = getSortedImages(targetProduct);
     return images.find((image) => image.is_cover)?.color_id || images[0]?.color_id || null;
@@ -185,7 +185,8 @@ const ProductDetail = () => {
           fetch(`${API_ENDPOINTS.products}?view=collection&limit=5&status=active`),
         ]);
 
-        if (!prodRes.ok) throw new Error("Product not found");
+        if (prodRes.status === 404) { setProductError("not_found"); return; }
+        if (!prodRes.ok) { setProductError("error"); return; }
 
         const [prodData, relatedData] = await Promise.all([
           prodRes.json(),
@@ -205,7 +206,7 @@ const ProductDetail = () => {
         if (initialColorId && String(searchParams.get("color")) !== String(initialColorId)) updateColorInUrl(initialColorId, true);
       } catch (error) {
         console.error("Error fetching product:", error);
-        setProduct(null);
+        setProductError("error");
       } finally {
         setLoading(false);
       }
@@ -338,7 +339,8 @@ const ProductDetail = () => {
   const buyNowSubtotal = Number(product?.selling_price || 0) * Math.max(1, Number(quantity || 1));
   const selectedBuyNowAddress = buyNowAddresses.find((address) => String(address.id) === String(selectedBuyNowAddressId));
   const canUsePrepaid = true;
-  const canUseCod = buyNowSubtotal <= COD_MAX_AMOUNT;
+  const isProductCodAllowed = !Array.isArray(product?.payment_options) || product.payment_options.includes("cod");
+  const canUseCod = isProductCodAllowed && buyNowSubtotal <= COD_MAX_AMOUNT;
   const buyNowShippingRate = Number(buyNowShipping?.rate || 0);
   const qualifiesForFreeShipping = buyNowShippingRate > 0;
   const shippingDiscountReasonCode = buyNowShippingRate > 0 ? (isFirstOrder ? "first_order" : "free_delivery") : null;
@@ -596,7 +598,7 @@ const ProductDetail = () => {
         api.get("/api/addresses"),
         user ? api.get("/api/orders/my").then((res) => res.data).catch(() => []) : Promise.resolve([]),
         api.get("/api/wallet").catch(() => ({ data: { wallet_balance: 0 } })),
-        fetch(API_ENDPOINTS.coupons).then((res) => (res.ok ? res.json() : [])).catch(() => []),
+        api.get(API_ENDPOINTS.coupons).then((res) => (Array.isArray(res.data) ? res.data : [])).catch(() => []),
       ]);
       const addresses = Array.isArray(addressRes.data) ? addressRes.data.map(cleanAddress) : [];
       const defaultAddress = addresses.find((address) => address.is_default) || addresses[0];
@@ -864,13 +866,9 @@ const ProductDetail = () => {
         throw new Error("Payment gateway is still loading. Please try again.");
       }
 
-      const orderResponse = await fetch(API_ENDPOINTS.razorpay.createOrder, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: buyNowTotal }),
-      });
-      const razorpayOrder = await orderResponse.json();
-      if (!orderResponse.ok) throw new Error(razorpayOrder.message || "Unable to start payment.");
+      const orderResponse = await api.post(API_ENDPOINTS.razorpay.createOrder, { amount: buyNowTotal });
+      const razorpayOrder = orderResponse.data;
+      if (!orderResponse.status || orderResponse.status >= 400) throw new Error(razorpayOrder.message || "Unable to start payment.");
 
       const razorpay = new window.Razorpay({
         key: requiredEnv("VITE_RAZORPAY_KEY_ID"),
@@ -887,13 +885,9 @@ const ProductDetail = () => {
         theme: { color: "#800020" },
         handler: async (response) => {
           try {
-            const verifyRes = await fetch(API_ENDPOINTS.razorpay.verifyPayment, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(response),
-            });
-            const verifyData = await verifyRes.json();
-            if (!verifyRes.ok || !verifyData.success) throw new Error(verifyData.message || "Payment verification failed.");
+            const verifyRes = await api.post(API_ENDPOINTS.razorpay.verifyPayment, response);
+            const verifyData = verifyRes.data;
+            if (!verifyData.success) throw new Error(verifyData.message || "Payment verification failed.");
             const created = await createBuyNowOrder({
               ...orderData,
               payment_gateway: "razorpay",
@@ -998,7 +992,6 @@ const ProductDetail = () => {
         ["SKU", selectedSku],
         ["Variety", product.Variety?.name],
         ["Material", product.Material?.name],
-        ["Fabric", product.Material?.name],
         ["Occasion", product.Occasion?.name],
         ["Length", product.length ? `${formatNumber(product.length)} m` : ""],
         ["Width", product.width ? `${formatNumber(product.width)} m` : ""],
@@ -1055,11 +1048,13 @@ const ProductDetail = () => {
     );
   }
 
-  if (!product) {
+  if (productError) {
     return (
       <div className="product-detail-page product-detail-loading">
         <div className="text-center">
-          <p className="serif-text italic text-2xl text-[#800020] mb-4">This product is no longer available.</p>
+          <p className="serif-text italic text-2xl text-[#800020] mb-4">
+            {productError === "not_found" ? "This product is no longer available." : "Something went wrong. Please try again."}
+          </p>
           <Link to="/collection" className="text-[#800020] font-bold uppercase tracking-widest border-b border-[#800020]">
             Return to Collection
           </Link>

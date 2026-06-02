@@ -269,7 +269,7 @@ const Order = sequelize.define('Order', {
   tableName: 'orders',
   schema: 'vns_saree',
   timestamps: true,
-  underscored: true
+  underscored: true,
 });
 
 module.exports = Order;

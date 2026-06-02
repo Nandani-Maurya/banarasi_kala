@@ -30,8 +30,12 @@ export const AuthProvider = ({ children }) => {
       localStorage.getItem('accessToken') || sessionStorage.getItem('accessToken');
     
     if (storedUser && token) {
-      setUser(JSON.parse(storedUser));
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      try {
+        setUser(JSON.parse(storedUser));
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      } catch {
+        clearStoredAuth();
+      }
     }
     setLoading(false);
   }, []);

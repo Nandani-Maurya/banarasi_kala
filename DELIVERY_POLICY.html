@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Banarasi Kala — Delivery & Order Policy Document</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f1ec; color: #2d2218; font-size: 13px; line-height: 1.6; }
+
+  /* Cover */
+  .cover { background: #800020; color: #fff; padding: 60px 80px 50px; }
+  .cover .brand { font-size: 36px; font-weight: 800; letter-spacing: 2px; color: #D4AF37; margin-bottom: 6px; }
+  .cover .sub { font-size: 11px; letter-spacing: 4px; text-transform: uppercase; color: #f0c45e; margin-bottom: 40px; }
+  .cover h1 { font-size: 28px; font-weight: 700; margin-bottom: 10px; }
+  .cover p { font-size: 13px; color: #f5d8d8; margin-top: 8px; }
+  .cover .meta { margin-top: 30px; font-size: 11px; color: #e0bebe; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 16px; }
+
+  /* Layout */
+  .page { max-width: 960px; margin: 0 auto; padding: 0 40px 60px; }
+
+  /* Section headers */
+  .section-title {
+    margin-top: 48px; margin-bottom: 20px;
+    padding: 12px 20px; background: #800020; color: #fff;
+    font-size: 15px; font-weight: 700; letter-spacing: 1px;
+    border-left: 6px solid #D4AF37;
+    page-break-before: auto;
+  }
+  .section-subtitle {
+    margin-top: 28px; margin-bottom: 12px;
+    font-size: 13px; font-weight: 700; color: #800020;
+    border-bottom: 2px solid #D4AF37; padding-bottom: 4px;
+  }
+
+  /* Cards */
+  .card { background: #fff; border: 1px solid #e0d8cc; border-radius: 6px; padding: 18px 22px; margin-bottom: 14px; }
+  .card-title { font-weight: 700; font-size: 13px; margin-bottom: 8px; color: #3d2817; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin-bottom: 18px; background: #fff; }
+  th { background: #3d2817; color: #D4AF37; padding: 9px 12px; font-size: 11px; text-align: left; letter-spacing: 0.5px; }
+  td { padding: 8px 12px; border-bottom: 1px solid #e8e2d8; vertical-align: top; font-size: 12px; }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: #faf7f2; }
+
+  /* Badges */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 700; letter-spacing: 0.5px; }
+  .badge-green { background: #d4edda; color: #155724; }
+  .badge-red { background: #f8d7da; color: #721c24; }
+  .badge-yellow { background: #fff3cd; color: #856404; }
+  .badge-blue { background: #d1ecf1; color: #0c5460; }
+  .badge-grey { background: #e2e3e5; color: #383d41; }
+
+  /* Flow diagrams */
+  .flow { display: flex; align-items: flex-start; gap: 0; margin: 16px 0; flex-wrap: wrap; }
+  .flow-step {
+    flex: 1; min-width: 100px; background: #fff; border: 1px solid #d4c9b8;
+    border-radius: 6px; padding: 10px 12px; text-align: center; font-size: 11px;
+    position: relative;
+  }
+  .flow-step .step-label { font-weight: 700; color: #800020; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .flow-arrow { display: flex; align-items: center; padding: 0 6px; color: #800020; font-size: 18px; font-weight: 700; }
+  .flow-branch { background: #fff3cd; border-color: #D4AF37; }
+  .flow-end { background: #fdf0f0; border-color: #800020; }
+
+  /* Option boxes */
+  .option-box { border: 2px solid #D4AF37; border-radius: 8px; padding: 16px 20px; margin-bottom: 14px; background: #fff; }
+  .option-box h4 { color: #800020; font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+  .option-box ul { padding-left: 18px; }
+  .option-box li { margin-bottom: 6px; font-size: 12px; }
+
+  /* Alert boxes */
+  .alert { padding: 12px 16px; border-radius: 6px; margin-bottom: 14px; font-size: 12px; }
+  .alert-warning { background: #fff3cd; border-left: 4px solid #ffc107; }
+  .alert-danger { background: #f8d7da; border-left: 4px solid #dc3545; }
+  .alert-info { background: #d1ecf1; border-left: 4px solid #17a2b8; }
+  .alert-success { background: #d4edda; border-left: 4px solid #28a745; }
+  .alert strong { font-weight: 700; }
+
+  /* Code blocks */
+  .code-ref { background: #f4f1ec; border: 1px solid #d4c9b8; border-radius: 4px; padding: 2px 6px; font-family: 'Courier New', monospace; font-size: 11px; color: #4a3f35; }
+
+  /* Lists */
+  ul.policy-list { padding-left: 20px; margin-bottom: 12px; }
+  ul.policy-list li { margin-bottom: 6px; font-size: 12px; }
+
+  /* Two-col grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+
+  /* Gap indicator */
+  .gap-tag { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; vertical-align: middle; margin-left: 6px; }
+  .impl-tag { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; border-radius: 4px; padding: 1px 6px; font-size: 10px; font-weight: 700; vertical-align: middle; margin-left: 6px; }
+
+  /* Divider */
+  .divider { border: none; border-top: 1px solid #e0d8cc; margin: 28px 0; }
+
+  /* TOC */
+  .toc { background: #fff; border: 1px solid #e0d8cc; border-radius: 6px; padding: 20px 24px; margin: 24px 0; }
+  .toc h2 { font-size: 14px; font-weight: 700; color: #800020; margin-bottom: 12px; }
+  .toc ol { padding-left: 20px; }
+  .toc li { margin-bottom: 6px; font-size: 12px; color: #4a3f35; }
+  .toc li span { color: #999; font-size: 11px; margin-left: 6px; }
+
+  @media print {
+    body { background: #fff; }
+    .cover { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .section-title { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════ COVER ═══ -->
+<div class="cover">
+  <div class="brand">Banarasi Kala</div>
+  <div class="sub">Heritage Saree Store</div>
+  <h1>Delivery, Order Lifecycle &amp; Policy Document</h1>
+  <p>Cart &amp; Quantity Management Implementation Review + Full Business Policy</p>
+  <div class="meta">
+    Version 1.0 &nbsp;·&nbsp; Generated: June 2026 &nbsp;·&nbsp;
+    Scope: Frontend (React) + Backend (Node.js / Sequelize)
+  </div>
+</div>
+
+<div class="page">
+
+<!-- ═══════════════════════════════════════════════════ TOC ═══ -->
+<div class="toc">
+  <h2>Table of Contents</h2>
+  <ol>
+    <li>Cart &amp; Quantity Management — Implementation Review</li>
+    <li>Order Cancellation Policy <span>Before Delivery</span></li>
+    <li>COD Order — Customer Unavailable at Delivery (RTO)</li>
+    <li>Prepaid Order — Customer Unavailable at Delivery (RTO)</li>
+    <li>Return &amp; Exchange Policy — Single Product Orders</li>
+    <li>Return &amp; Exchange Policy — Multiple Product Orders</li>
+    <li>Return / Exchange Request Cancellation Window</li>
+    <li>Return / Exchange RTO — Customer Liability</li>
+    <li>Backend Implementation Coverage Map</li>
+    <li>Gaps — Missing Enforcement (Action Required)</li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════════════════════ SECTION 1: CART ═══ -->
+<div class="section-title">1. Cart &amp; Quantity Management — Implementation Review</div>
+
+<div class="section-subtitle">1.1 Frontend — CartContext.jsx</div>
+<div class="card">
+  <div class="card-title">State &amp; API calls</div>
+  <table>
+    <tr><th>Action</th><th>API Call</th><th>Re-fetch Full Cart?</th><th>Notes</th></tr>
+    <tr><td><span class="code-ref">addToCart(product, qty, colorId)</span></td><td>POST /api/cart</td><td>✅ Yes</td><td>Optimistic-free — always re-fetches for accuracy</td></tr>
+    <tr><td><span class="code-ref">removeFromCart(productId, colorId)</span></td><td>DELETE /api/cart/:productId</td><td>❌ No (optimistic)</td><td>Filters local state immediately; no server re-fetch</td></tr>
+    <tr><td><span class="code-ref">updateQuantity(productId, qty, colorId)</span></td><td>PUT /api/cart/quantity</td><td>✅ Yes</td><td>PUT then re-fetches</td></tr>
+    <tr><td><span class="code-ref">clearCart()</span></td><td>DELETE /api/cart</td><td>❌ No (optimistic)</td><td>Clears state immediately</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <div class="card-title">Cart UI — Cart.jsx</div>
+  <ul class="policy-list">
+    <li>Quantity buttons call <span class="code-ref">handleCartQuantityChange</span> → checks <span class="code-ref">getProductStockInfo()</span> client-side before API call.</li>
+    <li>Increment disabled if <span class="code-ref">stockInfo.isOutOfStock</span> is true — prevents over-add at the UI level.</li>
+    <li>Shows <span class="badge badge-red">Out of Stock</span> / <span class="badge badge-yellow">Low Stock</span> badges per variant.</li>
+    <li>"Save to Wishlist" calls <span class="code-ref">toggleWishlist(item)</span> — correctly wired after BUG-F06 fix.</li>
+    <li>Shipping calculated at checkout; coupon / wallet info shown in summary note.</li>
+  </ul>
+</div>
+
+<div class="section-subtitle">1.2 Backend — CartService.js</div>
+<table>
+  <tr><th>Method</th><th>Stock Guard</th><th>Behaviour</th></tr>
+  <tr>
+    <td><span class="code-ref">addToCart</span></td>
+    <td><span class="badge badge-green">Yes</span></td>
+    <td>Checks product.status = 'active'. Reads <span class="code-ref">color_stocks[colorId]</span> or falls back to <span class="code-ref">stock_quantity</span>. Errors if newQty &gt; available stock.</td>
+  </tr>
+  <tr>
+    <td><span class="code-ref">updateQuantity</span></td>
+    <td><span class="badge badge-green">Yes</span></td>
+    <td>Same stock check. If quantity ≤ 0, cart item is destroyed (auto-remove).</td>
+  </tr>
+  <tr>
+    <td><span class="code-ref">removeFromCart</span></td>
+    <td>N/A</td>
+    <td>Hard-deletes the row by customerId + productId. Note: does NOT filter by colorId — potential issue if same product in multiple colors.</td>
+  </tr>
+  <tr>
+    <td><span class="code-ref">clearCart</span></td>
+    <td>N/A</td>
+    <td>Destroys all cart rows for a customer.</td>
+  </tr>
+</table>
+
+<div class="alert alert-warning">
+  <strong>Note on removeFromCart:</strong> The CartService deletes by <span class="code-ref">{ customerId, productId }</span> only — it ignores colorId. If a customer has the same product in two different colors, removing one color will remove ALL rows for that product. The frontend passes <span class="code-ref">?colorId=...</span> as a query param, but CartRoutes must forward this to the service. Verify CartRoutes passes colorId to the service.
+</div>
+
+<div class="section-subtitle">1.3 Cart Data Model — Cart.js</div>
+<div class="grid-2">
+  <div class="card">
+    <div class="card-title">Cart Table Columns</div>
+    <ul class="policy-list">
+      <li><strong>customerId</strong> — FK to customers</li>
+      <li><strong>productId</strong> — FK to products</li>
+      <li><strong>colorId</strong> — FK to colors (nullable)</li>
+      <li><strong>quantity</strong> — integer</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-title">Cart Includes in getCart()</div>
+    <ul class="policy-list">
+      <li>Product: id, sku, variant_skus, name, slug, prices, images, stock fields, weight/dims, payment_options</li>
+      <li>Color: id, name, slug, hex_code</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ SECTION 2: CANCELLATION ═══ -->
+<div class="section-title">2. Order Cancellation Policy — Before Delivery</div>
+
+<div class="alert alert-info">
+  <strong>Window:</strong> Customers may cancel an order only within <strong>24 hours</strong> of placing it. Requests after 24 hours are automatically rejected.
+</div>
+
+<div class="section-subtitle">2.1 Conditions</div>
+<table>
+  <tr><th>Condition</th><th>Rule</th></tr>
+  <tr><td>Time window</td><td>Within 24 hours of <strong>order creation timestamp</strong></td></tr>
+  <tr><td>Status guard</td><td>Order must not already be <em>Cancelled</em> or <em>Delivered</em></td></tr>
+  <tr><td>After dispatch</td><td>Cancellation is blocked once item is Shipped / Out for Delivery / RTO statuses</td></tr>
+  <tr><td>Method</td><td>Customer submits via My Orders → Cancel button</td></tr>
+</table>
+
+<div class="section-subtitle">2.2 Outcome by Payment Method</div>
+<div class="grid-2">
+  <div class="option-box">
+    <h4>COD Order Cancellation</h4>
+    <ul>
+      <li>Order status → <span class="badge badge-grey">Cancelled</span></li>
+      <li>refund_status → <span class="badge badge-grey">Not Required</span></li>
+      <li>payment_status → <span class="badge badge-grey">Cancelled</span></li>
+      <li>No financial refund (no money was paid)</li>
+      <li>Customer receives cancellation email</li>
+    </ul>
+  </div>
+  <div class="option-box">
+    <h4>Prepaid Order Cancellation</h4>
+    <ul>
+      <li>Order status → <span class="badge badge-grey">Cancelled</span></li>
+      <li>refund_status → <span class="badge badge-yellow">Refund Pending</span></li>
+      <li>Refund of full paid amount in 1–2 business days</li>
+      <li>ShipRocket cancellation attempted automatically</li>
+      <li>Customer receives cancellation + refund email</li>
+    </ul>
+  </div>
+</div>
+
+<div class="section-subtitle">2.3 Multi-Item Orders — Partial Cancellation</div>
+<ul class="policy-list">
+  <li>Customer can cancel individual items within the 24-hour window.</li>
+  <li>If only one active item remains and it is cancelled → entire order becomes <span class="badge badge-grey">Cancelled</span>.</li>
+  <li>If other items remain active → order totals are recalculated, that item is marked <span class="badge badge-grey">Cancelled</span>, and ShipRocket is notified to update shipment.</li>
+  <li>Cancelled item inventory is automatically restocked.</li>
+</ul>
+
+<!-- ═══════════════════════════════════════════ SECTION 3: COD RTO ═══ -->
+<div class="section-title">3. COD Order — Customer Unavailable at Delivery (RTO)</div>
+
+<div class="flow">
+  <div class="flow-step"><div class="step-label">Delivery Attempt</div>Customer not available / refuses</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step"><div class="step-label">RTO Initiated</div>Courier returns parcel to seller</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step flow-branch"><div class="step-label">Admin Action</div>Sets order → RTO Delivered</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step flow-end"><div class="step-label">Order Cancelled</div>Admin cancels + Email sent</div>
+</div>
+
+<div class="section-subtitle">3.1 What Happens</div>
+<table>
+  <tr><th>Step</th><th>Action</th><th>Trigger</th></tr>
+  <tr><td>1</td><td>Order status updated to <span class="badge badge-yellow">RTO Initiated → RTO In Transit → RTO Delivered</span></td><td>Admin updates via order panel</td></tr>
+  <tr><td>2</td><td>Admin cancels the order</td><td>Admin team manually</td></tr>
+  <tr><td>3</td><td>Customer receives email notification about cancellation</td><td>Automatic — EmailService.sendOrderStatusUpdate()</td></tr>
+  <tr><td>4</td><td><strong>COD facility blocked for this customer</strong></td><td>blockCustomerCodForOrder() called by admin</td></tr>
+</table>
+
+<div class="section-subtitle">3.2 COD Block Logic</div>
+<div class="card">
+  <div class="card-title">How COD is Blocked — Backend (orderLifecycle.js)</div>
+  <ul class="policy-list">
+    <li>Sets <span class="code-ref">customer.is_cod_blocked = true</span> on the Customers table.</li>
+    <li>Reason stored: <em>"COD blocked because a previous COD order returned to seller after unsuccessful delivery."</em></li>
+    <li>Checks run at order creation: <span class="code-ref">isCodBlockedForContact()</span> matches by both email AND phone.</li>
+    <li>Even guest customers (no account) are blocked by email+phone combination.</li>
+    <li>Blocked customers who try COD at checkout get: <em>"COD is not available for this account. Please place a prepaid order."</em></li>
+  </ul>
+</div>
+
+<div class="alert alert-danger">
+  <strong>Customer Impact:</strong> Once COD is blocked due to RTO, the customer may only place <strong>Prepaid</strong> orders going forward. This is permanent until an admin manually unblocks.
+</div>
+
+<div class="section-subtitle">3.3 No Refund — COD</div>
+<div class="alert alert-info">
+  COD orders that RTO have no financial refund obligation — the customer never paid online. No wallet credit, no bank transfer required.
+</div>
+
+<!-- ═══════════════════════════════════════════ SECTION 4: PREPAID RTO ═══ -->
+<div class="section-title">4. Prepaid Order — Customer Unavailable at Delivery (RTO)</div>
+
+<div class="flow">
+  <div class="flow-step"><div class="step-label">Delivery Attempt</div>Customer unavailable / refuses</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step"><div class="step-label">RTO</div>Parcel returned to seller</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step flow-branch"><div class="step-label">Admin Notifies</div>Contacts customer</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step flow-branch"><div class="step-label">Customer Chooses</div>Option A or B</div>
+</div>
+
+<div class="section-subtitle">4.1 Option A — Refund</div>
+<div class="option-box">
+  <h4>Option A: Customer Chooses Refund</h4>
+  <ul>
+    <li>Refund is processed <strong>after deducting</strong>: Forward shipping charge + RTO shipping charge.</li>
+    <li>Formula: <span class="code-ref">Refund = Paid Amount − Forward Shipping − RTO Charge − (any prior redispatch charges)</span></li>
+    <li>Remaining balance refunded to original payment method.</li>
+    <li>Customer submits bank details via My Orders → Refund Details form.</li>
+    <li>Admin processes and updates refund_status → Refund Paid.</li>
+  </ul>
+</div>
+
+<div class="section-subtitle">4.2 Option B — Re-dispatch</div>
+<div class="option-box">
+  <h4>Option B: Customer Chooses Re-dispatch</h4>
+  <ul>
+    <li>No refund is issued.</li>
+    <li>Customer must <strong>pay re-dispatch + delivery charges</strong> before the order is shipped again.</li>
+    <li>Payment link / amount shared by admin team.</li>
+    <li>Once payment received, admin updates: <span class="code-ref">is_redispatched = true</span>, <span class="code-ref">redispatch_payment_amount</span> recorded.</li>
+    <li>Order re-dispatched via ShipRocket.</li>
+    <li>Subsequent RTO on a re-dispatched order: refund deducts all cumulative logistics charges (original + redispatch).</li>
+  </ul>
+</div>
+
+<div class="section-subtitle">4.3 Refund Calculation Logic</div>
+<table>
+  <tr><th>Field</th><th>Source (Backend)</th></tr>
+  <tr><td>Paid Amount</td><td><span class="code-ref">order.payable_amount</span> or <span class="code-ref">order.total_amount</span></td></tr>
+  <tr><td>Forward Shipping</td><td><span class="code-ref">order.shipping_charge</span> or courier data freight_charge</td></tr>
+  <tr><td>RTO Charge</td><td><span class="code-ref">selected_courier_data.rto_charges</span></td></tr>
+  <tr><td>Redispatch Paid</td><td><span class="code-ref">order.redispatch_payment_amount</span></td></tr>
+  <tr><td><strong>Net Refund</strong></td><td><strong>max(0, Paid − Forward − RTO × rtoCount − Redispatch)</strong></td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════ SECTION 5: RETURN/EXCHANGE SINGLE ═══ -->
+<div class="section-title">5. Return &amp; Exchange Policy — Single Product Orders</div>
+
+<div class="alert alert-info">
+  <strong>Window:</strong> Customer may request a return or exchange within <strong>7 days</strong> of the delivery date.
+</div>
+
+<div class="section-subtitle">5.1 Core Rules — Single Product</div>
+<table>
+  <tr><th>#</th><th>Rule</th></tr>
+  <tr><td>1</td><td>The customer must choose <strong>full return</strong> OR <strong>full exchange</strong> for the entire order — no partial allowed.</td></tr>
+  <tr><td>2</td><td>Once a product is returned and refund is completed, no further return or exchange is accepted for that order.</td></tr>
+  <tr><td>3</td><td>If the customer chooses exchange, the replacement product is eligible for <strong>one delivery only</strong>.</td></tr>
+  <tr><td>4</td><td>Products received through exchange are <strong>NOT eligible</strong> for any further return or exchange.</td></tr>
+  <tr><td>5</td><td>A customer can use return or exchange <strong>only once per order</strong>.</td></tr>
+</table>
+
+<div class="section-subtitle">5.2 Exchange — Once Per Order</div>
+<div class="card">
+  Backend enforces this via <span class="code-ref">hasOrderExchangeHistory(order)</span> in <strong>OrderItemActionController.js</strong>:<br/><br/>
+  Checks <span class="code-ref">order.exchange_requested_at</span> OR whether any item already has an exchange action. If true, new exchange requests for any item in the same order are rejected with:<br/>
+  <em>"Exchange can be requested only once for an order. Remaining products can be returned."</em>
+</div>
+
+<!-- ═══════════════════════════════════════════ SECTION 6: RETURN/EXCHANGE MULTI ═══ -->
+<div class="section-title">6. Return &amp; Exchange Policy — Multiple Product Orders</div>
+
+<div class="section-subtitle">6.1 Rules</div>
+<table>
+  <tr><th>#</th><th>Rule</th></tr>
+  <tr><td>1</td><td>Customer can choose <strong>which products</strong> to return or exchange.</td></tr>
+  <tr><td>2</td><td>All products the customer wants to return must be included in <strong>one return request only</strong> — no split requests.</td></tr>
+  <tr><td>3</td><td>Once a product is returned, it <strong>cannot be returned or exchanged again</strong>.</td></tr>
+  <tr><td>4</td><td>Products NOT returned can be exchanged <strong>one time only</strong>.</td></tr>
+  <tr><td>5</td><td>If a product is exchanged, the replacement <strong>cannot be returned or exchanged</strong> again.</td></tr>
+  <tr><td>6</td><td>If a customer <strong>cancels an exchange request</strong>, that product loses return/exchange eligibility permanently.</td></tr>
+  <tr><td>7</td><td>Each product: <strong>one action only</strong> (return OR exchange). After that, no further action allowed.</td></tr>
+</table>
+
+<div class="section-subtitle">6.2 Per-Item Eligibility Tracking (Backend)</div>
+<table>
+  <tr><th>DB Column (order_items)</th><th>Meaning</th></tr>
+  <tr><td><span class="code-ref">quantity</span></td><td>Total items ordered</td></tr>
+  <tr><td><span class="code-ref">cancelled_quantity</span></td><td>Quantity cancelled so far</td></tr>
+  <tr><td><span class="code-ref">returned_quantity</span></td><td>Quantity returned so far</td></tr>
+  <tr><td><span class="code-ref">exchanged_quantity</span></td><td>Quantity exchanged so far</td></tr>
+  <tr><td><span class="code-ref">pending_action_quantity</span></td><td>Quantity in a pending action</td></tr>
+  <tr><td><span class="code-ref">actionable_quantity</span></td><td>= quantity − cancelled − returned − exchanged − pending</td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════ SECTION 7: ACTION CANCELLATION ═══ -->
+<div class="section-title">7. Return / Exchange Request Cancellation Window</div>
+
+<div class="alert alert-info">
+  <strong>Window:</strong> After a return or exchange request is placed, the customer may cancel it within <strong>24 hours</strong> of submission. After 24 hours, the request cannot be cancelled.
+</div>
+
+<table>
+  <tr><th>Condition</th><th>Rule</th></tr>
+  <tr><td>Cancellation window</td><td>Within 24 hours of the action's <span class="code-ref">created_at</span> timestamp</td></tr>
+  <tr><td>Effect of cancelling an exchange request</td><td>That product becomes <strong>permanently ineligible</strong> for return or exchange</td></tr>
+  <tr><td>Effect of cancelling a return request</td><td>Product is no longer in pending state; no further return or exchange action allowed</td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════ SECTION 8: ACTION RTO ═══ -->
+<div class="section-title">8. Return / Exchange Shipment RTO — Customer Liability</div>
+
+<div class="card">
+  If a return or exchange shipment is returned to us (RTO) due to:
+  <ul class="policy-list" style="margin-top:10px;">
+    <li>Customer unavailability during pickup</li>
+    <li>Refusal to hand over the parcel</li>
+    <li>Incorrect address provided</li>
+    <li>Any other customer-related reason</li>
+  </ul>
+  <strong>→ The customer is responsible for the applicable RTO and re-shipping charges.</strong><br/>
+  The return/exchange process will continue only after the customer pays the required charges.
+</div>
+
+<!-- ═══════════════════════════════════════════ SECTION 9: COVERAGE MAP ═══ -->
+<div class="section-title">9. Backend Implementation Coverage Map</div>
+
+<table>
+  <tr><th>Policy Rule</th><th>Status</th><th>Location</th></tr>
+
+  <tr>
+    <td>24-hour cancellation window (order)</td>
+    <td><span class="badge badge-green">Implemented</span></td>
+    <td><span class="code-ref">OrderController.cancelOrder</span> — hoursSinceOrder &gt; 24 check</td>
+  </tr>
+  <tr>
+    <td>24-hour cancellation window (item-level)</td>
+    <td><span class="badge badge-green">Implemented</span></td>
+    <td><span class="code-ref">OrderItemActionController.canCancelOrderItems()</span></td>
+  </tr>
+  <tr>
+    <td>COD blocked after RTO</td>
+    <td><span class="badge badge-green">Implemented</span></td>
+    <td><span class="code-ref">orderLifecycle.blockCustomerCodForOrder()</span></td>
+  </tr>
+  <tr>
+    <td>COD block check at checkout</td>
+    <td><span class="badge badge-green">Implemented</span></td>
+    <td><span class="code-ref">orderLifecycle.isCodBlockedForContact()</span> in createOrder</td>
+  </tr>
+  <tr>
+    <td>COD max order amount limit</td>
+    <td><span class="badge badge-green">Implemented</span></td>
+    <td><span class="code-ref">config.codMaxAmount</span> check in createOrder</td>
+  </tr>
+  <tr>
+    <td>Prepaid RTO refund deduction formula</td>
+    <td><span class="badge badge-green">Implemented</span></td>
+    <td><span class="code-ref">orderLifecycle.calculateRtoRefundAmount()</span></td>
+  </tr>
+  <tr>
+    <td>Re-dispatch payment tracking</td>
+    <td><span class="badge badge-green">Implemented</span></td>
+    <td><span class="code-ref">order.is_redispatched</span>, <span class="code-ref">redispatch_payment_amount</span> columns</td>
+  </tr>
+  <tr>
+    <td>Return/exchange only after delivery</td>
+    <td><span class="badge badge-green">Implemented</span></td>
+    <td><span class="code-ref">isDeliveredEnoughForPostDeliveryAction()</span></td>
+  </tr>
+  <tr>
+    <td>Exchange once per order</td>
+    <td><span class="badge badge-green">Implemented</span></td>
+    <td><span class="code-ref">hasOrderExchangeHistory(order)</span> in OrderItemActionController</td>
+  </tr>
+  <tr>
+    <td>Per-item action eligibility tracking</td>
+    <td><span class="badge badge-green">Implemented</span></td>
+    <td><span class="code-ref">getActionableQuantity(item)</span> — tracks cancelled/returned/exchanged quantities</td>
+  </tr>
+  <tr>
+    <td>Inventory restock on cancellation</td>
+    <td><span class="badge badge-green">Implemented</span></td>
+    <td><span class="code-ref">restockCancelledItem()</span> in OrderItemActionController</td>
+  </tr>
+  <tr>
+    <td>Inventory decrement on order create</td>
+    <td><span class="badge badge-green">Implemented</span></td>
+    <td><span class="code-ref">decrementProductInventory()</span> in OrderController — with DB-level row lock</td>
+  </tr>
+  <tr>
+    <td>Email on cancellation</td>
+    <td><span class="badge badge-green">Implemented</span></td>
+    <td><span class="code-ref">EmailService.sendOrderStatusUpdate(order, 'Cancelled')</span></td>
+  </tr>
+  <tr>
+    <td>Email on order confirmation</td>
+    <td><span class="badge badge-green">Implemented</span></td>
+    <td><span class="code-ref">EmailService.sendOrderConfirmation()</span> in createOrder</td>
+  </tr>
+  <tr>
+    <td><strong>7-day return/exchange window</strong></td>
+    <td><span class="badge badge-red">MISSING</span></td>
+    <td>No 7-day check in <span class="code-ref">OrderItemActionController</span> — see Section 10</td>
+  </tr>
+  <tr>
+    <td><strong>24-hour action request cancellation</strong></td>
+    <td><span class="badge badge-red">MISSING</span></td>
+    <td>No cancel-action-request endpoint or 24-hour window check — see Section 10</td>
+  </tr>
+  <tr>
+    <td><strong>Exchange-cancelled product = permanently ineligible</strong></td>
+    <td><span class="badge badge-yellow">Partial</span></td>
+    <td><span class="code-ref">hasUsableAction()</span> checks non-rejected actions, but does not specifically block cancelled-exchange items — see Section 10</td>
+  </tr>
+  <tr>
+    <td><strong>removeFromCart color isolation</strong></td>
+    <td><span class="badge badge-yellow">Partial</span></td>
+    <td>CartService ignores colorId in WHERE clause — deletes ALL rows for that productId</td>
+  </tr>
+</table>
+
+<!-- ═══════════════════════════════════════════ SECTION 10: GAPS ═══ -->
+<div class="section-title">10. Gaps — Missing Enforcement (Action Required)</div>
+
+<div class="section-subtitle">GAP-1 — 7-Day Return/Exchange Window Not Enforced</div>
+<div class="alert alert-danger">
+  <strong>Severity: High</strong><br/>
+  <strong>File:</strong> <span class="code-ref">backend/src/controllers/OrderItemActionController.js</span><br/>
+  <strong>Function:</strong> <span class="code-ref">isDeliveredEnoughForPostDeliveryAction()</span><br/><br/>
+  Currently only checks that the order is delivered — it does NOT check if 7 days have passed since delivery.
+  A customer could request a return 30 days after delivery and it would be accepted.
+</div>
+<div class="card">
+  <div class="card-title">Fix Required — add to orderItemActions.js</div>
+  <pre style="background:#f4f1ec; padding:12px; border-radius:4px; font-size:11px; overflow-x:auto;">
+const isWithinReturnWindow = (order, windowDays = 7) => {
+  const deliveredAt = order?.delivered_at ? new Date(order.delivered_at) : null;
+  if (!deliveredAt) return false;
+  const msSinceDelivery = Date.now() - deliveredAt.getTime();
+  return msSinceDelivery &lt;= windowDays * 24 * 60 * 60 * 1000;
+};
+  </pre>
+  Then in <span class="code-ref">OrderItemActionController.create()</span> and <span class="code-ref">estimate()</span>, add:<br/>
+  <pre style="background:#f4f1ec; padding:8px; border-radius:4px; font-size:11px; margin-top:8px;">
+if ([ACTION_TYPES.RETURN, ACTION_TYPES.EXCHANGE].includes(actionType)) {
+  if (!isDeliveredEnoughForPostDeliveryAction(order)) {
+    return res.status(400).json({ message: 'Return or exchange is available after delivery.' });
+  }
+  if (!isWithinReturnWindow(order, 7)) {
+    return res.status(400).json({ message: 'Return or exchange window of 7 days from delivery has expired.' });
+  }
+}
+  </pre>
+</div>
+
+<div class="section-subtitle">GAP-2 — No 24-Hour Cancel Window for Action Requests</div>
+<div class="alert alert-danger">
+  <strong>Severity: High</strong><br/>
+  <strong>Missing:</strong> There is no API endpoint or controller method that allows a customer to cancel a pending return/exchange request within 24 hours.<br/>
+  The policy states: <em>"After a return or exchange request has been placed, the customer may cancel that request within 24 hours."</em>
+</div>
+<div class="card">
+  <div class="card-title">What needs to be built</div>
+  <ul class="policy-list">
+    <li>New endpoint: <span class="code-ref">DELETE /api/orders/:orderId/actions/:actionId</span></li>
+    <li>Check: action.created_at within 24 hours</li>
+    <li>Check: action.status is still 'Initiated' or 'Requested' (not yet approved/completed)</li>
+    <li>On cancellation: set action.status = 'Cancelled', revert item.status, clear pending_action_quantity</li>
+    <li>Special rule for exchange: if cancelled, mark item as permanently ineligible (set a flag or use a special status)</li>
+  </ul>
+</div>
+
+<div class="section-subtitle">GAP-3 — Cancelled Exchange Request = Permanent Ineligibility</div>
+<div class="alert alert-warning">
+  <strong>Severity: Medium</strong><br/>
+  Currently <span class="code-ref">hasUsableAction(item)</span> only blocks items with non-rejected actions. If an exchange action is cancelled (status = 'Cancelled'), the item appears eligible again — violating the policy that <em>"if a customer cancels an exchange request, that product will no longer be eligible for any return or exchange."</em>
+</div>
+<div class="card">
+  <div class="card-title">Fix Options</div>
+  <ul class="policy-list">
+    <li><strong>Option A:</strong> Add a boolean column <span class="code-ref">exchange_action_cancelled</span> to order_items. Set it when an exchange action is cancelled. Block any further actions on that item.</li>
+    <li><strong>Option B:</strong> In <span class="code-ref">hasUsableAction()</span>, also treat 'Cancelled' exchange actions as blocking (exchange-specific).</li>
+  </ul>
+</div>
+
+<div class="section-subtitle">GAP-4 — removeFromCart Ignores colorId</div>
+<div class="alert alert-warning">
+  <strong>Severity: Medium</strong><br/>
+  <span class="code-ref">CartService.removeFromCart(customerId, productId)</span> does not filter by colorId. If a customer adds the same product in two colors, removing one color removes both rows.
+</div>
+<div class="card">
+  <div class="card-title">Fix in CartService.js</div>
+  <pre style="background:#f4f1ec; padding:10px; border-radius:4px; font-size:11px;">
+async removeFromCart(customerId, productId, colorId = null) {
+  const where = { customerId, productId };
+  if (colorId !== null && colorId !== undefined) where.colorId = colorId;
+  return await Cart.destroy({ where });
+}
+  </pre>
+  Also update <span class="code-ref">CartController.removeFromCart</span> to extract colorId from <span class="code-ref">req.query</span> and pass it.
+</div>
+
+<hr class="divider"/>
+
+<div class="card" style="background:#faf7f2; border-color:#D4AF37;">
+  <div class="card-title" style="color:#800020; font-size:14px;">Summary — Priority Fix List</div>
+  <table>
+    <tr><th>Priority</th><th>Gap</th><th>Impact</th></tr>
+    <tr><td><span class="badge badge-red">P0</span></td><td>GAP-1: 7-day return/exchange window</td><td>Policy violation — customers can return after 7 days</td></tr>
+    <tr><td><span class="badge badge-red">P0</span></td><td>GAP-2: 24-hour action cancellation endpoint</td><td>Feature missing — customer has no way to cancel return/exchange</td></tr>
+    <tr><td><span class="badge badge-yellow">P1</span></td><td>GAP-3: Cancelled exchange = permanent ineligibility</td><td>Policy loophole — customer can re-request after cancelling exchange</td></tr>
+    <tr><td><span class="badge badge-yellow">P1</span></td><td>GAP-4: removeFromCart ignores colorId</td><td>Data integrity — wrong cart item removed for multi-color products</td></tr>
+  </table>
+</div>
+
+</div><!-- /page -->
+</body>
+</html>
