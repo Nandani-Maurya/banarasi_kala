@@ -97,9 +97,6 @@ const Home = () => {
           <ReviewsStory />
         </HomeSection>
         <HomeSection variant="faq" active={visibleSections >= 7}>
-<ReviewsStory />
-        </HomeSection>
-        <HomeSection variant="faq">
           <FaqSection />
         </HomeSection>
       </main>
