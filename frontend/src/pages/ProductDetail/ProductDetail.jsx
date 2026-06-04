@@ -156,6 +156,7 @@ const ProductDetail = () => {
   const frameRef = useRef(null);
   const perspectiveRef = useRef(null);
   const rootRef = useRef(null);
+  const removingFromBagRef = useRef(false);
 
   const getCoverColorId = (targetProduct = product) => {
     const images = getSortedImages(targetProduct);
@@ -443,6 +444,7 @@ const ProductDetail = () => {
 
   // Keep quantity in sync with cart (so cart-page changes reflect here instantly)
   useEffect(() => {
+    removingFromBagRef.current = false;
     setQuantity(existingBagQuantity > 0 ? existingBagQuantity : 1);
   }, [existingBagQuantity]);
 
@@ -567,6 +569,8 @@ const ProductDetail = () => {
   };
 
   const handleRemoveFromBag = () => {
+    if (removingFromBagRef.current) return;
+    removingFromBagRef.current = true;
     removeFromCart(product.id, selectedColorId);
     toast.success(`${product.name} removed from bag`);
   };
