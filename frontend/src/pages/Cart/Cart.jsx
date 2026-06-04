@@ -28,7 +28,11 @@ const Cart = () => {
       return;
     }
     const result = await updateQuantity(item.id, nextQuantity, item.colorId);
-    if (result && !result.success) toast.error(result.message);
+    if (result?.success) {
+      toast.success(`Quantity updated to ${nextQuantity}`);
+    } else if (result && !result.success) {
+      toast.error(result.message);
+    }
   };
 
   const handleRemove = (item) => {
