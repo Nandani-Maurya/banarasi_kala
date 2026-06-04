@@ -610,15 +610,11 @@ class OrderController {
     }
   }
 
-  async getMyOrders(req, res) {
+   async getMyOrders(req, res) {
     try {
       await ensureOrderAccountingColumns();
       await ensureOrderItemActionSchema();
-      const { status, paymentMethod, customer, q, page, limit: rawLimit } = req.query;
-      const pageNum = Math.max(1, parseInt(page, 10) || 1);
-      const pageSize = Math.min(100, Math.max(1, parseInt(rawLimit, 10) || 50));
-      const offset = (pageNum - 1) * pageSize;
-
+      const { status, paymentMethod, customer, q } = req.query;
       const where = {};
       if (status && status !== 'all') where.status = status;
       if (paymentMethod && paymentMethod !== 'all') where.payment_method = paymentMethod;
@@ -631,7 +627,7 @@ class OrderController {
           { order_number: { [Op.iLike]: `%${customerSearch}%` } },
         ];
       }
-      const { count, rows } = await Order.findAndCountAll({
+      const orders = await Order.findAll({
         where,
         include: [{
           model: OrderItem,
@@ -642,19 +638,12 @@ class OrderController {
           ],
         }],
         order: [['createdAt', 'DESC']],
-        limit: pageSize,
-        offset,
-        distinct: true,
       });
-      res.status(200).json({
-        orders: rows.map((order) => serializeOrder(order)),
-        pagination: { total: count, page: pageNum, limit: pageSize, pages: Math.ceil(count / pageSize) },
-      });
+      res.status(200).json(orders.map((order) => serializeOrder(order)));
     } catch (error) {
       res.status(500).json({ message: error.message });
     }
   }
-
   async saveRefundBankDetails(req, res) {
     try {
       await ensureOrderAccountingColumns();
