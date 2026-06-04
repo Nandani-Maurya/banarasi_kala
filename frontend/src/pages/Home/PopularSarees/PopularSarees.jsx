@@ -169,7 +169,7 @@ const PopularSarees = () => {
                   onPointerLeave={() => handleCardLeave(product.id)}
                   onFocus={() => handleCardEnter(product.id)}
                   onBlur={() => handleCardLeave(product.id)}
-                  style={{ transitionDelay: `${Math.min(index * 80, 420)}ms` }}
+                  style={{ transitionDelay: `${Math.min(index * 40, 200)}ms` }}
                 >
                   <Link
                     to={`/product/${product.slug}`}

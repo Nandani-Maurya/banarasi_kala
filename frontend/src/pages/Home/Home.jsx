@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import headerBackground from "../../assets/header_backgroung.png";
 import FabricStrip from "./FabricStrip/FabricStrip";
@@ -14,36 +14,37 @@ const OccasionCollections = lazy(() => import("./OccasionCollections/OccasionCol
 const ReviewsStory = lazy(() => import("./ReviewsStory/ReviewsStory"));
 const FaqSection = lazy(() => import("./FaqSection/FaqSection"));
 
-const HomeSection = ({ children, id, variant = "default", active = false }) => (
-  <div id={id} className={`home-deferred-section home-deferred-section--${variant}`}>
-    <Suspense fallback={<div className="home-section-loader" aria-hidden="true" />}>
-      {active ? children : <div className="home-section-loader" aria-hidden="true" />}
-    </Suspense>
-  </div>
-);
+const HomeSection = ({ children, id, variant = "default" }) => {
+  const ref = useRef(null);
+  const [active, setActive] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setActive(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "500px 0px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div id={id} ref={ref} className={`home-deferred-section home-deferred-section--${variant}`}>
+      <Suspense fallback={<div className="home-section-loader" aria-hidden="true" />}>
+        {active ? children : <div className="home-section-loader" aria-hidden="true" />}
+      </Suspense>
+    </div>
+  );
+};
 
 const Home = () => {
   const location = useLocation();
-  const [visibleSections, setVisibleSections] = useState(location.hash ? 7 : 0);
-
-  // Progressive loading of lazy components when the browser is idle
-  useEffect(() => {
-    if (visibleSections >= 7) return;
-
-    const loadNext = () => {
-      setVisibleSections((prev) => prev + 1);
-    };
-
-    const idleCallback = (window.requestIdleCallback || ((cb) => window.setTimeout(cb, 200)))(loadNext);
-
-    return () => {
-      if (window.cancelIdleCallback) {
-        window.cancelIdleCallback(idleCallback);
-      } else {
-        window.clearTimeout(idleCallback);
-      }
-    };
-  }, [visibleSections]);
 
   useEffect(() => {
     if (location.hash !== "#new-arrivals") return undefined;
@@ -54,7 +55,6 @@ const Home = () => {
       if (target) {
         target.scrollIntoView({ behavior: "smooth", block: "start" });
       }
-
       attempts += 1;
       if (attempts < 6) {
         window.setTimeout(scrollToNewArrivals, 160);
@@ -78,29 +78,14 @@ const Home = () => {
         <OfferBand />
         <HeroSlider />
 
-        <HomeSection variant="why" active={visibleSections >= 1}>
-          <WhyChooseUs />
-        </HomeSection>
-        <HomeSection variant="popular" active={visibleSections >= 2}>
-          <PopularSarees />
-        </HomeSection>
-        <HomeSection variant="browse" active={visibleSections >= 3}>
-          <BrowseCircles />
-        </HomeSection>
-        <HomeSection id="new-arrivals" variant="arrivals" active={visibleSections >= 4}>
-          <NewArrivals />
-        </HomeSection>
-        <HomeSection variant="occasion" active={visibleSections >= 5}>
-          <OccasionCollections />
-        </HomeSection>
-        <HomeSection variant="reviews" active={visibleSections >= 6}>
-          <ReviewsStory />
-        </HomeSection>
-        <HomeSection variant="faq" active={visibleSections >= 7}>
-          <FaqSection />
-        </HomeSection>
+        <HomeSection variant="why"><WhyChooseUs /></HomeSection>
+        <HomeSection variant="popular"><PopularSarees /></HomeSection>
+        <HomeSection variant="browse"><BrowseCircles /></HomeSection>
+        <HomeSection id="new-arrivals" variant="arrivals"><NewArrivals /></HomeSection>
+        <HomeSection variant="occasion"><OccasionCollections /></HomeSection>
+        <HomeSection variant="reviews"><ReviewsStory /></HomeSection>
+        <HomeSection variant="faq"><FaqSection /></HomeSection>
       </main>
-
     </div>
   );
 };

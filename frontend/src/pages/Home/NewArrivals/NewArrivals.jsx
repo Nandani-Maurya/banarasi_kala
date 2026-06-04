@@ -147,7 +147,7 @@ const NewArrivals = () => {
                     onPointerLeave={() => handleCardLeave(product.id)}
                     onFocus={() => handleCardEnter(product.id)}
                     onBlur={() => handleCardLeave(product.id)}
-                    style={{ transitionDelay: `${Math.min(index * 70, 490)}ms` }}
+                    style={{ transitionDelay: `${Math.min(index * 35, 200)}ms` }}
                   >
                     <Link to={`/product/${product.slug}`} className="bk-arrival-link">
                       <div className="bk-arrival-media">
