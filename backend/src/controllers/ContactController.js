@@ -1,5 +1,11 @@
 const ContactMessage = require("../models/ContactMessage");
 
+const normalizePhone = (value) => {
+  const digits = String(value || "").replace(/\D/g, "");
+  const stripped = digits.replace(/^(91|0)+/, "");
+  return stripped.length > 10 ? stripped.slice(-10) : stripped;
+};
+
 exports.submit = async (req, res) => {
   try {
     const { name, email, phone, subject, message } = req.body;
@@ -11,10 +17,15 @@ exports.submit = async (req, res) => {
       return res.status(400).json({ message: "Please enter a valid email address." });
     }
 
+    const cleanPhone = normalizePhone(phone);
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+      return res.status(400).json({ message: "Please enter a valid 10-digit Indian mobile number." });
+    }
+
     const entry = await ContactMessage.create({
       name: String(name).trim(),
       email: String(email).trim().toLowerCase(),
-      phone: phone ? String(phone).trim() : null,
+      phone: cleanPhone,
       subject: String(subject).trim(),
       message: String(message).trim(),
     });

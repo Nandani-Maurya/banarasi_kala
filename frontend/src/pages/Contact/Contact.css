@@ -161,6 +161,42 @@
   gap: 16px;
 }
 
+.contact-phone-wrap {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(123, 88, 51, 0.16);
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(91, 55, 28, 0.045);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.contact-phone-wrap:focus-within {
+  background: #fff;
+  border-color: rgba(91, 7, 16, 0.38);
+  box-shadow: 0 0 0 4px rgba(91, 7, 16, 0.06);
+}
+
+.contact-phone-prefix {
+  flex: 0 0 auto;
+  padding: 0 10px 0 14px;
+  color: #5b0710;
+  font-size: 13px;
+  font-weight: 700;
+  border-right: 1px solid rgba(123, 88, 51, 0.16);
+  line-height: 52px;
+  user-select: none;
+}
+
+.contact-phone-wrap input {
+  flex: 1;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
 .contact-form input,
 .contact-form textarea {
   width: 100%;

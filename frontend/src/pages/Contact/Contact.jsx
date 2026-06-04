@@ -11,13 +11,23 @@ const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_TEXT}`;
 
 const EMPTY_FORM = { name: "", email: "", phone: "", subject: "", message: "" };
 
+// Strip non-digits, remove leading zeros, keep last 10 digits
+const normalizePhone = (value) => {
+  const digits = String(value || "").replace(/\D/g, "");
+  const stripped = digits.replace(/^0+/, "");
+  return stripped.length > 10 ? stripped.slice(-10) : stripped;
+};
+
 const Contact = () => {
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    setForm((prev) => ({
+      ...prev,
+      [name]: name === "phone" ? normalizePhone(value) : value,
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -25,12 +35,16 @@ const Contact = () => {
     if (submitting) return;
 
     const { name, email, phone, subject, message } = form;
-    if (!name.trim() || !email.trim() || !phone.trim() || !subject.trim() || !message.trim()) {
+    if (!name.trim() || !email.trim() || !subject.trim() || !message.trim()) {
       toast.error("Please fill all required fields.");
       return;
     }
     if (!/^\S+@\S+\.\S+$/.test(email)) {
       toast.error("Please enter a valid email address.");
+      return;
+    }
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      toast.error("Please enter a valid 10-digit mobile number starting with 6–9.");
       return;
     }
 
@@ -39,7 +53,7 @@ const Contact = () => {
       const res = await fetch(API_ENDPOINTS.contactSubmit, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), phone: phone.trim(), subject: subject.trim(), message: message.trim() }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), phone, subject: subject.trim(), message: message.trim() }),
       });
       const data = await res.json();
       if (res.ok && data.success) {
@@ -127,15 +141,19 @@ const Contact = () => {
             </div>
 
             <div className="contact-form-grid">
-              <input
-                type="tel"
-                name="phone"
-                value={form.phone}
-                onChange={handleChange}
-                required
-                placeholder="Phone Number *"
-                maxLength={15}
-              />
+              <div className="contact-phone-wrap">
+                <span className="contact-phone-prefix">+91</span>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={form.phone}
+                  onChange={handleChange}
+                  required
+                  placeholder="10-digit mobile number *"
+                  inputMode="numeric"
+                  maxLength={10}
+                />
+              </div>
               <input
                 type="text"
                 name="subject"
