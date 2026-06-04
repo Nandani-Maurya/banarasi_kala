@@ -83,15 +83,9 @@ export const WishlistProvider = ({ children }) => {
     setProcessingIds(prev => new Set(prev).add(pId));
 
     try {
-      const res = await api.post(`${API_ENDPOINTS.wishlist}/toggle`, { productId: pId });
-      const isAdded = res.data.added === true;
-      
-      // Show notification directly from context based on backend response
-      if (isAdded) {
-        showNotification("Added to wishlist!");
-      } else {
-        showNotification("Removed from wishlist!");
-      }
+      await api.post(`${API_ENDPOINTS.wishlist}/toggle`, { productId: pId });
+      const isAdded = !currentlyIn;
+      showNotification(isAdded ? "Added to wishlist!" : "Removed from wishlist!");
 
       // 2. Refresh fresh data
       const refreshRes = await api.get(API_ENDPOINTS.wishlist);
