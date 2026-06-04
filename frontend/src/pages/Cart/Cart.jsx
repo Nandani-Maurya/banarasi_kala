@@ -27,10 +27,10 @@ const Cart = () => {
       toast.error(`Only ${stockInfo.quantity} item${stockInfo.quantity === 1 ? "" : "s"} available for this product.`);
       return;
     }
+    // Toast fires instantly alongside the optimistic cart update
+    toast.success(`Quantity updated to ${nextQuantity}`);
     const result = await updateQuantity(item.id, nextQuantity, item.colorId);
-    if (result?.success) {
-      toast.success(`Quantity updated to ${nextQuantity}`);
-    } else if (result && !result.success) {
+    if (result && !result.success) {
       toast.error(result.message);
     }
   };

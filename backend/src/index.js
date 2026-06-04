@@ -23,6 +23,7 @@ const WalletRoutes = require("./routes/WalletRoutes");
 const ReferralRoutes = require("./routes/ReferralRoutes");
 const CustomerRoutes = require("./routes/CustomerRoutes");
 const CustomerAddressRoutes = require("./routes/CustomerAddressRoutes");
+const ContactRoutes = require("./routes/ContactRoutes");
 
 const app = express();
 
@@ -92,6 +93,9 @@ app.use("/api/wallet", WalletRoutes);
 app.use("/api/referral", ReferralRoutes);
 app.use("/api/customers", CustomerRoutes);
 app.use("/api/addresses", CustomerAddressRoutes);
+
+// Contact form — public, no auth required
+app.use("/api/contact", ContactRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: "API route not found" });

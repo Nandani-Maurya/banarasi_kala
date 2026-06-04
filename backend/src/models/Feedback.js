@@ -68,8 +68,8 @@ const Product = require('./Product');
 const Order = require('./Order');
 const OrderItem = require('./OrderItem');
 Feedback.belongsTo(Customer, { foreignKey: 'customer_id' });
-Feedback.belongsTo(Product, { foreignKey: 'product_id' });
-Feedback.belongsTo(Order, { foreignKey: 'order_id' });
-Feedback.belongsTo(OrderItem, { foreignKey: 'order_item_id' });
+Feedback.belongsTo(Product, { foreignKey: 'product_id', constraints: false });
+Feedback.belongsTo(Order, { foreignKey: 'order_id', constraints: false });
+Feedback.belongsTo(OrderItem, { foreignKey: 'order_item_id', constraints: false });
 
 module.exports = Feedback;

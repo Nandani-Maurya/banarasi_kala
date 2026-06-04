@@ -1,35 +1,57 @@
 import { useState } from "react";
 import { Icon } from "@iconify/react";
 import { Clock, Mail, MapPin, Phone, Send } from "lucide-react";
+import toast from "react-hot-toast";
+import { API_ENDPOINTS } from "../../config/api";
 import "./Contact.css";
 
 const WHATSAPP_NUMBER = "919555098884";
 const WHATSAPP_TEXT = encodeURIComponent("Hi Banarasi Kala, I need quick help.");
 const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_TEXT}`;
 
+const EMPTY_FORM = { name: "", email: "", phone: "", subject: "", message: "" };
+
 const Contact = () => {
-  const [result, setResult] = useState("");
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [submitting, setSubmitting] = useState(false);
 
-  const onSubmit = async (event) => {
-    event.preventDefault();
-    setResult("Sending...");
-    const formData = new FormData(event.target);
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  };
 
-    formData.append("access_key", "f23a0283-8a44-4d5b-a9bb-bd25ea343936");
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (submitting) return;
 
-    const response = await fetch("https://api.web3forms.com/submit", {
-      method: "POST",
-      body: formData,
-    });
+    const { name, email, phone, subject, message } = form;
+    if (!name.trim() || !email.trim() || !phone.trim() || !subject.trim() || !message.trim()) {
+      toast.error("Please fill all required fields.");
+      return;
+    }
+    if (!/^\S+@\S+\.\S+$/.test(email)) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
 
-    const data = await response.json();
-
-    if (data.success) {
-      setResult("Message Sent Successfully!");
-      event.target.reset();
-    } else {
-      console.log("Error", data);
-      setResult(data.message);
+    setSubmitting(true);
+    try {
+      const res = await fetch(API_ENDPOINTS.contactSubmit, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), phone: phone.trim(), subject: subject.trim(), message: message.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success("Message sent! We will get back to you soon.");
+        setForm(EMPTY_FORM);
+      } else {
+        toast.error(data.message || "Could not send message. Please try again.");
+      }
+    } catch {
+      toast.error("Network error. Please check your connection and try again.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -48,9 +70,7 @@ const Contact = () => {
 
           <div className="contact-info-list">
             <article>
-              <span>
-                <Phone size={20} />
-              </span>
+              <span><Phone size={20} /></span>
               <div>
                 <h2>Call Us</h2>
                 <p>+91 98765 43210</p>
@@ -58,9 +78,7 @@ const Contact = () => {
               </div>
             </article>
             <article>
-              <span>
-                <Mail size={20} />
-              </span>
+              <span><Mail size={20} /></span>
               <div>
                 <h2>Email Us</h2>
                 <p>hello@banarasikala.com</p>
@@ -68,18 +86,14 @@ const Contact = () => {
               </div>
             </article>
             <article>
-              <span>
-                <MapPin size={20} />
-              </span>
+              <span><MapPin size={20} /></span>
               <div>
                 <h2>Visit Us</h2>
                 <p>B-15/42, Assi Ghat Road, Varanasi, Uttar Pradesh - 221005</p>
               </div>
             </article>
             <article>
-              <span>
-                <Clock size={20} />
-              </span>
+              <span><Clock size={20} /></span>
               <div>
                 <h2>Store Hours</h2>
                 <p>Monday to Saturday: 10:00 AM - 7:00 PM</p>
@@ -92,33 +106,57 @@ const Contact = () => {
         <div className="contact-form-panel">
           <div className="contact-kicker">Send Us a Message</div>
 
-          <form onSubmit={onSubmit} className="contact-form">
+          <form onSubmit={handleSubmit} className="contact-form" noValidate>
             <div className="contact-form-grid">
-              <input type="text" name="name" required placeholder="Full Name *" />
+              <input
+                type="text"
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                required
+                placeholder="Full Name *"
+              />
               <input
                 type="email"
                 name="email"
+                value={form.email}
+                onChange={handleChange}
                 required
                 placeholder="Email Address *"
               />
             </div>
 
-            <input
-              type="text"
-              name="subject"
-              required
-              placeholder="Subject *"
-            />
+            <div className="contact-form-grid">
+              <input
+                type="tel"
+                name="phone"
+                value={form.phone}
+                onChange={handleChange}
+                required
+                placeholder="Phone Number *"
+                maxLength={15}
+              />
+              <input
+                type="text"
+                name="subject"
+                value={form.subject}
+                onChange={handleChange}
+                required
+                placeholder="Subject *"
+              />
+            </div>
 
             <textarea
               name="message"
+              value={form.message}
+              onChange={handleChange}
               rows="5"
               required
               placeholder="Your Message *"
             />
 
-            <button type="submit" className="contact-submit">
-              <span>{result || "Send Message"}</span>
+            <button type="submit" className="contact-submit" disabled={submitting}>
+              <span>{submitting ? "Sending..." : "Send Message"}</span>
               <Send size={17} />
             </button>
           </form>
@@ -141,7 +179,6 @@ const Contact = () => {
             </a>
           </div>
         </div>
-
       </section>
     </main>
   );
