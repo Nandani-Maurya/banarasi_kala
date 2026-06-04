@@ -102,10 +102,10 @@ const PopularSarees = () => {
     });
   };
 
-  const handleWishlistClick = (e, product) => {
+  const handleWishlistClick = (e, product, colorId) => {
     e.preventDefault();
-    if (!user) { navigate("/login"); return; }
-    toggleWishlist(product);
+    if (!user) { navigate("/wishlist"); return; }
+    toggleWishlist(product, colorId || null);
   };
 
   return (
@@ -146,8 +146,9 @@ const PopularSarees = () => {
               const img = getProductCoverImage(product);
               const cardImages = getProductImages(product);
               const sliderImages = cardImages.length > 0 ? cardImages : [{ url: img }];
-              const liked = isInWishlist(product.id);
               const activeIndex = activeSlides[product.id] || 0;
+              const currentColorId = sliderImages[activeIndex]?.color_id || null;
+              const liked = isInWishlist(product.id, currentColorId);
               const stockInfo = getProductStockInfo(product);
               const motionClass = index % 3 === 0 ? "from-left" : index % 3 === 1 ? "from-bottom" : "from-right";
 
@@ -198,7 +199,7 @@ const PopularSarees = () => {
                       )}
                       <button
                         type="button"
-                        onClick={(e) => handleWishlistClick(e, product)}
+                        onClick={(e) => handleWishlistClick(e, product, currentColorId)}
                         className="bk-popular-wishlist"
                         aria-label={liked ? "Remove from wishlist" : "Add to wishlist"}
                       >

@@ -8,14 +8,14 @@ class WishlistController {
   });
 
   toggleWishlist = asyncHandler(async (req, res) => {
-    const { productId } = req.body;
-    const result = await WishlistService.toggleWishlist(req.customer.id, productId);
+    const { productId, colorId } = req.body;
+    const result = await WishlistService.toggleWishlist(req.customer.id, productId, colorId || null);
     return ok(res, result, "Wishlist updated");
   });
 
   removeFromWishlist = asyncHandler(async (req, res) => {
-    const { productId } = req.params;
-    await WishlistService.removeFromWishlist(req.customer.id, productId);
+    const { id } = req.params;
+    await WishlistService.removeById(req.customer.id, id);
     return ok(res, null, "Item removed from wishlist");
   });
 }

@@ -79,10 +79,10 @@ const NewArrivals = () => {
     };
   }, [hoveredProductId, products]);
 
-  const handleWishlistClick = (e, product) => {
+  const handleWishlistClick = (e, product, colorId) => {
     e.preventDefault();
-    if (!user) { navigate("/login"); return; }
-    toggleWishlist(product);
+    if (!user) { navigate("/wishlist"); return; }
+    toggleWishlist(product, colorId || null);
   };
 
   const handleCardEnter = (productId) => setHoveredProductId(productId);
@@ -147,7 +147,8 @@ const NewArrivals = () => {
                 const sliderImages = cardImages.length > 0 ? cardImages : [{ url: cover }];
                 const activeIndex = activeSlides[product.id] || 0;
                 const stockInfo = getProductStockInfo(product);
-                const liked = isInWishlist(product.id);
+                const currentColorId = sliderImages[activeIndex]?.color_id || null;
+                const liked = isInWishlist(product.id, currentColorId);
 
                 return (
                   <article
@@ -196,7 +197,7 @@ const NewArrivals = () => {
                         )}
                         <button
                           type="button"
-                          onClick={(e) => handleWishlistClick(e, product)}
+                          onClick={(e) => handleWishlistClick(e, product, currentColorId)}
                           className="bk-arrival-wishlist"
                           aria-label={liked ? "Remove from wishlist" : "Add to wishlist"}
                         >

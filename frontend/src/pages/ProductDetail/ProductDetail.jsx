@@ -931,11 +931,10 @@ const ProductDetail = () => {
 
   const handleWishlist = async () => {
     if (!user) {
-      showNotification("Please login first", "info");
       navigate("/wishlist");
       return;
     }
-    await toggleWishlist(product);
+    await toggleWishlist(product, selectedColorId || null);
   };
 
   const handleShare = async () => {
@@ -1120,8 +1119,8 @@ const ProductDetail = () => {
                   <span className="product-discount-badge">{product.discount_percent}% OFF</span>
                 )}
                 <div className="product-image-actions">
-                  <button type="button" onClick={handleWishlist} className={isInWishlist(product.id) ? "active" : ""} aria-label="Wishlist">
-                    <Icon icon={isInWishlist(product.id) ? "mdi:heart" : "lucide:heart"} />
+                  <button type="button" onClick={handleWishlist} className={isInWishlist(product.id, selectedColorId) ? "active" : ""} aria-label="Wishlist">
+                    <Icon icon={isInWishlist(product.id, selectedColorId) ? "mdi:heart" : "lucide:heart"} />
                   </button>
                   <button type="button" onClick={handleShare} aria-label="Share">
                     <Icon icon="lucide:share-2" />

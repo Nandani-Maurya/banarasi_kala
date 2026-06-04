@@ -12,32 +12,27 @@ const Wishlist = sequelize.define(
     customerId: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      references: {
-        model: "customers",
-        key: "id",
-      },
+      references: { model: "customers", key: "id" },
     },
     productId: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      references: {
-        model: "products",
-        key: "id",
-      },
+      references: { model: "products", key: "id" },
+    },
+    colorId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
     },
   },
   {
     tableName: "wishlists",
     timestamps: true,
-    indexes: [
-      {
-        unique: true,
-        fields: ['customerId', 'productId']
-      }
-    ]
   }
 );
 
 const Product = require("./Product");
+const Color = require("./Color");
 Wishlist.belongsTo(Product, { foreignKey: "productId" });
+Wishlist.belongsTo(Color, { foreignKey: "colorId" });
+
 module.exports = Wishlist;

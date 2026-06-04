@@ -75,7 +75,11 @@ const Wishlist = () => {
     }
 
     setColorModalProduct(product);
-    setSelectedColorId(inStockColors[0].id);
+    // Pre-select the saved color variant if it's in stock
+    const savedColor = product.colorId
+      ? inStockColors.find(c => String(c.id) === String(product.colorId))
+      : null;
+    setSelectedColorId(savedColor ? savedColor.id : inStockColors[0].id);
   };
 
   const closeColorModal = () => {
@@ -169,19 +173,27 @@ const Wishlist = () => {
             const isLowStock = stockInfo.isLowStock;
 
             return (
-              <article key={item.id} className={`wishlist-card ${isOutOfStock ? "out-of-stock" : ""}`}>
-                <Link to={`/product/${item.slug}`} className="wishlist-card-image">
+              <article key={item.wishlistItemId || `${item.id}-${item.colorId}`} className={`wishlist-card ${isOutOfStock ? "out-of-stock" : ""}`}>
+                <Link to={`/product/${item.slug}${item.colorId ? `?color=${item.colorId}` : ""}`} className="wishlist-card-image">
                   <img src={item.image_url} alt={item.name} loading="lazy" />
                   {hasDiscount && discountPercent > 0 && (
                     <span className="wishlist-discount-badge">{discountPercent}% off</span>
                   )}
                   {isOutOfStock && <span className="wishlist-stock-badge">Out of stock</span>}
                   {isLowStock && <span className="wishlist-stock-badge low">{stockInfo.badge}</span>}
+                  {item.colorName && (
+                    <span className="wishlist-color-badge">
+                      {item.colorHex && (
+                        <span className="wishlist-color-dot" style={{ background: item.colorHex }} />
+                      )}
+                      {item.colorName}
+                    </span>
+                  )}
                 </Link>
                 <button
                   type="button"
                   className="wishlist-remove-icon"
-                  onClick={() => removeFromWishlist(item.id)}
+                  onClick={() => removeFromWishlist(item.wishlistItemId)}
                   aria-label={`Remove ${item.name} from wishlist`}
                 >
                   <Icon icon="lucide:x" />
