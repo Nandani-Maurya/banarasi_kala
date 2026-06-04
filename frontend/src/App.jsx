@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
 
 import Layout from "./layout/Layout";
 import ScrollToTop from "./components/ScrollToTop";
@@ -112,6 +113,28 @@ function App() {
                 </Suspense>
                 </ErrorBoundary>
               </div>
+              <Toaster
+                position="top-center"
+                toastOptions={{
+                  duration: 3200,
+                  style: {
+                    background: "#1a0a06",
+                    color: "#fff6e8",
+                    borderRadius: "12px",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    padding: "12px 16px",
+                    boxShadow: "0 14px 34px rgba(0,0,0,0.22)",
+                  },
+                  success: {
+                    iconTheme: { primary: "#4ade80", secondary: "#1a0a06" },
+                  },
+                  error: {
+                    iconTheme: { primary: "#f87171", secondary: "#1a0a06" },
+                  },
+                }}
+              />
             </Router>
           </CartProvider>
         </WishlistProvider>

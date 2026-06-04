@@ -70,7 +70,8 @@ export const CartProvider = ({ children }) => {
   }, [user]);
 
   const addToCart = async (product, quantity = 1, colorId = null) => {
-    if (!user || !product) return false;
+    if (!user) return { success: false, message: "Please login to add items to bag." };
+    if (!product) return { success: false, message: "Product not found." };
     try {
       await api.post(API_ENDPOINTS.cart, { productId: product.id, quantity, colorId });
       const res = await api.get(API_ENDPOINTS.cart);
@@ -113,30 +114,17 @@ export const CartProvider = ({ children }) => {
 
   const updateQuantity = async (productId, quantity, colorId = null) => {
     if (!user || quantity < 1) return;
+    const snapshot = cart;
+    setCart(prev => prev.map(item =>
+      item.id === productId && String(item.colorId) === String(colorId)
+        ? { ...item, quantity }
+        : item
+    ));
     try {
       await api.put(`${API_ENDPOINTS.cart}/quantity`, { productId, quantity, colorId });
-      const res = await api.get(API_ENDPOINTS.cart);
-      const payload = unwrapApiData(res.data);
-      const rawItems = Array.isArray(payload) ? payload : [];
-      const formattedCart = rawItems.map(item => {
-        const p = item.Product;
-        if (!p) return null;
-        const allImages = getProductImages(p);
-        const colorImage = allImages.find(img => img.color_id === item.colorId);
-        return {
-          ...p,
-          cartItemId: item.id,
-          quantity: item.quantity,
-          colorId: item.colorId,
-          selectedColorName: item.Color?.name || "",
-          selectedColorSlug: item.Color?.slug || "",
-          price: p.selling_price || p.mrp_price || 0,
-          image_url: colorImage?.url || getProductCoverImage(p)
-        };
-      }).filter(i => i);
-      setCart(formattedCart);
       return { success: true };
     } catch (error) {
+      setCart(snapshot);
       const msg = error.response?.data?.message || "Update failed";
       return { success: false, message: msg };
     }

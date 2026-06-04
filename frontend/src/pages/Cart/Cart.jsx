@@ -1,22 +1,21 @@
 import { Icon } from "@iconify/react";
 import { Link } from "react-router-dom";
+import toast from "react-hot-toast";
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
-import { useNotification } from "../../context/NotificationContext";
 import EmptyStateIcon from "../../components/EmptyStateIcon";
 import { getProductStockInfo } from "../../utils/stockStatus";
 import { getVariantSku } from "../../utils/itemCode";
 import "./Cart.css";
 
 const Cart = () => {
-  const { 
-    cart, 
-    removeFromCart, 
-    updateQuantity, 
+  const {
+    cart,
+    removeFromCart,
+    updateQuantity,
     getSubtotal,
   } = useCart();
   const { toggleWishlist } = useWishlist();
-  const { showNotification } = useNotification();
 
   const subtotal = getSubtotal();
   const total = subtotal;
@@ -25,12 +24,16 @@ const Cart = () => {
     if (nextQuantity < 1) return;
     const stockInfo = getProductStockInfo(item, item.colorId);
     if (nextQuantity > stockInfo.quantity) {
-      showNotification(`Only ${stockInfo.quantity} item${stockInfo.quantity === 1 ? "" : "s"} are available for this product.`, "warning");
+      toast.error(`Only ${stockInfo.quantity} item${stockInfo.quantity === 1 ? "" : "s"} available for this product.`);
       return;
     }
-
     const result = await updateQuantity(item.id, nextQuantity, item.colorId);
-    if (result && !result.success) showNotification(result.message, "warning");
+    if (result && !result.success) toast.error(result.message);
+  };
+
+  const handleRemove = (item) => {
+    removeFromCart(item.id, item.colorId);
+    toast.success(`${item.name} removed from bag`);
   };
 
   return (
@@ -89,7 +92,7 @@ const Cart = () => {
                       <div className="cart-item-actions flex items-center justify-center sm:justify-start space-x-4 text-sm font-medium">
                         <button onClick={() => toggleWishlist(item)} className="text-gray-400 hover:text-[#800020] transition-colors">Save to Wishlist</button>
                         <span className="text-gray-300">|</span>
-                        <button onClick={() => removeFromCart(item.id, item.colorId)} className="text-red-700 hover:text-red-900 transition-colors">Remove</button>
+                        <button onClick={() => handleRemove(item)} className="text-red-700 hover:text-red-900 transition-colors">Remove</button>
                       </div>
                     </div>
                     <div className="cart-item-side flex flex-col items-center sm:items-end gap-4">

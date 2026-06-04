@@ -1,6 +1,7 @@
 import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../context/CartContext";
 import { useNotification } from "../../context/NotificationContext";
@@ -534,37 +535,37 @@ const ProductDetail = () => {
     }
 
     if (!user) {
-      showNotification("Please login first", "info");
-      navigate("/cart");
+      toast("Please login to add items to bag");
+      navigate("/login");
       return;
     }
 
     if (isSelectedOutOfStock || quantity > selectedStockInfo.quantity) {
-      showNotification(selectedStockInfo.colorMessage || "This product is out of stock.", "warning");
+      toast.error(selectedStockInfo.colorMessage || "This product is out of stock.");
       return;
     }
 
     const canAddMore = Math.max(0, selectedStockInfo.quantity - existingBagQuantity);
     if (quantity > canAddMore) {
-      showNotification(
+      toast.error(
         canAddMore > 0
-          ? `You already have ${existingBagQuantity} in your bag. You can add only ${canAddMore} more.`
-          : `You already have all available ${selectedStockInfo.quantity} item(s) in your bag.`,
-        "warning"
+          ? `You already have ${existingBagQuantity} in bag. Only ${canAddMore} more can be added.`
+          : `All ${selectedStockInfo.quantity} available item(s) are already in your bag.`
       );
       return;
     }
 
     const wasAlreadyInBag = existingBagQuantity > 0;
     const result = await addToCart(product, quantity, selectedColorId);
-    if (result.success) {
+    if (result?.success) {
+      const newTotal = existingBagQuantity + quantity;
       if (wasAlreadyInBag) {
-        showNotification(`Item already added to bag and we have increased the quantity by ${quantity}`, "success");
+        toast.success(`Bag updated — ${quantity} more added (${newTotal} total)`);
       } else {
-        showNotification(`Item added to bag! Quantity: ${quantity}`, "success");
+        toast.success(`Added to bag! Qty: ${quantity}`);
       }
     } else {
-      showNotification(result.message, "warning");
+      toast.error(result?.message || "Could not add to bag. Try again.");
     }
   };
 
