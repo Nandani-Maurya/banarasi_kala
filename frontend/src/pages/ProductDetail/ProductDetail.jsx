@@ -101,7 +101,7 @@ const ProductDetail = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
-  const { cart, addToCart } = useCart();
+  const { cart, addToCart, updateQuantity, removeFromCart } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
   const { showNotification } = useNotification();
 
@@ -126,6 +126,7 @@ const ProductDetail = () => {
   const [deliveryPincode, setDeliveryPincode] = useState("");
   const [deliveryCheckLoading, setDeliveryCheckLoading] = useState(false);
   const [deliveryQuote, setDeliveryQuote] = useState(null);
+  const [addingToBag, setAddingToBag] = useState(false);
   const [buyNowOpen, setBuyNowOpen] = useState(false);
   const [buyNowStep, setBuyNowStep] = useState("details");
   const [buyNowLoading, setBuyNowLoading] = useState(false);
@@ -301,10 +302,7 @@ const ProductDetail = () => {
       .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
   }, [cart, product, selectedColorId]);
 
-  const isGoToBagMode = existingBagQuantity > 0 && quantity <= existingBagQuantity;
-  const canAddToBag = !isSelectedOutOfStock && !isChangingColor && quantity <= selectedStockInfo.quantity;
-  const availableQuantity = isSelectedOutOfStock ? 0 : Math.max(0, Math.floor(Number(selectedStockInfo.quantity || 0)));
-  const quantityOptions = availableQuantity > 0 ? Array.from({ length: availableQuantity }, (_, index) => index + 1) : [0];
+  const canAddToBag = !isSelectedOutOfStock && !isChangingColor;
   const formatMoney = (value) => `Rs. ${Number(value || 0).toLocaleString("en-IN")}`;
   const formatDeliveryDate = (value) => {
     if (!value) return "";
@@ -443,21 +441,41 @@ const ProductDetail = () => {
     return () => window.clearInterval(timer);
   }, [products, relatedHoverId]);
 
-  const incrementQty = () => {
-    if (isSelectedOutOfStock) return;
-    if (quantity >= selectedStockInfo.quantity) {
-      showNotification(`Only ${selectedStockInfo.quantity} item${selectedStockInfo.quantity === 1 ? "" : "s"} are available for this product.`, "warning");
-      return;
-    }
-    setQuantity((prev) => prev + 1);
-  };
-  const decrementQty = () => setQuantity((prev) => (prev > 1 ? prev - 1 : 1));
+  // Keep quantity in sync with cart (so cart-page changes reflect here instantly)
+  useEffect(() => {
+    setQuantity(existingBagQuantity > 0 ? existingBagQuantity : 1);
+  }, [existingBagQuantity]);
 
+  // Clamp to available stock
   useEffect(() => {
     if (!isSelectedOutOfStock && selectedStockInfo.quantity > 0 && quantity > selectedStockInfo.quantity) {
       setQuantity(selectedStockInfo.quantity);
     }
   }, [isSelectedOutOfStock, quantity, selectedStockInfo.quantity]);
+
+  const incrementQty = async () => {
+    if (isSelectedOutOfStock) return;
+    const next = quantity + 1;
+    if (next > selectedStockInfo.quantity) {
+      toast.error(`Only ${selectedStockInfo.quantity} item${selectedStockInfo.quantity === 1 ? "" : "s"} available.`);
+      return;
+    }
+    setQuantity(next);
+    if (existingBagQuantity > 0) {
+      const result = await updateQuantity(product.id, next, selectedColorId);
+      if (result && !result.success) toast.error(result.message);
+    }
+  };
+
+  const decrementQty = async () => {
+    if (quantity <= 1) return;
+    const next = quantity - 1;
+    setQuantity(next);
+    if (existingBagQuantity > 0) {
+      const result = await updateQuantity(product.id, next, selectedColorId);
+      if (result && !result.success) toast.error(result.message);
+    }
+  };
 
   useEffect(() => {
     if (!buyNowOpen || !selectedBuyNowAddress?.pincode || isSelectedOutOfStock) {
@@ -529,44 +547,28 @@ const ProductDetail = () => {
   }, [buyNowOpen]);
 
   const handleAddToCart = async () => {
-    if (isGoToBagMode) {
-      navigate("/cart");
-      return;
-    }
-
     if (!user) {
       toast("Please login to add items to bag");
       navigate("/login");
       return;
     }
-
-    if (isSelectedOutOfStock || quantity > selectedStockInfo.quantity) {
+    if (isSelectedOutOfStock) {
       toast.error(selectedStockInfo.colorMessage || "This product is out of stock.");
       return;
     }
-
-    const canAddMore = Math.max(0, selectedStockInfo.quantity - existingBagQuantity);
-    if (quantity > canAddMore) {
-      toast.error(
-        canAddMore > 0
-          ? `You already have ${existingBagQuantity} in bag. Only ${canAddMore} more can be added.`
-          : `All ${selectedStockInfo.quantity} available item(s) are already in your bag.`
-      );
-      return;
-    }
-
-    const wasAlreadyInBag = existingBagQuantity > 0;
+    setAddingToBag(true);
     const result = await addToCart(product, quantity, selectedColorId);
+    setAddingToBag(false);
     if (result?.success) {
-      const newTotal = existingBagQuantity + quantity;
-      if (wasAlreadyInBag) {
-        toast.success(`Bag updated — ${quantity} more added (${newTotal} total)`);
-      } else {
-        toast.success(`Added to bag! Qty: ${quantity}`);
-      }
+      toast.success(`Added to bag! Qty: ${quantity}`);
     } else {
       toast.error(result?.message || "Could not add to bag. Try again.");
     }
+  };
+
+  const handleRemoveFromBag = () => {
+    removeFromCart(product.id, selectedColorId);
+    toast.success(`${product.name} removed from bag`);
   };
 
   const resetBuyNowForm = () => {
@@ -1289,36 +1291,47 @@ const ProductDetail = () => {
 
             <div className="product-action-panel">
               <div className="product-qty">
-                <label htmlFor="product-quantity">Quantity</label>
-                <select
-                  id="product-quantity"
-                  value={isSelectedOutOfStock ? 0 : quantity}
-                  onChange={(event) => setQuantity(Number(event.target.value))}
-                  disabled={isSelectedOutOfStock}
-                >
-                  {quantityOptions.map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
+                <div className="product-qty-stepper">
+                  <button
+                    type="button"
+                    onClick={existingBagQuantity > 0 && quantity <= 1 ? handleRemoveFromBag : decrementQty}
+                    disabled={existingBagQuantity === 0 && quantity <= 1}
+                    aria-label={existingBagQuantity > 0 && quantity <= 1 ? "Remove from bag" : "Decrease quantity"}
+                    className={existingBagQuantity > 0 && quantity <= 1 ? "is-trash" : ""}
+                  >
+                    <Icon icon={existingBagQuantity > 0 && quantity <= 1 ? "lucide:trash-2" : "lucide:minus"} />
+                  </button>
+                  <span>{isSelectedOutOfStock ? 0 : quantity}</span>
+                  <button
+                    type="button"
+                    onClick={incrementQty}
+                    disabled={isSelectedOutOfStock || quantity >= selectedStockInfo.quantity}
+                    aria-label="Increase quantity"
+                  >
+                    <Icon icon="lucide:plus" />
+                  </button>
+                </div>
               </div>
-              <button 
-                type="button" 
-                onClick={handleAddToCart} 
-                className="product-add-btn" 
-                disabled={!isGoToBagMode && !canAddToBag}
+
+              <button
+                type="button"
+                onClick={handleAddToCart}
+                className={`product-add-btn${existingBagQuantity > 0 ? " in-bag" : ""}`}
+                disabled={existingBagQuantity > 0 || !canAddToBag || addingToBag}
               >
-                <Icon icon={isGoToBagMode ? "lucide:arrow-right" : "lucide:shopping-bag"} />
-                {isGoToBagMode 
-                  ? "Go to Bag" 
-                  : isSelectedOutOfStock 
-                    ? "Out of Stock" 
-                    : isChangingColor 
-                      ? "Loading..." 
-                      : "Add to Bag"
-                }
+                {existingBagQuantity > 0 ? (
+                  <><Icon icon="lucide:check" /> In Bag</>
+                ) : addingToBag ? (
+                  <>Adding...</>
+                ) : isSelectedOutOfStock ? (
+                  <>Out of Stock</>
+                ) : isChangingColor ? (
+                  <>Loading...</>
+                ) : (
+                  <><Icon icon="lucide:shopping-bag" /> Add to Bag</>
+                )}
               </button>
+
               <button type="button" onClick={openBuyNowModal} className="product-buy-btn" disabled={!canAddToBag}>
                 <Icon icon="lucide:zap" />
                 Buy Now

@@ -72,32 +72,64 @@ export const CartProvider = ({ children }) => {
   const addToCart = async (product, quantity = 1, colorId = null) => {
     if (!user) return { success: false, message: "Please login to add items to bag." };
     if (!product) return { success: false, message: "Product not found." };
+
+    const snapshot = cart;
+    const existing = cart.find(
+      item => Number(item.id) === Number(product.id) && String(item.colorId) === String(colorId)
+    );
+
+    if (existing) {
+      setCart(prev => prev.map(item =>
+        Number(item.id) === Number(product.id) && String(item.colorId) === String(colorId)
+          ? { ...item, quantity: item.quantity + quantity }
+          : item
+      ));
+    } else {
+      const allImages = getProductImages(product);
+      const colorImage = allImages.find(img => String(img.color_id) === String(colorId));
+      const colorInfo = Array.isArray(product.colors)
+        ? product.colors.find(c => String(c.id) === String(colorId))
+        : null;
+      setCart(prev => [...prev, {
+        ...product,
+        cartItemId: null,
+        quantity,
+        colorId,
+        selectedColorName: colorInfo?.name || "",
+        selectedColorSlug: colorInfo?.slug || "",
+        price: product.selling_price || product.mrp_price || 0,
+        image_url: colorImage?.url || getProductCoverImage(product),
+      }]);
+    }
+
     try {
       await api.post(API_ENDPOINTS.cart, { productId: product.id, quantity, colorId });
-      const res = await api.get(API_ENDPOINTS.cart);
-      const payload = unwrapApiData(res.data);
-      const rawItems = Array.isArray(payload) ? payload : [];
-      const formattedCart = rawItems.map(item => {
-        const p = item.Product;
-        if (!p) return null;
-        const allImages = getProductImages(p);
-        const colorImage = allImages.find(img => img.color_id === item.colorId);
-        return {
-          ...p,
-          cartItemId: item.id,
-          quantity: item.quantity,
-          colorId: item.colorId,
-          selectedColorName: item.Color?.name || "",
-          selectedColorSlug: item.Color?.slug || "",
-          price: p.selling_price || p.mrp_price || 0,
-          image_url: colorImage?.url || getProductCoverImage(p)
-        };
-      }).filter(i => i);
-      setCart(formattedCart);
+      // Sync real cartItemId in background — don't await
+      api.get(API_ENDPOINTS.cart).then(res => {
+        const payload = unwrapApiData(res.data);
+        const rawItems = Array.isArray(payload) ? payload : [];
+        const synced = rawItems.map(item => {
+          const p = item.Product;
+          if (!p) return null;
+          const allImages = getProductImages(p);
+          const colorImage = allImages.find(img => img.color_id === item.colorId);
+          return {
+            ...p,
+            cartItemId: item.id,
+            quantity: item.quantity,
+            colorId: item.colorId,
+            selectedColorName: item.Color?.name || "",
+            selectedColorSlug: item.Color?.slug || "",
+            price: p.selling_price || p.mrp_price || 0,
+            image_url: colorImage?.url || getProductCoverImage(p),
+          };
+        }).filter(Boolean);
+        setCart(synced);
+      }).catch(() => {});
       return { success: true };
     } catch (error) {
-      const msg = error.response?.data?.message || "Failed to add to bag";
-      return { success: false, message: msg };
+      setCart(snapshot);
+      return { success: false, message: error.response?.data?.message || "Failed to add to bag" };
     }
   };
 
