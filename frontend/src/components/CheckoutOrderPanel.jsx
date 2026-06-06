@@ -9,6 +9,8 @@ const CheckoutOrderPanel = ({
   onSelectAddress,
   onAddAddress,
   onEditAddress,
+  onDeleteAddress,
+  deletingAddressId = null,
   getAddressLine,
   user,
   addressLoading = false,
@@ -44,7 +46,22 @@ const CheckoutOrderPanel = ({
               </div>
 
               {addressLoading && !addresses.length ? (
-                <p className="buy-now-muted">Loading saved addresses...</p>
+                <div className="buy-now-address-list checkout-address-list">
+                  {[0, 1].map((i) => (
+                    <div key={i} className="buy-now-address-skeleton">
+                      <div className="bnas-radio" />
+                      <div className="bnas-lines">
+                        <div className="bnas-line bnas-line--title" />
+                        <div className="bnas-line bnas-line--addr" />
+                        <div className="bnas-line bnas-line--meta" />
+                      </div>
+                      <div className="bnas-actions">
+                        <div className="bnas-btn" />
+                        <div className="bnas-btn" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : addresses.length > 0 ? (
                 <div className="buy-now-address-list checkout-address-list">
                   {addresses.map((address) => (
@@ -62,15 +79,29 @@ const CheckoutOrderPanel = ({
                         <small>{addressLine(address)}</small>
                         <small>{address.name || user?.name} - {address.phone || user?.phone}</small>
                       </span>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.preventDefault();
-                          onEditAddress?.(address);
-                        }}
-                      >
-                        Edit
-                      </button>
+                      <div className="buy-now-address-actions">
+                        <button
+                          type="button"
+                          disabled={String(deletingAddressId) === String(address.id)}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            onEditAddress?.(address);
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="is-danger"
+                          disabled={String(deletingAddressId) === String(address.id)}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            onDeleteAddress?.(address);
+                          }}
+                        >
+                          {String(deletingAddressId) === String(address.id) ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
                     </label>
                   ))}
                 </div>

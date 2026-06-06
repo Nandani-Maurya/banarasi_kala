@@ -31,10 +31,10 @@
 .wishlist-hero h1 {
   margin: 0;
   color: #800020;
-  font-family: "Poppins", sans-serif;
+  font-family: "Cinzel", Georgia, "Times New Roman", serif;
   font-size: clamp(22px, 5vw, 30px);
   line-height: 1.1;
-  letter-spacing: 0;
+  letter-spacing: 0.04em;
   font-weight: 700;
 }
 
@@ -116,30 +116,27 @@
   position: absolute;
   top: 10px;
   right: 10px;
-  min-width: 32px;
-  height: 30px;
-  padding: 0 9px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
   color: #800020;
-  background: rgba(255, 248, 239, 0.9);
-  border: 1px solid rgba(255, 235, 203, 0.75);
-  border-radius: 999px;
+  background: rgba(255, 248, 239, 0.92);
+  border: 1px solid rgba(255, 235, 203, 0.8);
+  border-radius: 50%;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.wishlist-remove-icon:hover {
+  background: rgba(255, 235, 230, 0.96);
+  border-color: rgba(128, 0, 32, 0.28);
 }
 
 .wishlist-remove-icon svg {
   width: 13px;
   height: 13px;
-}
-
-.wishlist-remove-icon span {
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .wishlist-card-body {
@@ -151,7 +148,6 @@
 
 .wishlist-card-title {
   display: block;
-  min-height: 38px;
   color: #4a160f;
   font-family: "Poppins", sans-serif;
   font-size: 13.5px;
@@ -161,8 +157,33 @@
   text-transform: none;
 }
 
+.wishlist-card-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.wishlist-status-pill {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.4;
+  color: #8b001f;
+  background: rgba(255, 235, 230, 0.9);
+  border: 1px solid rgba(128, 0, 32, 0.16);
+}
+
+.wishlist-status-pill.low {
+  color: #7c2d12;
+  background: rgba(255, 237, 213, 0.9);
+  border-color: rgba(194, 65, 12, 0.2);
+}
+
 .wishlist-card-price {
-  margin-top: 8px;
+  margin-top: 5px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -228,22 +249,7 @@
 }
 
 .wishlist-stock-badge {
-  position: absolute;
-  left: 10px;
-  bottom: 10px;
-  z-index: 1;
-  padding: 7px 10px;
-  border-radius: 999px;
-  background: rgba(255, 248, 239, 0.94);
-  color: #8b001f;
-  border: 1px solid rgba(128, 0, 32, 0.2);
-  box-shadow: 0 8px 20px rgba(55, 15, 10, 0.16);
-  font-family: "Inter", "Poppins", Arial, sans-serif;
-  font-size: 10px;
-  font-weight: 900;
-  line-height: 1;
-  text-transform: capitalize;
-  letter-spacing: 0.02em;
+  display: none;
 }
 
 .wishlist-stock-badge.low {
@@ -279,7 +285,7 @@
   position: absolute;
   bottom: 10px;
   left: 10px;
-  z-index: 1;
+  z-index: 3;
   display: inline-flex;
   align-items: center;
   gap: 5px;

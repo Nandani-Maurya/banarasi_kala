@@ -796,6 +796,87 @@
     font-weight: 600;
 }
 
+.buy-now-address-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    align-items: center;
+    justify-self: end;
+}
+
+.buy-now-address-actions > button {
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 0;
+    color: #800020;
+}
+
+@keyframes bnas-shimmer {
+    0% { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+}
+
+.buy-now-address-skeleton {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 10px;
+    background: #fffdf8;
+    border: 1px solid rgba(128, 0, 32, 0.08);
+    border-radius: 12px;
+}
+
+.buy-now-address-skeleton .bnas-radio {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.buy-now-address-skeleton .bnas-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.buy-now-address-skeleton .bnas-line {
+    border-radius: 6px;
+    height: 10px;
+}
+
+.buy-now-address-skeleton .bnas-line--title { width: 60%; }
+.buy-now-address-skeleton .bnas-line--addr  { width: 90%; }
+.buy-now-address-skeleton .bnas-line--meta  { width: 50%; }
+
+.buy-now-address-skeleton .bnas-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.buy-now-address-skeleton .bnas-btn {
+    width: 32px;
+    height: 10px;
+    border-radius: 6px;
+}
+
+.buy-now-address-skeleton .bnas-radio,
+.buy-now-address-skeleton .bnas-line,
+.buy-now-address-skeleton .bnas-btn {
+    background: linear-gradient(
+        90deg,
+        #ede8e0 25%,
+        #f5f1ea 50%,
+        #ede8e0 75%
+    );
+    background-size: 800px 100%;
+    animation: bnas-shimmer 1.4s infinite linear;
+}
+
 .checkout-no-address {
     display: grid;
     grid-template-columns: auto 1fr auto;
@@ -1281,8 +1362,13 @@
         grid-template-columns: auto minmax(0, 1fr);
     }
 
-    .buy-now-address > button {
+    .buy-now-address > button,
+    .buy-now-address > .buy-now-address-actions {
         grid-column: 2;
+        justify-self: start;
+    }
+
+    .buy-now-address-actions {
         justify-self: start;
     }
 }

@@ -262,9 +262,6 @@ const Wishlist = () => {
                   {hasDiscount && discountPercent > 0 && !cardIsOos && (
                     <span className="wishlist-discount-badge">{discountPercent}% off</span>
                   )}
-                  {showColorOos && <span className="wishlist-stock-badge">Color unavailable</span>}
-                  {noColorSaved && stockInfo.isOutOfStock && <span className="wishlist-stock-badge">Out of stock</span>}
-                  {isLowStock && <span className="wishlist-stock-badge low">{stockInfo.badge}</span>}
                   {item.colorName && (
                     <span className="wishlist-color-badge">
                       {item.colorHex && (
@@ -281,13 +278,19 @@ const Wishlist = () => {
                   aria-label={`Remove ${item.name} from wishlist`}
                 >
                   <Icon icon="lucide:x" />
-                  <span>Remove</span>
                 </button>
 
                 <div className="wishlist-card-body">
                   <Link to={`/product/${item.slug}`} className="wishlist-card-title">
                     {item.name}
                   </Link>
+                  {(showColorOos || (noColorSaved && stockInfo.isOutOfStock) || isLowStock) && (
+                    <div className="wishlist-card-status">
+                      {showColorOos && <span className="wishlist-status-pill">Color unavailable</span>}
+                      {noColorSaved && stockInfo.isOutOfStock && <span className="wishlist-status-pill">Out of stock</span>}
+                      {isLowStock && <span className="wishlist-status-pill low">{stockInfo.badge}</span>}
+                    </div>
+                  )}
                   <div className="wishlist-card-price">
                     <strong>Rs. {price.toLocaleString("en-IN")}</strong>
                     {hasDiscount && <span>Rs. {mrp.toLocaleString("en-IN")}</span>}

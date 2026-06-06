@@ -498,7 +498,7 @@ const ProductDetail = () => {
       try {
         setBuyNowShippingLoading(true);
         const rawWeight = Number(product?.weight);
-        const productWeightKg = Number.isFinite(rawWeight) && rawWeight > 0 ? rawWeight : 0.5;
+        const productWeightKg = Number.isFinite(rawWeight) && rawWeight > 0 ? (rawWeight > 5 ? rawWeight / 1000 : rawWeight) : 0.5;
         const totalQty = Math.max(1, Number(quantity || 1));
         const totalWeightKg = (productWeightKg * totalQty) + (PACKAGING_WEIGHT_KG * totalQty);
         const response = await fetch(

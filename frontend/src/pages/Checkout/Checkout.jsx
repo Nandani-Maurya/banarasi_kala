@@ -84,6 +84,7 @@ const Checkout = () => {
   const [shippingLoading, setShippingLoading] = useState(false);
   const [isFirstOrder, setIsFirstOrder] = useState(false);
   const [addresses, setAddresses] = useState([]);
+  const [addressLoading, setAddressLoading] = useState(true);
   const [selectedAddressId, setSelectedAddressId] = useState("");
   const [availableCoupons, setAvailableCoupons] = useState([]);
   const [couponCode, setCouponCode] = useState(appliedCoupon?.code || "");
@@ -99,6 +100,7 @@ const Checkout = () => {
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   const [addressSaving, setAddressSaving] = useState(false);
+  const [deletingAddressId, setDeletingAddressId] = useState(null);
   const [addrFormErrors, setAddrFormErrors] = useState({});
   const rootRef = useRef(null);
   const orderingRef = useRef(false);
@@ -126,8 +128,9 @@ const Checkout = () => {
   const total = Math.max(0, grossAfterCoupon - walletUsableAmount);
   const totalWeightKg = payableCart.reduce((sum, item) => {
     const qty = Math.max(1, Number(item.quantity || 1));
-    const productWeight = Math.max(0, Number(item.weight || 0));
-    return sum + ((productWeight + PACKAGING_WEIGHT_KG) * qty);
+    const raw = Number(item.weight || 0);
+    const productWeightKg = raw > 5 ? raw / 1000 : raw;
+    return sum + ((productWeightKg + PACKAGING_WEIGHT_KG) * qty);
   }, 0);
 
   const getCouponSavingsText = (coupon) => {
@@ -147,7 +150,10 @@ const Checkout = () => {
   useEffect(() => {
     let cancelled = false;
     const loadOrderState = async () => {
-      if (!user?.id) return;
+      if (!user?.id) {
+        setAddressLoading(false);
+        return;
+      }
       try {
         const [ordersRes, addressRes, walletRes, couponRes] = await Promise.all([
           api.get("/api/orders/my"),
@@ -178,6 +184,8 @@ const Checkout = () => {
         setAvailableCoupons(Array.isArray(couponRes.data) ? couponRes.data.filter((coupon) => coupon.is_active !== false) : []);
       } catch {
         if (!cancelled) setIsFirstOrder(false);
+      } finally {
+        if (!cancelled) setAddressLoading(false);
       }
     };
     loadOrderState();
@@ -255,6 +263,28 @@ const Checkout = () => {
       map_lng: location.center?.[0] || current.map_lng,
     }));
     setMapOpen(false);
+  };
+
+  const deleteCheckoutAddress = async (address) => {
+    try {
+      setDeletingAddressId(String(address.id));
+      await api.delete(`/api/addresses/${address.id}`);
+      const nextAddresses = addresses.filter((a) => String(a.id) !== String(address.id));
+      setAddresses(nextAddresses);
+      if (String(selectedAddressId) === String(address.id)) {
+        const next = nextAddresses.find((a) => a.is_default) || nextAddresses[0];
+        if (next) {
+          selectAddress(next);
+        } else {
+          setSelectedAddressId("");
+        }
+      }
+      showNotification("Address deleted.", "success");
+    } catch (error) {
+      showNotification(error?.response?.data?.message || "Unable to delete address.", "warning");
+    } finally {
+      setDeletingAddressId(null);
+    }
   };
 
   const saveCheckoutAddress = async () => {
@@ -397,6 +427,8 @@ const Checkout = () => {
           weightKg: effectiveWeight,
           requireCod: activePayment === "cod" && subtotal <= COD_MAX_AMOUNT,
         });
+
+        console.log("Serviceability check - selected courier:", selectedCourier);
 
         if (!cancelled) {
           setShippingCharge(selectedCourier?.rate || 0);
@@ -564,8 +596,11 @@ const Checkout = () => {
               addresses={addresses}
               selectedAddressId={selectedAddressId}
               onSelectAddress={selectAddress}
+              addressLoading={addressLoading}
               onAddAddress={() => openAddressModal()}
               onEditAddress={openAddressModal}
+              onDeleteAddress={deleteCheckoutAddress}
+              deletingAddressId={deletingAddressId}
               getAddressLine={getCheckoutAddressLine}
               user={user}
               paymentOptions={[
