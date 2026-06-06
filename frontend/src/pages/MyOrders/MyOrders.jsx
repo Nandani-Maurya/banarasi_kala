@@ -579,7 +579,8 @@ export default function MyOrders() {
       const response = await api.post("/api/feedback/submit", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      showNotification(response.data?.message || "Review submitted for approval.", "success");
+      const msg = response.data?.message?.toLowerCase().includes("updated") ? "Review updated" : "Review submitted";
+      showNotification(msg, "success");
       closeFeedbackModal();
       fetchOrders();
     } catch (err) {

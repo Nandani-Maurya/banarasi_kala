@@ -213,7 +213,10 @@ const PopularSarees = () => {
                       <h3>{product.name}</h3>
                       <div className="bk-popular-price-row">
                         {stockInfo.isOutOfStock ? (
-                          <span className="bk-popular-oos-label">Out of Stock</span>
+                          <span className="bk-popular-oos-stack">
+                            {mrp > 0 && <span className="bk-popular-price">Rs. {mrp.toLocaleString("en-IN")}</span>}
+                            <span className="bk-popular-oos-label">Out of Stock</span>
+                          </span>
                         ) : (
                           <>
                             <span className="bk-popular-price">Rs. {sell.toLocaleString("en-IN")}</span>

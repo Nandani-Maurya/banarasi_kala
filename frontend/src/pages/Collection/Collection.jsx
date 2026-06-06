@@ -47,21 +47,24 @@ const Collection = () => {
   const [activeSlides, setActiveSlides] = useState({});
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const productsRequestId = useRef(0);
+  const isFirstSearchParamsRun = useRef(true);
 
-
-
-  const [filters, setFilters] = useState({
-    variety: [],
+  const [filters, setFilters] = useState(() => ({
+    variety: getIdListParam(searchParams, "variety"),
     occasion: [],
     material: [],
     color: [],
     minPrice: 0,
     maxPrice: 200000,
-    sortBy: "newest",
+    sortBy: getSortParam(searchParams),
     search: searchParams.get("search") || "",
-  });
+  }));
 
   useEffect(() => {
+    if (isFirstSearchParamsRun.current) {
+      isFirstSearchParamsRun.current = false;
+      return;
+    }
     const urlSearch = searchParams.get("search") || "";
     const urlVarieties = getIdListParam(searchParams, "variety");
     setFilters((prev) => ({

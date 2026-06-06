@@ -1,11 +1,13 @@
 import { useState } from "react";
 import "./Feedback.css";
-import { MessageSquare, Send, ShieldCheck, Sparkles, Star } from "lucide-react";
+import { MessageSquare, Send, ShieldCheck, Sparkles, Star, LogIn } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { API_ENDPOINTS } from "../../config/api";
 
 const Feedback = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [rating, setRating] = useState(5);
   const [hover, setHover] = useState(0);
   const [comment, setComment] = useState("");
@@ -18,11 +20,12 @@ const Feedback = () => {
     setMessage({ type: "", text: "" });
 
     try {
-      const response = await fetch(API_ENDPOINTS.feedbackSubmit, {
+      const token = localStorage.getItem("accessToken") || sessionStorage.getItem("accessToken");
+      const response = await fetch(API_ENDPOINTS.feedbackGeneral, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("accessToken") || sessionStorage.getItem("accessToken")}`
+          "Authorization": `Bearer ${token}`
         },
         body: JSON.stringify({ rating, comment })
       });
@@ -30,7 +33,7 @@ const Feedback = () => {
       const data = await response.json();
 
       if (data.success) {
-        setMessage({ type: "success", text: "Thank you! Your feedback has been submitted and is pending admin approval." });
+        setMessage({ type: "success", text: "Thank you! Your feedback has been submitted." });
         setComment("");
         setRating(5);
       } else {
@@ -76,7 +79,7 @@ const Feedback = () => {
               <span><ShieldCheck size={20} /></span>
               <div>
                 <h2>Trusted Review</h2>
-                <p>Logged in as {user?.name || "Customer"}.</p>
+                <p>{user ? `Logged in as ${user.name}.` : "Login to share your experience."}</p>
               </div>
             </article>
           </div>
@@ -85,58 +88,76 @@ const Feedback = () => {
         <div className="feedback-form-panel">
           <div className="feedback-kicker">Send Us a Review</div>
 
-          <form onSubmit={handleSubmit} className="feedback-form">
-            <div className="feedback-rating">
-              <label>Rate your experience</label>
-              <div className="feedback-stars">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    type="button"
-                    className={(hover || rating) >= star ? "is-active" : ""}
-                    onMouseEnter={() => setHover(star)}
-                    onMouseLeave={() => setHover(0)}
-                    onClick={() => setRating(star)}
-                    aria-label={`${star} star rating`}
-                  >
-                    <Star />
-                  </button>
-                ))}
-              </div>
-              <p>
-                {rating === 5 ? "Exceptional!" : rating === 4 ? "Very Good" : rating === 3 ? "Good" : rating === 2 ? "Fair" : "Needs Improvement"}
-              </p>
+          {!user ? (
+            <div className="feedback-login-prompt">
+              <LogIn size={36} strokeWidth={1.5} />
+              <h2>Login to Leave a Review</h2>
+              <p>Only logged-in customers can submit feedback.</p>
+              <button
+                type="button"
+                className="feedback-submit"
+                onClick={() => navigate("/auth?redirect=/feedback")}
+              >
+                <span>Login / Sign Up</span>
+                <LogIn size={17} />
+              </button>
             </div>
-
-            <label className="feedback-review-field">
-              <span><MessageSquare size={14} /> Your Review</span>
-              <textarea
-                required
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Tell us what you loved about our sarees or how we can improve..."
-              />
-            </label>
-
-            {message.text && (
-              <div className={`feedback-message ${message.type}`}>
-                {message.text}
+          ) : (
+            <form onSubmit={handleSubmit} className="feedback-form">
+              <div className="feedback-rating">
+                <label>Rate your experience</label>
+                <div className="feedback-stars">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <button
+                      key={star}
+                      type="button"
+                      className={(hover || rating) >= star ? "is-active" : ""}
+                      onMouseEnter={() => setHover(star)}
+                      onMouseLeave={() => setHover(0)}
+                      onClick={() => setRating(star)}
+                      aria-label={`${star} star rating`}
+                    >
+                      <Star />
+                    </button>
+                  ))}
+                </div>
+                <p>
+                  {rating === 5 ? "Exceptional!" : rating === 4 ? "Very Good" : rating === 3 ? "Good" : rating === 2 ? "Fair" : "Needs Improvement"}
+                </p>
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="feedback-submit"
-            >
-              <span>{submitting ? "Submitting..." : "Post Review"}</span>
-              <Send size={17} />
-            </button>
-          </form>
+              <label className="feedback-review-field">
+                <span><MessageSquare size={14} /> Your Review</span>
+                <textarea
+                  required
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Tell us what you loved about our sarees or how we can improve..."
+                />
+              </label>
 
-          <div className="feedback-note">
-            Your review will be published after a quick quality check by our team.
-          </div>
+              {message.text && (
+                <div className={`feedback-message ${message.type}`}>
+                  {message.text}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="feedback-submit"
+              >
+                <span>{submitting ? "Submitting..." : "Post Review"}</span>
+                <Send size={17} />
+              </button>
+            </form>
+          )}
+
+          {user && (
+            <div className="feedback-note">
+              Your review will be published after a quick quality check by our team.
+            </div>
+          )}
         </div>
       </section>
     </main>

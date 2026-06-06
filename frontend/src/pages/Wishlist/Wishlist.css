@@ -312,6 +312,13 @@
   cursor: not-allowed;
 }
 
+.wishlist-explore-btn {
+  background: linear-gradient(135deg, #4b2a1d, #7a3a1e) !important;
+  color: #ffe4a8 !important;
+  font-size: 10px !important;
+  letter-spacing: 0.04em;
+}
+
 .wishlist-modal-backdrop {
   position: fixed;
   inset: 0;

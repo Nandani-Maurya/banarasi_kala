@@ -136,6 +136,12 @@
   opacity: 0.65;
 }
 
+.bk-popular-oos-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .bk-popular-oos-label {
   color: #9f1239;
   font-size: 11px;

@@ -142,6 +142,33 @@ exports.submitFeedback = async (req, res) => {
   }
 };
 
+exports.submitGeneralFeedback = async (req, res) => {
+  try {
+    const rating = toInt(req.body.rating);
+    const comment = String(req.body.comment || '').trim();
+    const customerId = req.user.id;
+
+    if (!rating || rating < 1 || rating > 5) {
+      return res.status(400).json({ success: false, message: 'Please select a rating.' });
+    }
+    if (comment.length < 8) {
+      return res.status(400).json({ success: false, message: 'Please write a short review.' });
+    }
+
+    await Feedback.create({
+      customer_id: customerId,
+      rating,
+      comment,
+      is_approved: false,
+    });
+
+    res.status(201).json({ success: true, message: 'Feedback submitted.' });
+  } catch (error) {
+    console.error('Submit general feedback error:', error);
+    res.status(500).json({ success: false, message: 'Could not submit your feedback right now.' });
+  }
+};
+
 exports.getApprovedFeedback = async (req, res) => {
   try {
     await ensureFeedbackColumns();

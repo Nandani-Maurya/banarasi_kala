@@ -211,7 +211,10 @@ const NewArrivals = () => {
                         <h3>{product.name}</h3>
                         <div className="bk-arrival-price-row">
                           {stockInfo.isOutOfStock ? (
-                            <span className="bk-arrival-oos-label">Out of Stock</span>
+                            <span className="bk-arrival-oos-stack">
+                              {mrp > 0 && <span className="bk-arrival-price">Rs. {mrp.toLocaleString("en-IN")}</span>}
+                              <span className="bk-arrival-oos-label">Out of Stock</span>
+                            </span>
                           ) : (
                             <>
                               <span className="bk-arrival-price">Rs. {sell.toLocaleString("en-IN")}</span>

@@ -153,6 +153,12 @@
   opacity: 0.65;
 }
 
+.bk-arrival-oos-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .bk-arrival-oos-label {
   color: #9f1239;
   font-size: 11px;

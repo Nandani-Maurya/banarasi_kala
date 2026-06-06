@@ -10,6 +10,7 @@ router.get('/product/:productId', FeedbackController.getProductFeedback);
 
 // Protected route to submit feedback
 router.post('/submit', authMiddleware, upload.array('images', 5), FeedbackController.submitFeedback);
+router.post('/general', authMiddleware, FeedbackController.submitGeneralFeedback);
 
 // Admin routes
 router.get('/pending', authMiddleware, adminMiddleware, FeedbackController.getPendingFeedback);

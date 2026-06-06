@@ -40,15 +40,15 @@ const AuthField = ({
   value,
   placeholder,
   onChange,
-  required = true,
   rightAction,
   leftAddon,
   maxLength,
   inputMode,
+  error,
 }) => (
-  <label className="auth-field">
+  <div className="auth-field">
     <span className="auth-label">{label}</span>
-    <span className={leftAddon ? "auth-input-wrap has-left-addon" : "auth-input-wrap"}>
+    <span className={`auth-input-wrap${leftAddon ? " has-left-addon" : ""}${error ? " has-error" : ""}`}>
       {leftAddon || <Icon icon={icon} />}
       <input
         type={type}
@@ -56,13 +56,14 @@ const AuthField = ({
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        required={required}
         maxLength={maxLength}
         inputMode={inputMode}
+        autoComplete={name}
       />
       {rightAction}
     </span>
-  </label>
+    {error && <span className="auth-field-error">{error}</span>}
+  </div>
 );
 
 const OtpBoxes = ({ value, length, onChange, disabled }) => {
@@ -95,17 +96,15 @@ const OtpBoxes = ({ value, length, onChange, disabled }) => {
       {digits.map((digit, index) => (
         <input
           key={`otp-${index}`}
-          ref={(element) => {
-            inputRefs.current[index] = element;
-          }}
+          ref={(el) => { inputRefs.current[index] = el; }}
           type="text"
           inputMode="numeric"
           autoComplete={index === 0 ? "one-time-code" : "off"}
           value={digit}
           disabled={disabled}
           maxLength={1}
-          onChange={(event) => updateDigit(index, event.target.value)}
-          onKeyDown={(event) => handleKeyDown(index, event)}
+          onChange={(e) => updateDigit(index, e.target.value)}
+          onKeyDown={(e) => handleKeyDown(index, e)}
           aria-label={`OTP digit ${index + 1}`}
         />
       ))}
@@ -121,7 +120,7 @@ const Auth = () => {
   const [otpCode, setOtpCode] = useState("");
   const [otpError, setOtpError] = useState("");
   const [otpSendAttempts, setOtpSendAttempts] = useState({});
-  const [error, setError] = useState("");
+  const [apiError, setApiError] = useState("");
   const [success, setSuccess] = useState("");
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [animationKey, setAnimationKey] = useState(0);
@@ -132,60 +131,46 @@ const Auth = () => {
   const [signupOtpToken, setSignupOtpToken] = useState("");
   const [emailOtpSessionToken, setEmailOtpSessionToken] = useState("");
   const [signupVerifiedEmail, setSignupVerifiedEmail] = useState("");
+  const [consentChecked, setConsentChecked] = useState(false);
+
+  // Per-field validation errors
+  const [loginErrors, setLoginErrors] = useState({});
+  const [signupErrors, setSignupErrors] = useState({});
+  const [forgotErrors, setForgotErrors] = useState({});
+  const [resetErrors, setResetErrors] = useState({});
 
   const { login, signup, user } = useAuth();
   const { showNotification } = useNotification();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [loginData, setLoginData] = useState({
-    identifier: "",
-    password: "",
-    keepLoggedIn: false,
-  });
-  const [signupData, setSignupData] = useState({
-    name: "",
-    phone: "",
-    email: "",
-    password: "",
-    referral_code: "",
-  });
-  const [forgotPasswordData, setForgotPasswordData] = useState({
-    email: "",
-    newPassword: "",
-    confirmPassword: "",
-  });
+  const [loginData, setLoginData] = useState({ identifier: "", password: "", keepLoggedIn: false });
+  const [signupData, setSignupData] = useState({ name: "", phone: "", email: "", password: "", referral_code: "" });
+  const [forgotPasswordData, setForgotPasswordData] = useState({ email: "", newPassword: "", confirmPassword: "" });
+
   const alertRef = useRef(null);
   const activeOtpDigitCount = EMAIL_OTP_DIGIT_COUNT;
 
   useEffect(() => {
-    window.requestAnimationFrame(() => {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    });
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
   }, [activeTab]);
 
   useEffect(() => {
-    if (!error) return;
-    window.requestAnimationFrame(() => {
-      alertRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
-  }, [error]);
+    if (!apiError) return;
+    window.requestAnimationFrame(() => alertRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }, [apiError]);
 
   useEffect(() => {
     if (user) {
       const mode = new URLSearchParams(location.search).get("mode");
       if (mode === "forgot" || activeTab === "forgotPassword" || activeTab === "resetPassword") return;
-      const from = location.state?.from?.pathname || "/";
-      navigate(from, { replace: true });
+      navigate(location.state?.from?.pathname || "/", { replace: true });
     }
   }, [user, navigate, location, activeTab]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    if (params.get("mode") === "signup") {
-      switchMode("signup");
-      return;
-    }
+    if (params.get("mode") === "signup") { switchMode("signup"); return; }
     if (params.get("mode") === "forgot") {
       switchMode("forgotPassword");
       const email = params.get("email");
@@ -201,65 +186,53 @@ const Auth = () => {
   }, [location.search]);
 
   useEffect(() => {
-    const refreshAuthCard = () => switchMode("login");
-    window.addEventListener("auth:refresh", refreshAuthCard);
-    return () => window.removeEventListener("auth:refresh", refreshAuthCard);
+    const handler = () => switchMode("login");
+    window.addEventListener("auth:refresh", handler);
+    return () => window.removeEventListener("auth:refresh", handler);
   }, []);
 
   const authCopy = useMemo(() => {
-    if (activeTab === "signup") {
-      return {
-        title: "Create Account",
-        subtitle: "Add your details and verify your email once.",
-      };
-    }
-    if (activeTab === "forgotPassword") {
-      return {
-        title: "Reset Password",
-        subtitle: "Enter your registered email to verify ownership.",
-      };
-    }
-    if (activeTab === "resetPassword") {
-      return {
-        title: "Create New Password",
-        subtitle: "Your email is verified. Set a secure new password.",
-      };
-    }
-    return {
-      title: "Welcome Back",
-      subtitle: "Please enter your details",
-    };
+    if (activeTab === "signup") return { title: "Create Account", subtitle: "Add your details and verify your email once." };
+    if (activeTab === "forgotPassword") return { title: "Reset Password", subtitle: "Enter your registered email to verify ownership." };
+    if (activeTab === "resetPassword") return { title: "Create New Password", subtitle: "Your email is verified. Set a secure new password." };
+    return { title: "Welcome Back", subtitle: "Please enter your details" };
   }, [activeTab]);
 
   function switchMode(mode) {
     setActiveTab(mode);
-    setError("");
+    setApiError("");
     setSuccess("");
     setOtpStep(null);
     setOtpCode("");
     setOtpError("");
     setOtpLoading(false);
-    setAnimationKey((key) => key + 1);
+    setLoginErrors({});
+    setSignupErrors({});
+    setForgotErrors({});
+    setResetErrors({});
+    setAnimationKey((k) => k + 1);
   }
 
   const updateStrength = (value) => {
-    let strength = 0;
-    if (value.length >= 6) strength++;
-    if (/[A-Z]/.test(value)) strength++;
-    if (/[0-9]/.test(value)) strength++;
-    if (/[^A-Za-z0-9]/.test(value)) strength++;
-    setPasswordStrength(strength);
+    let s = 0;
+    if (value.length >= 6) s++;
+    if (/[A-Z]/.test(value)) s++;
+    if (/[0-9]/.test(value)) s++;
+    if (/[^A-Za-z0-9]/.test(value)) s++;
+    setPasswordStrength(s);
   };
 
-  const handleLoginChange = (event) => {
-    const { name, value, type, checked } = event.target;
+  const handleLoginChange = (e) => {
+    const { name, value, type, checked } = e.target;
     setLoginData((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
+    if (loginErrors[name]) setLoginErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
-  const handleSignupChange = (event) => {
-    const { name, value } = event.target;
+  const handleSignupChange = (e) => {
+    const { name, value } = e.target;
     const nextValue = name === "phone" ? normalizePhone(value) : value;
     setSignupData((prev) => ({ ...prev, [name]: nextValue }));
+    if (signupErrors[name]) setSignupErrors((prev) => ({ ...prev, [name]: "" }));
     if (name === "email" && String(nextValue || "").trim().toLowerCase() !== signupVerifiedEmail) {
       setSignupOtpToken("");
       setSignupVerifiedEmail("");
@@ -267,44 +240,72 @@ const Auth = () => {
     if (name === "password") updateStrength(value);
   };
 
-  const validateSignup = () => {
-    if (!signupData.name.trim()) return "Please enter your full name.";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signupData.email.trim())) return "Please enter a valid email address.";
-    if (!/^[6-9]\d{9}$/.test(normalizePhone(signupData.phone))) return "Please enter a valid 10 digit mobile number.";
-    if (signupData.password.length < 6) return "Password must be at least 6 characters.";
-    return "";
+  // ── Validation helpers ──────────────────────────────────────
+  const validateLogin = () => {
+    const errors = {};
+    if (!loginData.identifier.trim()) errors.identifier = "Please enter your email or mobile number.";
+    if (!loginData.password) errors.password = "Please enter your password.";
+    return errors;
   };
 
+  const validateSignupFields = () => {
+    const errors = {};
+    if (!signupData.name.trim()) errors.name = "Please enter your full name.";
+    if (!signupData.email.trim()) {
+      errors.email = "Please enter your email address.";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signupData.email.trim())) {
+      errors.email = "Please enter a valid email address.";
+    }
+    const phone = normalizePhone(signupData.phone);
+    if (!phone) {
+      errors.phone = "Please enter your mobile number.";
+    } else if (!/^[6-9]\d{9}$/.test(phone)) {
+      errors.phone = "Please enter a valid 10-digit mobile number (starting with 6–9).";
+    }
+    if (!signupData.password) {
+      errors.password = "Please enter a password.";
+    } else if (signupData.password.length < 6) {
+      errors.password = "Password must be at least 6 characters.";
+    }
+    if (!consentChecked) {
+      errors.consent = "Please accept the Terms & Conditions to continue.";
+    }
+    return errors;
+  };
+
+  const validateForgot = () => {
+    const errors = {};
+    const email = String(forgotPasswordData.email || "").trim();
+    if (!email) errors.email = "Please enter your email address.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = "Please enter a valid email address.";
+    return errors;
+  };
+
+  const validateReset = () => {
+    const errors = {};
+    if (!forgotPasswordData.newPassword) errors.newPassword = "Please enter a new password.";
+    else if (forgotPasswordData.newPassword.length < 6) errors.newPassword = "Password must be at least 6 characters.";
+    if (!forgotPasswordData.confirmPassword) errors.confirmPassword = "Please confirm your password.";
+    else if (forgotPasswordData.newPassword !== forgotPasswordData.confirmPassword) errors.confirmPassword = "Passwords do not match.";
+    return errors;
+  };
+
+  // ── OTP ────────────────────────────────────────────────────
   const getOtpAttemptKey = (action, email) => `${action}:${String(email || "").trim().toLowerCase()}`;
-
-  const getOtpAttemptsLeft = (action, email) => {
-    const used = otpSendAttempts[getOtpAttemptKey(action, email)] || 0;
-    return Math.max(OTP_SEND_LIMIT - used, 0);
-  };
+  const getOtpAttemptsLeft = (action, email) => Math.max(OTP_SEND_LIMIT - (otpSendAttempts[getOtpAttemptKey(action, email)] || 0), 0);
 
   const startEmailOtp = async (action, email, name = "") => {
     const cleanEmail = String(email || "").trim().toLowerCase();
     const attemptKey = getOtpAttemptKey(action, cleanEmail);
-    const attemptsLeft = getOtpAttemptsLeft(action, cleanEmail);
-    setError("");
-    setSuccess("");
-    setOtpError("");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-      setError("Please enter a valid email.");
-      return;
-    }
-    if (attemptsLeft <= 0) {
-      setError("OTP attempts exceeded. Please try again after 24 hours or contact support.");
-      return;
-    }
-
+    setApiError(""); setSuccess(""); setOtpError("");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) { setApiError("Please enter a valid email."); return; }
+    if (getOtpAttemptsLeft(action, cleanEmail) <= 0) { setApiError("OTP attempts exceeded. Please try again after 24 hours or contact support."); return; }
     setOtpLoading(true);
-    const purposeMap = { signup: "signup", reset: "forgot_password" };
     try {
       const res = await fetch(`${API_ENDPOINTS.auth}/send-email-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: cleanEmail, purpose: purposeMap[action], name }),
+        body: JSON.stringify({ email: cleanEmail, purpose: action === "signup" ? "signup" : "forgot_password", name }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Failed to send OTP");
@@ -314,45 +315,30 @@ const Auth = () => {
       setSuccess("OTP sent to your email.");
     } catch (err) {
       const message = getFriendlyError(err, "We could not send the OTP right now. Please try again.");
-      if (otpStep) setOtpError(message);
-      else setError(message);
+      if (otpStep) setOtpError(message); else setApiError(message);
     } finally {
       setOtpLoading(false);
     }
   };
 
-  const handleVerifyOtpCode = async (event) => {
-    event.preventDefault();
+  const handleVerifyOtpCode = async (e) => {
+    e.preventDefault();
     const code = String(otpCode || "").replace(/\D/g, "");
-    setError("");
-    setSuccess("");
-    setOtpError("");
+    setApiError(""); setSuccess(""); setOtpError("");
     if (!otpStep) return;
-    if (code.length !== activeOtpDigitCount) {
-      setOtpError("Please enter the complete OTP.");
-      return;
-    }
+    if (code.length !== activeOtpDigitCount) { setOtpError("Please enter the complete OTP."); return; }
     try {
       setOtpLoading(true);
-      const purposeMap = { signup: "signup", reset: "forgot_password" };
       const res = await fetch(`${API_ENDPOINTS.auth}/verify-email-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: emailOtpSessionToken, otp: code, purpose: purposeMap[otpStep.action] }),
+        body: JSON.stringify({ token: emailOtpSessionToken, otp: code, purpose: otpStep.action === "signup" ? "signup" : "forgot_password" }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "OTP verify failed");
-      if (otpStep.action === "signup") {
-        setSignupOtpToken(emailOtpSessionToken);
-        setSignupVerifiedEmail(String(signupData.email || "").trim().toLowerCase());
-      }
-      if (otpStep.action === "reset") {
-        setResetOtpToken(emailOtpSessionToken);
-        switchMode("resetPassword");
-      }
-      setOtpStep(null);
-      setOtpCode("");
-      setSuccess("Email OTP verified.");
+      if (otpStep.action === "signup") { setSignupOtpToken(emailOtpSessionToken); setSignupVerifiedEmail(String(signupData.email || "").trim().toLowerCase()); }
+      if (otpStep.action === "reset") { setResetOtpToken(emailOtpSessionToken); switchMode("resetPassword"); }
+      setOtpStep(null); setOtpCode(""); setSuccess("Email OTP verified.");
     } catch (err) {
       setOtpError(getFriendlyError(err, "The OTP is incorrect or expired. Please try again."));
     } finally {
@@ -362,67 +348,52 @@ const Auth = () => {
 
   const handleResendOtp = () => {
     if (!otpStep || otpLoading) return;
-    setOtpCode("");
-    setOtpError("");
+    setOtpCode(""); setOtpError("");
     startEmailOtp(otpStep.action, otpStep.email, signupData.name);
   };
 
-  const onLogin = async (event) => {
-    event.preventDefault();
-    setError("");
-    setLoading(true);
+  // ── Handlers ───────────────────────────────────────────────
+  const onLogin = async (e) => {
+    e.preventDefault();
+    const errors = validateLogin();
+    if (Object.keys(errors).length) { setLoginErrors(errors); return; }
+    setApiError(""); setLoading(true);
     try {
       await login(loginData.identifier, loginData.password, loginData.keepLoggedIn);
       showNotification("Login successfully", "success");
     } catch (err) {
-      console.error("[Auth] login failed:", err);
-      setError(getFriendlyError(err, "Unable to login right now. Please contact support or try again later."));
+      setApiError(getFriendlyError(err, "Unable to login right now. Please contact support or try again later."));
     } finally {
       setLoading(false);
     }
   };
 
-  const onSignup = async (event) => {
-    event.preventDefault();
-    const validationError = validateSignup();
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
+  const onSignup = async (e) => {
+    e.preventDefault();
+    const errors = validateSignupFields();
+    if (Object.keys(errors).length) { setSignupErrors(errors); return; }
     if (!signupOtpToken || signupVerifiedEmail !== signupData.email.trim().toLowerCase()) {
-      setError("Please verify your email OTP before signing up.");
+      setSignupErrors((prev) => ({ ...prev, email: "Please verify your email before signing up." }));
       return;
     }
-
-    setError("");
-    setLoading(true);
+    setApiError(""); setLoading(true);
     try {
-      await signup({
-        ...signupData,
-        phone: normalizePhone(signupData.phone),
-        email: signupData.email.trim().toLowerCase(),
-        email_otp_token: signupOtpToken,
-      });
+      await signup({ ...signupData, phone: normalizePhone(signupData.phone), email: signupData.email.trim().toLowerCase(), email_otp_token: signupOtpToken });
       showNotification("Account created successfully", "success");
       setSuccess("Account created successfully.");
     } catch (err) {
-      console.error("[Auth] signup failed:", err);
-      setError(getFriendlyError(err, "Unable to create account right now. Please contact support or try again later."));
+      setApiError(getFriendlyError(err, "Unable to create account right now. Please contact support or try again later."));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleForgotPassword = async (event) => {
-    event.preventDefault();
-    setError("");
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    const errors = validateForgot();
+    if (Object.keys(errors).length) { setForgotErrors(errors); return; }
     const email = String(forgotPasswordData.email || "").trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError("Please enter a valid email.");
-      return;
-    }
-
-    setLoading(true);
+    setApiError(""); setLoading(true);
     try {
       const res = await fetch(`${API_ENDPOINTS.auth}/forgot-password`, {
         method: "POST",
@@ -434,35 +405,22 @@ const Auth = () => {
       setSuccess(data.message || "Account found. Verify email OTP to continue.");
       await startEmailOtp("reset", email);
     } catch (err) {
-      console.error("[Auth] forgot password failed:", err);
-      setError(getFriendlyError(err, "Unable to start password reset. Please contact support or try again later."));
+      setApiError(getFriendlyError(err, "Unable to start password reset. Please contact support or try again later."));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleResetPassword = async (event) => {
-    event.preventDefault();
-    setError("");
-    if (forgotPasswordData.newPassword.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
-    if (forgotPasswordData.newPassword !== forgotPasswordData.confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-
-    setLoading(true);
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    const errors = validateReset();
+    if (Object.keys(errors).length) { setResetErrors(errors); return; }
+    setApiError(""); setLoading(true);
     try {
       const res = await fetch(`${API_ENDPOINTS.auth}/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: String(forgotPasswordData.email || "").trim().toLowerCase(),
-          email_otp_token: resetOtpToken,
-          newPassword: forgotPasswordData.newPassword,
-        }),
+        body: JSON.stringify({ email: String(forgotPasswordData.email || "").trim().toLowerCase(), email_otp_token: resetOtpToken, newPassword: forgotPasswordData.newPassword }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Reset failed");
@@ -471,8 +429,7 @@ const Auth = () => {
       switchMode("login");
       setSuccess("Password reset successfully. You can login now.");
     } catch (err) {
-      console.error("[Auth] password reset failed:", err);
-      setError(getFriendlyError(err, "Unable to reset password right now. Please contact support or try again later."));
+      setApiError(getFriendlyError(err, "Unable to reset password right now. Please contact support or try again later."));
     } finally {
       setLoading(false);
     }
@@ -486,14 +443,12 @@ const Auth = () => {
           <p>{authCopy.subtitle}</p>
         </header>
 
-        {error ? (
-          <div ref={alertRef} className="auth-alert auth-alert-error">{error}</div>
-        ) : success ? (
-          <div className="auth-alert auth-alert-success">{success}</div>
-        ) : null}
+        {apiError && <div ref={alertRef} className="auth-alert auth-alert-error">{apiError}</div>}
+        {!apiError && success && <div className="auth-alert auth-alert-success">{success}</div>}
 
+        {/* ── Login ── */}
         {activeTab === "login" && (
-          <form className="auth-form" onSubmit={onLogin}>
+          <form className="auth-form" onSubmit={onLogin} noValidate>
             <AuthField
               icon="lucide:user-round"
               label="Email or mobile number"
@@ -501,6 +456,7 @@ const Auth = () => {
               value={loginData.identifier}
               placeholder="Enter email or mobile number"
               onChange={handleLoginChange}
+              error={loginErrors.identifier}
             />
             <AuthField
               icon="lucide:lock"
@@ -510,8 +466,9 @@ const Auth = () => {
               value={loginData.password}
               placeholder="Enter your password"
               onChange={handleLoginChange}
+              error={loginErrors.password}
               rightAction={
-                <button type="button" className="auth-eye" onClick={() => setShowLoginPassword((value) => !value)}>
+                <button type="button" className="auth-eye" onClick={() => setShowLoginPassword((v) => !v)}>
                   <Icon icon={showLoginPassword ? "lucide:eye-off" : "lucide:eye"} />
                 </button>
               }
@@ -534,11 +491,29 @@ const Auth = () => {
           </form>
         )}
 
+        {/* ── Sign Up ── */}
         {activeTab === "signup" && (
-          <form className="auth-form auth-form-compact" onSubmit={onSignup}>
-            <AuthField icon="lucide:user" label="Full Name" name="name" value={signupData.name} placeholder="Enter your full name" onChange={handleSignupChange} />
+          <form className="auth-form auth-form-compact" onSubmit={onSignup} noValidate>
+            <AuthField
+              icon="lucide:user"
+              label="Full Name"
+              name="name"
+              value={signupData.name}
+              placeholder="Enter your full name"
+              onChange={handleSignupChange}
+              error={signupErrors.name}
+            />
             <div className="auth-verify-field">
-              <AuthField icon="lucide:mail" label="Email Address" name="email" type="email" value={signupData.email} placeholder="Enter your email" onChange={handleSignupChange} />
+              <AuthField
+                icon="lucide:mail"
+                label="Email Address"
+                name="email"
+                type="email"
+                value={signupData.email}
+                placeholder="Enter your email"
+                onChange={handleSignupChange}
+                error={signupErrors.email}
+              />
               <button
                 type="button"
                 className={signupVerifiedEmail === signupData.email.trim().toLowerCase() ? "auth-verify-link is-verified" : "auth-verify-link"}
@@ -558,12 +533,20 @@ const Auth = () => {
                 placeholder="Enter 10 digit mobile number"
                 onChange={handleSignupChange}
                 inputMode="tel"
-                maxLength={11}
+                maxLength={10}
                 leftAddon={<span className="auth-country-code"><span className="auth-flag-india" aria-hidden="true" />+91</span>}
+                error={signupErrors.phone}
               />
             </div>
             <div className="auth-referral-field">
-              <AuthField icon="lucide:gift" label="Referral Code (optional)" name="referral_code" value={signupData.referral_code} placeholder="Have a referral code?" onChange={handleSignupChange} required={false} />
+              <AuthField
+                icon="lucide:gift"
+                label="Referral Code (optional)"
+                name="referral_code"
+                value={signupData.referral_code}
+                placeholder="Have a referral code?"
+                onChange={handleSignupChange}
+              />
             </div>
             <AuthField
               icon="lucide:lock"
@@ -573,8 +556,9 @@ const Auth = () => {
               value={signupData.password}
               placeholder="Create a password"
               onChange={handleSignupChange}
+              error={signupErrors.password}
               rightAction={
-                <button type="button" className="auth-eye" onClick={() => setShowSignupPassword((value) => !value)}>
+                <button type="button" className="auth-eye" onClick={() => setShowSignupPassword((v) => !v)}>
                   <Icon icon={showSignupPassword ? "lucide:eye-off" : "lucide:eye"} />
                 </button>
               }
@@ -585,15 +569,25 @@ const Auth = () => {
               ))}
               <strong>{passwordStrength ? strengthLabels[passwordStrength - 1] : "Enter Password"}</strong>
             </div>
-            <label className="auth-consent">
-              <input type="checkbox" required />
-              <span className="auth-consent-box">
-                <Icon icon="lucide:check" />
-                <span className="auth-consent-text">
-                  I agree to the <Link to="/terms-conditions">Terms &amp; Conditions</Link> and <Link to="/privacy-policy">Privacy Policy</Link>
+            <div className="auth-consent-wrap">
+              <label className="auth-consent">
+                <input
+                  type="checkbox"
+                  checked={consentChecked}
+                  onChange={(e) => {
+                    setConsentChecked(e.target.checked);
+                    if (signupErrors.consent) setSignupErrors((prev) => ({ ...prev, consent: "" }));
+                  }}
+                />
+                <span className="auth-consent-box">
+                  <Icon icon="lucide:check" />
+                  <span className="auth-consent-text">
+                    I agree to the <Link to="/terms-conditions">Terms &amp; Conditions</Link> and <Link to="/privacy-policy">Privacy Policy</Link>
+                  </span>
                 </span>
-              </span>
-            </label>
+              </label>
+              {signupErrors.consent && <span className="auth-field-error">{signupErrors.consent}</span>}
+            </div>
             <button type="submit" disabled={loading || otpLoading} className="auth-primary">
               {loading ? "Signing up..." : "Sign Up"}
             </button>
@@ -601,14 +595,20 @@ const Auth = () => {
           </form>
         )}
 
+        {/* ── Forgot Password ── */}
         {activeTab === "forgotPassword" && (
-          <form className="auth-form" onSubmit={handleForgotPassword}>
+          <form className="auth-form" onSubmit={handleForgotPassword} noValidate>
             <AuthField
               icon="lucide:mail"
               label="Registered Email"
+              name="email"
               value={forgotPasswordData.email}
               placeholder="Enter your registered email"
-              onChange={(event) => setForgotPasswordData((prev) => ({ ...prev, email: event.target.value }))}
+              onChange={(e) => {
+                setForgotPasswordData((prev) => ({ ...prev, email: e.target.value }));
+                if (forgotErrors.email) setForgotErrors((prev) => ({ ...prev, email: "" }));
+              }}
+              error={forgotErrors.email}
             />
             <button type="submit" disabled={loading || otpLoading} className="auth-primary">
               {loading || otpLoading ? "Verifying..." : "Verify Email OTP"}
@@ -617,17 +617,23 @@ const Auth = () => {
           </form>
         )}
 
+        {/* ── Reset Password ── */}
         {activeTab === "resetPassword" && (
-          <form className="auth-form" onSubmit={handleResetPassword}>
+          <form className="auth-form" onSubmit={handleResetPassword} noValidate>
             <AuthField
               icon="lucide:lock"
               label="New Password"
+              name="newPassword"
               type={showResetPassword ? "text" : "password"}
               value={forgotPasswordData.newPassword}
               placeholder="Enter new password"
-              onChange={(event) => setForgotPasswordData((prev) => ({ ...prev, newPassword: event.target.value }))}
+              onChange={(e) => {
+                setForgotPasswordData((prev) => ({ ...prev, newPassword: e.target.value }));
+                if (resetErrors.newPassword) setResetErrors((prev) => ({ ...prev, newPassword: "" }));
+              }}
+              error={resetErrors.newPassword}
               rightAction={
-                <button type="button" className="auth-eye" onClick={() => setShowResetPassword((value) => !value)}>
+                <button type="button" className="auth-eye" onClick={() => setShowResetPassword((v) => !v)}>
                   <Icon icon={showResetPassword ? "lucide:eye-off" : "lucide:eye"} />
                 </button>
               }
@@ -635,10 +641,15 @@ const Auth = () => {
             <AuthField
               icon="lucide:lock-keyhole"
               label="Confirm Password"
+              name="confirmPassword"
               type={showResetPassword ? "text" : "password"}
               value={forgotPasswordData.confirmPassword}
               placeholder="Confirm new password"
-              onChange={(event) => setForgotPasswordData((prev) => ({ ...prev, confirmPassword: event.target.value }))}
+              onChange={(e) => {
+                setForgotPasswordData((prev) => ({ ...prev, confirmPassword: e.target.value }));
+                if (resetErrors.confirmPassword) setResetErrors((prev) => ({ ...prev, confirmPassword: "" }));
+              }}
+              error={resetErrors.confirmPassword}
             />
             <button type="submit" disabled={loading} className="auth-primary">
               {loading ? "Resetting..." : "Reset Password"}
@@ -646,18 +657,14 @@ const Auth = () => {
           </form>
         )}
 
+        {/* ── OTP Modal ── */}
         {otpStep && (
           <div className="auth-otp-modal" role="dialog" aria-modal="true" aria-label="Verify OTP">
             <form className="auth-otp-sheet" onSubmit={handleVerifyOtpCode}>
               <button
                 type="button"
                 className="auth-otp-close"
-                onClick={() => {
-                  setOtpStep(null);
-                  setOtpCode("");
-                  setOtpError("");
-                  setOtpLoading(false);
-                }}
+                onClick={() => { setOtpStep(null); setOtpCode(""); setOtpError(""); setOtpLoading(false); }}
                 aria-label="Close OTP"
               >
                 <Icon icon="lucide:x" />
@@ -669,12 +676,10 @@ const Auth = () => {
                   value={otpCode}
                   length={activeOtpDigitCount}
                   disabled={loading || otpLoading}
-                  onChange={(value) => setOtpCode(value.replace(/\D/g, "").slice(0, activeOtpDigitCount))}
+                  onChange={(v) => setOtpCode(v.replace(/\D/g, "").slice(0, activeOtpDigitCount))}
                 />
-                <p>
-                  {getOtpAttemptsLeft(otpStep.action, otpStep.email)} resend attempt(s) left. OTP expires in 15 minutes.
-                </p>
-                {otpError ? <div className="auth-alert auth-alert-error auth-otp-alert">{otpError}</div> : null}
+                <p>{getOtpAttemptsLeft(otpStep.action, otpStep.email)} resend attempt(s) left. OTP expires in 15 minutes.</p>
+                {otpError && <div className="auth-alert auth-alert-error auth-otp-alert">{otpError}</div>}
               </div>
               <button type="submit" disabled={loading || otpLoading} className="auth-primary">
                 {loading || otpLoading ? "Verifying..." : "Verify OTP"}
@@ -683,14 +688,7 @@ const Auth = () => {
                 <button type="button" onClick={handleResendOtp} disabled={otpLoading || getOtpAttemptsLeft(otpStep.action, otpStep.email) <= 0}>
                   Resend OTP
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOtpStep(null);
-                    setOtpCode("");
-                    setOtpError("");
-                  }}
-                >
+                <button type="button" onClick={() => { setOtpStep(null); setOtpCode(""); setOtpError(""); }}>
                   Change email
                 </button>
               </div>

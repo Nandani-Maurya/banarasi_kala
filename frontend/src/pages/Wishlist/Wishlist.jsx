@@ -20,6 +20,7 @@ const Wishlist = () => {
   const [colorModalProduct, setColorModalProduct] = useState(null);
   const [selectedColorId, setSelectedColorId] = useState(null);
   const [addingToBag, setAddingToBag] = useState(false);
+  const [directAddingId, setDirectAddingId] = useState(null);
   const hasItems = wishlist.length > 0;
 
   useEffect(() => {
@@ -43,13 +44,18 @@ const Wishlist = () => {
   }, [colors]);
 
   const getAvailableColors = (product) => {
-    const colorIds = [
+    // Try image-based color IDs first, fall back to color_stocks keys
+    const imageColorIds = [
       ...new Set(
         getProductImages(product)
-          .map((image) => Number(image.color_id))
+          .map((img) => Number(img.color_id))
           .filter(Boolean),
       ),
     ];
+    const stockColorIds = imageColorIds.length === 0 && product.color_stocks
+      ? [...new Set(Object.keys(product.color_stocks).map(Number).filter(Boolean))]
+      : [];
+    const colorIds = imageColorIds.length > 0 ? imageColorIds : stockColorIds;
 
     return colorIds
       .map((colorId) => ({
@@ -61,25 +67,29 @@ const Wishlist = () => {
   };
 
   const openColorModal = (product) => {
-    const productStock = getProductStockInfo(product);
-    if (productStock.isOutOfStock) {
-      showNotification("This saree is currently out of stock", "warning");
-      return;
-    }
-
     const colorOptions = getAvailableColors(product);
     const inStockColors = colorOptions.filter((color) => color.stock > 0);
     if (!inStockColors.length) {
-      showNotification("This saree is currently out of stock", "warning");
+      showNotification("This saree is currently unavailable", "warning");
       return;
     }
-
     setColorModalProduct(product);
-    // Pre-select the saved color variant if it's in stock
+    // Pre-select the saved color if it's in stock, otherwise the first available
     const savedColor = product.colorId
       ? inStockColors.find(c => String(c.id) === String(product.colorId))
       : null;
     setSelectedColorId(savedColor ? savedColor.id : inStockColors[0].id);
+  };
+
+  const handleDirectAddToBag = async (item) => {
+    setDirectAddingId(item.wishlistItemId);
+    const result = await addToCart(item, 1, item.colorId);
+    setDirectAddingId(null);
+    if (result?.success) {
+      showNotification("Added to bag!");
+    } else {
+      showNotification(result?.message || "Failed to add to bag", "error");
+    }
   };
 
   const closeColorModal = () => {
@@ -168,18 +178,92 @@ const Wishlist = () => {
             const mrp = Number(item.mrp_price || item.mrp || 0);
             const hasDiscount = mrp > price && price > 0;
             const discountPercent = Number(item.discount_percent || Math.round(((mrp - price) / mrp) * 100) || 0);
+
+            // Per-color stock — read color_stocks directly (images may be empty)
+            const colorStocksMap = item.color_stocks || {};
+            const hasColorData = Object.keys(colorStocksMap).length > 0;
+
+            const savedColorStock = item.colorId
+              ? (hasColorData
+                  ? Number(colorStocksMap[item.colorId] ?? colorStocksMap[String(item.colorId)] ?? 0)
+                  : 0)  // no per-color data — can't confirm this color is in stock
+              : Number(item.stock_quantity ?? 0);
+            const savedColorInStock = savedColorStock > 0;
+
+            const hasOtherInStockColor = hasColorData
+              ? Object.entries(colorStocksMap).some(
+                  ([cId, qty]) => Number(qty) > 0 && String(cId) !== String(item.colorId ?? "")
+                )
+              : false;
+
+            const hasAnyInStockColor = hasColorData
+              ? Object.values(colorStocksMap).some(v => Number(v) > 0)
+              : Number(item.stock_quantity ?? 0) > 0;
+
+            // If no specific color saved, fall back to product-level stock
+            const noColorSaved = !item.colorId;
             const stockInfo = getProductStockInfo(item);
-            const isOutOfStock = stockInfo.isOutOfStock;
-            const isLowStock = stockInfo.isLowStock;
+            const isLowStock = savedColorInStock && stockInfo.isLowStock;
+            const showColorOos = !noColorSaved && !savedColorInStock && hasOtherInStockColor;
+            const cardIsOos = noColorSaved ? stockInfo.isOutOfStock : !savedColorInStock && !hasOtherInStockColor;
+
+            // Action button logic
+            let actionBtn;
+            const isDirect = directAddingId === item.wishlistItemId;
+            if (noColorSaved) {
+              if (!hasColorData) {
+                // No color variants at all — add directly or show unavailable
+                actionBtn = hasAnyInStockColor ? (
+                  <button type="button" onClick={() => handleDirectAddToBag({ ...item, colorId: null })} disabled={isDirect}>
+                    <Icon icon="lucide:shopping-bag" />
+                    {isDirect ? "Adding..." : "Add to Bag"}
+                  </button>
+                ) : (
+                  <button type="button" disabled>Unavailable</button>
+                );
+              } else {
+                // Has color variants — open modal to pick
+                actionBtn = hasAnyInStockColor ? (
+                  <button type="button" onClick={() => openColorModal(item)}>
+                    <Icon icon="lucide:shopping-bag" />
+                    Add to Bag
+                  </button>
+                ) : (
+                  <button type="button" disabled>Unavailable</button>
+                );
+              }
+            } else if (savedColorInStock) {
+              // Saved color is in stock — add directly
+              actionBtn = (
+                <button type="button" onClick={() => handleDirectAddToBag(item)} disabled={isDirect}>
+                  <Icon icon="lucide:shopping-bag" />
+                  {isDirect ? "Adding..." : "Add to Bag"}
+                </button>
+              );
+            } else if (hasOtherInStockColor) {
+              // Saved color OOS but other colors available
+              actionBtn = (
+                <button type="button" className="wishlist-explore-btn" onClick={() => openColorModal(item)}>
+                  <Icon icon="lucide:palette" />
+                  Explore other colors
+                </button>
+              );
+            } else {
+              // All colors OOS
+              actionBtn = (
+                <button type="button" disabled>Unavailable</button>
+              );
+            }
 
             return (
-              <article key={item.wishlistItemId || `${item.id}-${item.colorId}`} className={`wishlist-card ${isOutOfStock ? "out-of-stock" : ""}`}>
+              <article key={item.wishlistItemId || `${item.id}-${item.colorId}`} className={`wishlist-card ${cardIsOos ? "out-of-stock" : ""}`}>
                 <Link to={`/product/${item.slug}${item.colorId ? `?color=${item.colorId}` : ""}`} className="wishlist-card-image">
                   <img src={item.image_url} alt={item.name} loading="lazy" />
-                  {hasDiscount && discountPercent > 0 && (
+                  {hasDiscount && discountPercent > 0 && !cardIsOos && (
                     <span className="wishlist-discount-badge">{discountPercent}% off</span>
                   )}
-                  {isOutOfStock && <span className="wishlist-stock-badge">Out of stock</span>}
+                  {showColorOos && <span className="wishlist-stock-badge">Color unavailable</span>}
+                  {noColorSaved && stockInfo.isOutOfStock && <span className="wishlist-stock-badge">Out of stock</span>}
                   {isLowStock && <span className="wishlist-stock-badge low">{stockInfo.badge}</span>}
                   {item.colorName && (
                     <span className="wishlist-color-badge">
@@ -209,14 +293,7 @@ const Wishlist = () => {
                     {hasDiscount && <span>Rs. {mrp.toLocaleString("en-IN")}</span>}
                   </div>
                   <div className="wishlist-card-actions">
-                    <button
-                      type="button"
-                      onClick={() => openColorModal(item)}
-                      disabled={isOutOfStock}
-                    >
-                      <Icon icon={isOutOfStock ? "lucide:bell" : "lucide:shopping-bag"} />
-                      {isOutOfStock ? "Unavailable" : "Add to Bag"}
-                    </button>
+                    {actionBtn}
                   </div>
                 </div>
               </article>

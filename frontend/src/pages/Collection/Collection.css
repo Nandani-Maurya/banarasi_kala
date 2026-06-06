@@ -10,7 +10,7 @@ hat undo kiy ahai:root {
 }
 
 .collection-container {
-    --collection-loader-duration: 2.15s;
+    --collection-loader-duration: 1.4s;
     background:
         linear-gradient(rgba(255, 246, 232, 0.76), rgba(255, 246, 232, 0.94)),
         var(--bk-section-bg),
