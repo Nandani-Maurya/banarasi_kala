@@ -17,10 +17,10 @@ export const useCart = () => {
 };
 
 export const CartProvider = ({ children }) => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { showNotification } = useNotification();
   const [cart, setCart] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Coupon States shared across Bag and Checkout
   const [appliedCoupon, setAppliedCoupon] = useState(null);
@@ -56,6 +56,7 @@ export const CartProvider = ({ children }) => {
 
   // Load cart from backend when user changes
   useEffect(() => {
+    if (authLoading) return; // wait for auth to resolve before acting
     if (user) {
       setLoading(true);
       fetchAndSetCart()
@@ -65,8 +66,9 @@ export const CartProvider = ({ children }) => {
       setCart([]);
       setAppliedCoupon(null);
       setDiscountAmount(0);
+      setLoading(false);
     }
-  }, [user, fetchAndSetCart]);
+  }, [user, authLoading, fetchAndSetCart]);
 
   const refreshCart = useCallback(() => {
     return fetchAndSetCart().catch(err => console.error("Error refreshing cart:", err));

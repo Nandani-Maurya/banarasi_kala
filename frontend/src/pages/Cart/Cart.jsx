@@ -26,6 +26,7 @@ const Cart = () => {
     updateQuantity,
     getSubtotal,
     refreshCart,
+    loading,
   } = useCart();
   const { toggleWishlist, wishlist } = useWishlist();
 
@@ -89,6 +90,41 @@ const Cart = () => {
 
   const isWishlisted = (item) =>
     wishlist.some(w => Number(w.id) === Number(item.id));
+
+  if (loading) {
+    return (
+      <div className="cart-page min-h-screen">
+        <div className="cart-topbar">
+          <div className="cart-topbar-inner">
+            <div className="cart-topbar-left">
+              <div className="cart-sk-topbar-title" />
+              <div className="cart-sk-topbar-sub" />
+            </div>
+            <div className="cart-sk-topbar-right" />
+          </div>
+        </div>
+        <div className="cart-body">
+          <div className="cart-sk-btn" />
+          <div className="cart-items">
+            {[1, 2].map(i => (
+              <div key={i} className="cart-sk-card">
+                <div className="cart-sk-image" />
+                <div className="cart-sk-body">
+                  <div className="cart-sk-line cart-sk-line--name" />
+                  <div className="cart-sk-line cart-sk-line--meta" />
+                  <div className="cart-sk-line cart-sk-line--meta" />
+                  <div className="cart-sk-footer">
+                    <div className="cart-sk-line cart-sk-line--price" />
+                    <div className="cart-sk-line cart-sk-line--qty" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (cart.length === 0) {
     return (
