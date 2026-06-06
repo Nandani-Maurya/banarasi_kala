@@ -31,10 +31,7 @@ const Cart = () => {
   const handleCartQuantityChange = async (item, nextQuantity) => {
     if (nextQuantity < 1) return;
     const stockInfo = getProductStockInfo(item, item.colorId);
-    if (nextQuantity > stockInfo.quantity) {
-      toast.error(`Only ${stockInfo.quantity} item${stockInfo.quantity === 1 ? "" : "s"} available for this product.`);
-      return;
-    }
+    if (nextQuantity > stockInfo.quantity) return;
     toast.success(`Quantity updated to ${nextQuantity}`);
     const result = await updateQuantity(item.id, nextQuantity, item.colorId);
     if (result && !result.success) {
@@ -70,11 +67,11 @@ const Cart = () => {
       <div className="cart-topbar">
         <div className="cart-topbar-inner">
           <div className="cart-topbar-left">
-            <h1 className="cart-topbar-title">Your Cart <span className="cart-topbar-count">({cart.length})</span></h1>
+            <h1 className="cart-topbar-title">Your Cart</h1>
             <span className="cart-topbar-sub">{cart.length} item{cart.length === 1 ? "" : "s"} in your bag</span>
           </div>
           <div className="cart-topbar-right">
-            <div className="cart-topbar-subtotal-label">Subtotal ({cart.length} item{cart.length === 1 ? "" : "s"})</div>
+            <div className="cart-topbar-subtotal-label">Subtotal</div>
             <div className="cart-topbar-subtotal-value">Rs. {subtotal.toLocaleString("en-IN")}</div>
           </div>
         </div>
@@ -137,9 +134,15 @@ const Cart = () => {
 
                   <div className="cart-card-footer">
                     <div className="cart-card-price-row">
-                      <span className="cart-card-price">Rs. {sell.toLocaleString("en-IN")}</span>
-                      {mrp > sell && <span className="cart-card-mrp">Rs. {mrp.toLocaleString("en-IN")}</span>}
-                      {disc > 0 && <span className="cart-card-off">{disc}% OFF</span>}
+                      {stockInfo.isOutOfStock ? (
+                        <span className="cart-card-price">Rs. {(mrp > 0 ? mrp : sell).toLocaleString("en-IN")}</span>
+                      ) : (
+                        <>
+                          <span className="cart-card-price">Rs. {sell.toLocaleString("en-IN")}</span>
+                          {mrp > sell && <span className="cart-card-mrp">Rs. {mrp.toLocaleString("en-IN")}</span>}
+                          {disc > 0 && <span className="cart-card-off">{disc}% OFF</span>}
+                        </>
+                      )}
                     </div>
                     <div className="cart-card-controls">
                       <div className="cart-qty">
@@ -149,7 +152,7 @@ const Cart = () => {
                         <span>{item.quantity}</span>
                         <button
                           onClick={() => handleCartQuantityChange(item, item.quantity + 1)}
-                          disabled={stockInfo.isOutOfStock}
+                          disabled={stockInfo.isOutOfStock || item.quantity >= stockInfo.quantity}
                           aria-label="Increase"
                         >
                           <Icon icon="lucide:plus" />

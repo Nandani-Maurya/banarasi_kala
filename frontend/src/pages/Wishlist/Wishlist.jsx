@@ -292,8 +292,14 @@ const Wishlist = () => {
                     </div>
                   )}
                   <div className="wishlist-card-price">
-                    <strong>Rs. {price.toLocaleString("en-IN")}</strong>
-                    {hasDiscount && <span>Rs. {mrp.toLocaleString("en-IN")}</span>}
+                    {cardIsOos ? (
+                      <strong>Rs. {(mrp > 0 ? mrp : price).toLocaleString("en-IN")}</strong>
+                    ) : (
+                      <>
+                        <strong>Rs. {price.toLocaleString("en-IN")}</strong>
+                        {hasDiscount && <span>Rs. {mrp.toLocaleString("en-IN")}</span>}
+                      </>
+                    )}
                   </div>
                   <div className="wishlist-card-actions">
                     {actionBtn}

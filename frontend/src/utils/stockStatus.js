@@ -16,6 +16,8 @@ export const getProductStockInfo = (product = {}, colorId = null) => {
   const isOutOfStock = isInactive || quantity <= 0;
   const isLowStock = !isOutOfStock && quantity < threshold;
 
+  const isVeryLowStock = isLowStock && quantity <= 2;
+
   return {
     quantity,
     threshold,
@@ -23,11 +25,16 @@ export const getProductStockInfo = (product = {}, colorId = null) => {
     isOutOfStock,
     isLowStock,
     status: isOutOfStock ? "out_of_stock" : isLowStock ? "low_stock" : "in_stock",
-    badge: isOutOfStock ? "Out of stock" : isLowStock ? "Few stocks available" : "",
+    badge: isOutOfStock ? "Out of stock"
+      : isVeryLowStock ? `Only ${quantity} left`
+      : isLowStock ? "Few items left"
+      : "",
     colorMessage: isOutOfStock
       ? "This color is out of stock"
-      : isLowStock
+      : isVeryLowStock
         ? `Only ${quantity} left in this color`
+      : isLowStock
+        ? "Few items left in this color"
         : "",
   };
 };

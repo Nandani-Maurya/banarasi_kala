@@ -458,10 +458,7 @@ const ProductDetail = () => {
   const incrementQty = async () => {
     if (isSelectedOutOfStock) return;
     const next = quantity + 1;
-    if (next > selectedStockInfo.quantity) {
-      toast.error(`Only ${selectedStockInfo.quantity} item${selectedStockInfo.quantity === 1 ? "" : "s"} available.`);
-      return;
-    }
+    if (next > selectedStockInfo.quantity) return;
     setQuantity(next);
     if (existingBagQuantity > 0) {
       const result = await updateQuantity(product.id, next, selectedColorId);
@@ -1216,15 +1213,21 @@ const ProductDetail = () => {
 
             <div className="product-price-card">
               <div className="product-price-row">
-                <strong>{formatMoney(product.selling_price)}</strong>
-                {Number(product.mrp_price || 0) > Number(product.selling_price || 0) && (
+                {isSelectedOutOfStock ? (
+                  <strong>{formatMoney(product.mrp_price || product.selling_price)}</strong>
+                ) : (
                   <>
-                    <span>{formatMoney(product.mrp_price)}</span>
-                    <em>Save {product.discount_percent}%</em>
+                    <strong>{formatMoney(product.selling_price)}</strong>
+                    {Number(product.mrp_price || 0) > Number(product.selling_price || 0) && (
+                      <>
+                        <span>{formatMoney(product.mrp_price)}</span>
+                        <em>Save {product.discount_percent}%</em>
+                      </>
+                    )}
                   </>
                 )}
               </div>
-              <p>Incl. of all taxes </p>
+              {!isSelectedOutOfStock && <p>Incl. of all taxes </p>}
             </div>
 
             {!isSelectedOutOfStock && (

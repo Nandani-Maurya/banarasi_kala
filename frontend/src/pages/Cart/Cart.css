@@ -38,9 +38,8 @@
     color: #5a160f;
     font-family: "Cinzel", Georgia, "Times New Roman", serif;
     font-size: clamp(18px, 5vw, 24px);
-    font-weight: 900;
+    font-weight: 700;
     line-height: 1.1;
-    text-transform: uppercase;
     letter-spacing: 0.04em;
 }
 
