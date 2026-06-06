@@ -1,11 +1,15 @@
 import { Icon } from "@iconify/react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
+import { useEffect, useRef, useState } from "react";
 import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
 import EmptyStateIcon from "../../components/EmptyStateIcon";
 import { getProductStockInfo } from "../../utils/stockStatus";
 import { getVariantSku } from "../../utils/itemCode";
+import api from "../../utils/api";
+import { API_ENDPOINTS } from "../../config/api";
+import { unwrapApiData } from "../../utils/error";
 import "./Cart.css";
 
 const FREE_DELIVERY_MIN = Number(import.meta.env.VITE_FREE_DELIVERY_MIN) || 20000;
@@ -21,8 +25,47 @@ const Cart = () => {
     removeFromCart,
     updateQuantity,
     getSubtotal,
+    refreshCart,
   } = useCart();
   const { toggleWishlist, wishlist } = useWishlist();
+
+  const [stockAlerts, setStockAlerts] = useState([]);
+  const checkingRef = useRef(false);
+
+  const checkCartStock = useRef(async () => {});
+
+  // Rebuild the checker on every render so it always closes over latest state
+  checkCartStock.current = async () => {
+    if (checkingRef.current) return;
+    checkingRef.current = true;
+    try {
+      await refreshCart();
+      const res = await api.get(API_ENDPOINTS.cartValidate);
+      const issues = unwrapApiData(res.data) || [];
+      const alerts = [];
+      for (const issue of issues) {
+        alerts.push(issue);
+        if (issue.issue === 'quantity_exceeded' && issue.availableStock > 0) {
+          updateQuantity(issue.productId, issue.availableStock, issue.colorId);
+        }
+      }
+      setStockAlerts(alerts);
+    } catch {
+      setStockAlerts([]);
+    } finally {
+      checkingRef.current = false;
+    }
+  };
+
+  useEffect(() => {
+    checkCartStock.current();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') checkCartStock.current();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []); // runs on mount only; uses ref so always calls latest version
 
   const subtotal = getSubtotal();
   const remaining = Math.max(0, FREE_DELIVERY_MIN - subtotal);
@@ -84,6 +127,26 @@ const Cart = () => {
           PROCEED TO CHECKOUT
           <Icon icon="lucide:arrow-right" />
         </Link>
+
+        {/* ── Stock alerts ── */}
+        {stockAlerts.length > 0 && (
+          <div className="cart-stock-alerts">
+            <Icon icon="lucide:alert-triangle" className="cart-stock-alerts-icon" />
+            <div className="cart-stock-alerts-body">
+              <strong>Stock update</strong>
+              <ul>
+                {stockAlerts.map(alert => (
+                  <li key={`${alert.productId}-${alert.colorId}`}>
+                    {alert.issue === 'out_of_stock'
+                      ? <><em>{alert.name}</em> is now out of stock.</>
+                      : <><em>{alert.name}</em> — only {alert.availableStock} left. Quantity updated automatically.</>
+                    }
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
 
         {/* ── Items ── */}
         <div className="cart-items">

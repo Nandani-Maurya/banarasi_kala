@@ -21,54 +21,56 @@ export const CartProvider = ({ children }) => {
   const { showNotification } = useNotification();
   const [cart, setCart] = useState([]);
   const [loading, setLoading] = useState(false);
-  
+
   // Coupon States shared across Bag and Checkout
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [discountAmount, setDiscountAmount] = useState(0);
 
+  const fetchAndSetCart = useCallback(async () => {
+    if (!user) return [];
+    const res = await api.get(API_ENDPOINTS.cart);
+    const payload = unwrapApiData(res.data);
+    const rawItems = Array.isArray(payload) ? payload : [];
+    const formatted = rawItems.map(item => {
+      const product = item.Product;
+      if (!product) return null;
+      const price = product.selling_price || product.mrp_price || 0;
+      const allImages = getProductImages(product);
+      const colorImage = allImages.find(img => img.color_id === item.colorId);
+      const image_url = colorImage?.url || getProductCoverImage(product);
+      return {
+        ...product,
+        cartItemId: item.id,
+        quantity: item.quantity,
+        colorId: item.colorId,
+        selectedColorName: item.Color?.name || "",
+        selectedColorSlug: item.Color?.slug || "",
+        selectedColorHex: item.Color?.hex_code || "",
+        price,
+        image_url
+      };
+    }).filter(Boolean);
+    setCart(formatted);
+    return formatted;
+  }, [user]);
+
   // Load cart from backend when user changes
   useEffect(() => {
-    const fetchCart = async () => {
-      if (user) {
-        setLoading(true);
-        try {
-          const res = await api.get(API_ENDPOINTS.cart);
-          const payload = unwrapApiData(res.data);
-          const rawItems = Array.isArray(payload) ? payload : [];
-          const formattedCart = rawItems.map(item => {
-            const product = item.Product;
-            if (!product) return null;
-            const price = product.selling_price || product.mrp_price || 0;
-            const allImages = getProductImages(product);
-            const colorImage = allImages.find(img => img.color_id === item.colorId);
-            const image_url = colorImage?.url || getProductCoverImage(product);
-            return {
-              ...product,
-              cartItemId: item.id,
-              quantity: item.quantity,
-              colorId: item.colorId,
-              selectedColorName: item.Color?.name || "",
-              selectedColorSlug: item.Color?.slug || "",
-              selectedColorHex: item.Color?.hex_code || "",
-              price,
-              image_url
-            };
-          }).filter(i => i);
-          setCart(formattedCart);
-        } catch (error) {
-          console.error("Error fetching cart:", error);
-        } finally {
-          setLoading(false);
-        }
-      } else {
-        setCart([]);
-        setAppliedCoupon(null);
-        setDiscountAmount(0);
-      }
-    };
+    if (user) {
+      setLoading(true);
+      fetchAndSetCart()
+        .catch(err => console.error("Error fetching cart:", err))
+        .finally(() => setLoading(false));
+    } else {
+      setCart([]);
+      setAppliedCoupon(null);
+      setDiscountAmount(0);
+    }
+  }, [user, fetchAndSetCart]);
 
-    fetchCart();
-  }, [user]);
+  const refreshCart = useCallback(() => {
+    return fetchAndSetCart().catch(err => console.error("Error refreshing cart:", err));
+  }, [fetchAndSetCart]);
 
   const addToCart = async (product, quantity = 1, colorId = null) => {
     if (!user) return { success: false, message: "Please login to add items to bag." };
@@ -107,28 +109,7 @@ export const CartProvider = ({ children }) => {
     try {
       await api.post(API_ENDPOINTS.cart, { productId: product.id, quantity, colorId });
       // Sync real cartItemId in background — don't await
-      api.get(API_ENDPOINTS.cart).then(res => {
-        const payload = unwrapApiData(res.data);
-        const rawItems = Array.isArray(payload) ? payload : [];
-        const synced = rawItems.map(item => {
-          const p = item.Product;
-          if (!p) return null;
-          const allImages = getProductImages(p);
-          const colorImage = allImages.find(img => img.color_id === item.colorId);
-          return {
-            ...p,
-            cartItemId: item.id,
-            quantity: item.quantity,
-            colorId: item.colorId,
-            selectedColorName: item.Color?.name || "",
-            selectedColorSlug: item.Color?.slug || "",
-            selectedColorHex: item.Color?.hex_code || "",
-            price: p.selling_price || p.mrp_price || 0,
-            image_url: colorImage?.url || getProductCoverImage(p),
-          };
-        }).filter(Boolean);
-        setCart(synced);
-      }).catch(() => {});
+      fetchAndSetCart().catch(() => {});
       return { success: true };
     } catch (error) {
       setCart(snapshot);
@@ -247,6 +228,7 @@ export const CartProvider = ({ children }) => {
       removeFromCart,
       updateQuantity,
       clearCart,
+      refreshCart,
       getSubtotal,
       getCartCount,
       appliedCoupon,

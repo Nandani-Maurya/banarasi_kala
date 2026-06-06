@@ -7,6 +7,7 @@ const { authMiddleware } = require("../middleware/authMiddleware");
 router.use(authMiddleware);
 
 router.get("/", CartController.getCart);
+router.get("/validate", CartController.validateCart);
 router.post("/", CartController.addToCart);
 router.put("/quantity", CartController.updateQuantity);
 router.delete("/:productId", CartController.removeFromCart);

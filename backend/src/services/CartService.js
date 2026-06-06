@@ -120,6 +120,54 @@ class CartService {
       where: { customerId },
     });
   }
+
+  async validateCart(customerId) {
+    const items = await Cart.findAll({
+      where: { customerId },
+      include: [{
+        model: Product,
+        attributes: ['id', 'name', 'stock_quantity', 'color_stocks', 'status'],
+      }],
+    });
+
+    const issues = [];
+    for (const item of items) {
+      const product = item.Product;
+      if (!product) continue;
+
+      const colorId = item.colorId;
+      const colorStocks = product.color_stocks || {};
+      const rawColorStock = colorStocks[colorId] ?? colorStocks[String(colorId)];
+      const colorStock = rawColorStock !== undefined
+        ? Number(rawColorStock)
+        : Number(product.stock_quantity || 0);
+      const totalStock = Number(product.stock_quantity || 0);
+      const available = Math.min(colorStock, totalStock);
+      const cartQty = Number(item.quantity);
+
+      if (product.status !== 'active' || available <= 0) {
+        issues.push({
+          productId: item.productId,
+          colorId: item.colorId,
+          cartQuantity: cartQty,
+          availableStock: 0,
+          name: product.name,
+          issue: 'out_of_stock',
+        });
+      } else if (cartQty > available) {
+        issues.push({
+          productId: item.productId,
+          colorId: item.colorId,
+          cartQuantity: cartQty,
+          availableStock: available,
+          name: product.name,
+          issue: 'quantity_exceeded',
+        });
+      }
+    }
+
+    return issues;
+  }
 }
 
 module.exports = new CartService();

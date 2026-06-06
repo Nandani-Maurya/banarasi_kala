@@ -13,6 +13,7 @@ export const API_ENDPOINTS = {
   coupons: `${API_BASE_URL}/api/coupons`,
   auth: `${API_BASE_URL}/api/auth`,
   cart: `${API_BASE_URL}/api/cart`,
+  cartValidate: `${API_BASE_URL}/api/cart/validate`,
   wishlist: `${API_BASE_URL}/api/wishlist`,
   feedback: `${API_BASE_URL}/api/feedback`,
   feedbackSubmit: `${API_BASE_URL}/api/feedback/submit`,

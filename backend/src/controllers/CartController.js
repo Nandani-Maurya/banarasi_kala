@@ -29,6 +29,11 @@ class CartController {
     await CartService.clearCart(req.customer.id);
     return ok(res, null, "Cart cleared");
   });
+
+  validateCart = asyncHandler(async (req, res) => {
+    const issues = await CartService.validateCart(req.customer.id);
+    return ok(res, issues, "Cart validated");
+  });
 }
 
 module.exports = new CartController();
