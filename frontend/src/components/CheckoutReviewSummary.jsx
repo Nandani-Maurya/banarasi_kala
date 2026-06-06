@@ -113,12 +113,18 @@ const CheckoutReviewSummary = ({
         )}
 
         <div className="crs-totals">
-          {rows.map((row) => (
-            <p key={row.label} className={row.tone === "success" ? "crs-success" : row.tone === "accent" ? "crs-accent" : ""}>
-              <span>{row.label}</span>
-              <strong>{row.value}</strong>
-            </p>
-          ))}
+          {rows.map((row, idx) =>
+            row.divider ? (
+              <div key={`divider-${idx}`} className="crs-divider">
+                {row.label && <span>{row.label}</span>}
+              </div>
+            ) : (
+              <p key={row.label} className={row.tone === "success" ? "crs-success" : row.tone === "accent" ? "crs-accent" : ""}>
+                <span>{row.label}</span>
+                <strong>{row.value}</strong>
+              </p>
+            )
+          )}
           {deliveryPromise && (
             <div className="crs-delivery">
               <strong>{deliveryPromise.title}</strong>

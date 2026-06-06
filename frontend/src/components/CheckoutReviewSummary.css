@@ -332,6 +332,29 @@
   transform: translateY(0);
 }
 
+.crs-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 2px;
+}
+
+.crs-divider::before,
+.crs-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgba(128, 0, 32, 0.1);
+}
+
+.crs-divider span {
+  color: rgba(53, 23, 15, 0.38);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .crs-total {
   margin-top: 8px !important;
   padding-top: 12px;

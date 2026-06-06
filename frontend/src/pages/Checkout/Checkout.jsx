@@ -672,16 +672,25 @@ const Checkout = () => {
                 walletBalance,
                 useWallet,
                 setUseWallet,
-                rows: [
-                  { label: "Subtotal", value: `Rs. ${subtotal.toLocaleString("en-IN")}` },
-                  ...(unavailableCart.length > 0 ? [{ label: "Unavailable items", value: `${unavailableCart.length} excluded`, tone: "accent" }] : []),
-                  ...(appliedCoupon ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-Rs. ${effectiveCouponDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
-                  { label: "Free delivery charge", value: shippingLoading ? "Calculating..." : shippingCharge > 0 ? <><s>Rs. {shippingCharge.toLocaleString("en-IN")}</s> Free</> : "Free", tone: "success" },
-                  ...(paymentDiscount > 0 ? [{ label: "Prepaid payment discount", value: `-Rs. ${paymentDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
-                  ...(paymentFee > 0 ? [{ label: "COD charge", value: `Rs. ${paymentFee.toLocaleString("en-IN")}`, tone: "accent" }] : []),
-                  { label: "Platform fee", value: `Rs. ${platformFee.toLocaleString("en-IN")}` },
-                  ...(walletUsableAmount > 0 ? [{ label: "Wallet used", value: `-Rs. ${walletUsableAmount.toLocaleString("en-IN")}`, tone: "success" }] : []),
-                ],
+                rows: (() => {
+                  const hasSavings = paymentDiscount > 0 || appliedCoupon || walletUsableAmount > 0 || (!shippingLoading && shippingCharge > 0);
+                  return [
+                    // ── Charges ──────────────────────────────────────────
+                    { label: "Subtotal", value: `Rs. ${subtotal.toLocaleString("en-IN")}` },
+                    ...(unavailableCart.length > 0 ? [{ label: "Unavailable items", value: `${unavailableCart.length} excluded`, tone: "accent" }] : []),
+                    { label: "Platform fee", value: `Rs. ${platformFee.toLocaleString("en-IN")}` },
+                    ...(paymentFee > 0 ? [{ label: "COD charge", value: `Rs. ${paymentFee.toLocaleString("en-IN")}`, tone: "accent" }] : []),
+                    // Show delivery here only when there is no saving to display below
+                    ...(!hasSavings || shippingLoading ? [{ label: "Delivery", value: shippingLoading ? "Calculating..." : "Free", tone: shippingLoading ? undefined : "success" }] : []),
+
+                    // ── Savings ───────────────────────────────────────────
+                    ...(hasSavings ? [{ divider: true, label: "Savings" }] : []),
+                    ...(!shippingLoading && shippingCharge > 0 ? [{ label: "Free delivery", value: <><s>Rs. {shippingCharge.toLocaleString("en-IN")}</s>{" "}Free</>, tone: "success" }] : []),
+                    ...(paymentDiscount > 0 ? [{ label: "Prepaid discount", value: `-Rs. ${paymentDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
+                    ...(appliedCoupon ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-Rs. ${effectiveCouponDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
+                    ...(walletUsableAmount > 0 ? [{ label: "Wallet used", value: `-Rs. ${walletUsableAmount.toLocaleString("en-IN")}`, tone: "success" }] : []),
+                  ];
+                })(),
                 logistics: shippingCharge > 0 ? {
                   label: "Returns & exchange available",
                   tooltip: shippingDiscountReason === "first_order"
