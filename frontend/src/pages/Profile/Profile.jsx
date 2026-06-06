@@ -144,7 +144,7 @@ export function LocationPickerModal({ open, initialQuery, onClose, onConfirm }) 
   const [isSearching, setIsSearching] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [status, setStatus] = useState("");
-  const canConfirmLocation = Boolean(selected?.center && selected?.displayName && selected?.house_building);
+  const canConfirmLocation = Boolean(selected?.center && selected?.displayName);
 
   const reverseGeocode = async (center) => {
     if (!MAPBOX_TOKEN) return null;

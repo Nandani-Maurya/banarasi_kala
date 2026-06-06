@@ -59,6 +59,8 @@ const getCheckoutAddressLine = (address = {}) =>
     .filter(Boolean)
     .join(", ");
 
+const normalizePhone = (value) => String(value || "").replace(/\D/g, "");
+
 const Checkout = () => {
   const { cart, clearCart, appliedCoupon, discountAmount, applyCoupon: cartApplyCoupon, removeCoupon: cartRemoveCoupon } = useCart();
   const { user } = useAuth();
@@ -97,6 +99,7 @@ const Checkout = () => {
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
   const [addressSaving, setAddressSaving] = useState(false);
+  const [addrFormErrors, setAddrFormErrors] = useState({});
   const rootRef = useRef(null);
   const orderingRef = useRef(false);
 
@@ -205,6 +208,7 @@ const Checkout = () => {
   const resetAddressForm = () => {
     setEditingAddressId(null);
     setAddressForm(getEmptyCheckoutAddress(user));
+    setAddrFormErrors({});
   };
 
   const openAddressModal = (address = null) => {
@@ -227,9 +231,13 @@ const Checkout = () => {
 
   const handleAddressFormChange = (event) => {
     const { name, value, type, checked } = event.target;
+    if (addrFormErrors[name]) setAddrFormErrors((prev) => ({ ...prev, [name]: undefined }));
     setAddressForm((current) => ({
       ...current,
-      [name]: type === "checkbox" ? checked : name === "pincode" ? value.replace(/\D/g, "").slice(0, 6) : value,
+      [name]: type === "checkbox" ? checked
+        : name === "pincode" ? value.replace(/\D/g, "").slice(0, 6)
+        : name === "phone" ? value.replace(/\D/g, "").slice(0, 10)
+        : value,
     }));
   };
 
@@ -251,17 +259,26 @@ const Checkout = () => {
 
   const saveCheckoutAddress = async () => {
     const form = cleanCheckoutAddress(addressForm);
-    if (!form.house_building || !form.city || !form.state || !/^\d{6}$/.test(form.pincode) || !form.phone) {
-      showNotification("Please fill complete delivery address.", "warning");
+    const phone = normalizePhone(form.phone);
+    const errors = {};
+    if (!form.house_building.trim()) errors.house_building = "Address is required.";
+    if (!form.city.trim()) errors.city = "City is required.";
+    if (!form.state.trim()) errors.state = "State is required.";
+    if (!form.pincode || !/^\d{6}$/.test(form.pincode)) errors.pincode = "Enter a valid 6-digit pincode.";
+    if (!phone) errors.phone = "Phone is required.";
+    else if (!/^[6-9]\d{9}$/.test(phone)) errors.phone = "Enter a valid 10-digit mobile number.";
+    if (Object.keys(errors).length > 0) {
+      setAddrFormErrors(errors);
       return;
     }
+    setAddrFormErrors({});
 
     try {
       setAddressSaving(true);
       const payload = {
         ...form,
         name: form.name || user?.name || "",
-        phone: form.phone || user?.phone || "",
+        phone: phone || user?.phone || "",
       };
       const response = editingAddressId
         ? await api.put(`/api/addresses/${editingAddressId}`, payload)
@@ -1047,6 +1064,7 @@ const Checkout = () => {
                 <label>
                   <span>Flat, House no., Building *</span>
                   <input name="house_building" value={addressForm.house_building} onChange={handleAddressFormChange} />
+                  {addrFormErrors.house_building && <em className="buy-now-field-error">{addrFormErrors.house_building}</em>}
                 </label>
                 <label>
                   <span>Area, Street, Sector</span>
@@ -1056,20 +1074,27 @@ const Checkout = () => {
                   <label>
                     <span>City *</span>
                     <input name="city" value={addressForm.city} onChange={handleAddressFormChange} />
+                    {addrFormErrors.city && <em className="buy-now-field-error">{addrFormErrors.city}</em>}
                   </label>
                   <label>
                     <span>State *</span>
                     <input name="state" value={addressForm.state} onChange={handleAddressFormChange} />
+                    {addrFormErrors.state && <em className="buy-now-field-error">{addrFormErrors.state}</em>}
                   </label>
                 </div>
                 <div className="buy-now-form-row">
                   <label>
                     <span>Pincode *</span>
                     <input name="pincode" inputMode="numeric" value={addressForm.pincode} onChange={handleAddressFormChange} />
+                    {addrFormErrors.pincode && <em className="buy-now-field-error">{addrFormErrors.pincode}</em>}
                   </label>
                   <label>
                     <span>Phone *</span>
-                    <input name="phone" inputMode="tel" value={addressForm.phone} onChange={handleAddressFormChange} />
+                    <div className="buy-now-phone-input">
+                      <span className="buy-now-country-code"><span className="buy-now-flag-india" aria-hidden="true" />+91</span>
+                      <input name="phone" inputMode="tel" maxLength={10} placeholder="10-digit mobile number" value={addressForm.phone} onChange={handleAddressFormChange} />
+                    </div>
+                    {addrFormErrors.phone && <em className="buy-now-field-error">{addrFormErrors.phone}</em>}
                   </label>
                 </div>
                 <label>

@@ -1018,7 +1018,76 @@
     color: #ffe1a2;
 }
 
-.checkout-page-shell .profile-map-modal {
+.buy-now-field-error {
+    display: block;
+    margin-top: 3px;
+    color: #b42318;
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 600;
+}
+
+.buy-now-phone-input {
+    display: flex;
+    align-items: center;
+    border: 1px solid rgba(53, 23, 15, 0.18);
+    border-radius: 4px;
+    overflow: hidden;
+    background: #fff;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.buy-now-phone-input:focus-within {
+    border-color: rgba(128, 0, 32, 0.42);
+    box-shadow: 0 0 0 3px rgba(128, 0, 32, 0.08);
+}
+
+.buy-now-phone-input input {
+    flex: 1;
+    min-height: 38px;
+    border: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding-left: 8px;
+}
+
+.buy-now-country-code {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px;
+    color: #5b0710;
+    font-size: 12px;
+    font-weight: 600;
+    border-right: 1px solid rgba(53, 23, 15, 0.12);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.buy-now-flag-india {
+    position: relative;
+    width: 18px;
+    height: 12px;
+    flex: 0 0 auto;
+    overflow: hidden;
+    background: linear-gradient(#ff9933 0 33.33%, #fff 33.33% 66.66%, #138808 66.66%);
+    border: 1px solid rgba(91, 55, 28, 0.18);
+    border-radius: 2px;
+}
+
+.buy-now-flag-india::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 4px;
+    height: 4px;
+    margin: -2px 0 0 -2px;
+    border: 1px solid #000080;
+    border-radius: 50%;
+}
+
+.checkout-page .profile-map-modal {
     z-index: 2147483020;
 }
 

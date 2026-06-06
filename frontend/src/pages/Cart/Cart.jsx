@@ -5,7 +5,6 @@ import { useCart } from "../../context/CartContext";
 import { useWishlist } from "../../context/WishlistContext";
 import EmptyStateIcon from "../../components/EmptyStateIcon";
 import { getProductStockInfo } from "../../utils/stockStatus";
-import { getVariantSku } from "../../utils/itemCode";
 import "./Cart.css";
 
 const Cart = () => {
@@ -18,7 +17,6 @@ const Cart = () => {
   const { toggleWishlist } = useWishlist();
 
   const subtotal = getSubtotal();
-  const total = subtotal;
 
   const handleCartQuantityChange = async (item, nextQuantity) => {
     if (nextQuantity < 1) return;
@@ -68,7 +66,6 @@ const Cart = () => {
               <div className="cart-items w-full lg:w-2/3 space-y-6">
                 {cart.map((item, index) => {
                   const productName = item.name;
-                  const variantSku = getVariantSku(item, item.colorId, item.selectedColorSlug || item.selectedColorName);
 
                 return (
                   (() => {
@@ -86,7 +83,6 @@ const Cart = () => {
                       <div className="cart-item-meta text-xs text-gray-500 uppercase tracking-widest mb-4 font-semibold">
                         <span>{item.Material?.name || "Pure Silk"}</span>
                         {item.selectedColorName && <span>{item.selectedColorName}</span>}
-                        {variantSku && <span>SKU: {variantSku}</span>}
                       </div>
                       {(stockInfo.isOutOfStock || stockInfo.isLowStock) && (
                         <p className={`cart-stock-note ${stockInfo.isOutOfStock ? "out" : "low"}`}>
@@ -125,29 +121,23 @@ const Cart = () => {
                   <h2 className="brand-font text-2xl text-[#3D2817] mb-8 uppercase tracking-wider font-bold">Order Summary</h2>
                   
                   <div className="cart-summary-lines space-y-4 mb-8">
-                    <div className="cart-summary-row flex justify-between text-[#3D2817]/70">
-                      <span>Subtotal ({cart.length} items)</span>
-                      <span className="font-semibold">Rs. {subtotal.toLocaleString("en-IN")}</span>
-                    </div>
-                    <div className="cart-summary-row flex justify-between text-[#3D2817]/70">
-                      <span>Shipping</span>
-                      <span>Calculated at checkout</span>
-                    </div>
-                    
-                    <div className="cart-summary-total-wrap pt-6 border-t border-[#D4AF37]/30">
+                    <div className="cart-summary-total-wrap">
+                      <div className="flex justify-between items-baseline mb-1">
+                        <span className="text-sm text-[#3D2817]/60 font-medium">{cart.length} {cart.length === 1 ? "item" : "items"}</span>
+                      </div>
                       <div className="cart-final-total flex justify-between items-baseline text-3xl font-black text-[#800020] mb-2">
                         <span className="brand-font uppercase tracking-tighter">Total</span>
-                        <span>Rs. {total.toLocaleString("en-IN")}</span>
+                        <span>Rs. {subtotal.toLocaleString("en-IN")}</span>
                       </div>
-                      
+
                       <div className="cart-summary-notes flex flex-col gap-1.5 mt-4 pt-4 border-t border-dashed border-[#D4AF37]/20">
                         <div className="flex items-center space-x-2 text-emerald-700">
                           <Icon icon="lucide:check-circle" className="text-xs" />
                           <span>Inclusive of all taxes</span>
                         </div>
                         <div className="flex items-center space-x-2 text-[#B8860B]">
-                          <Icon icon="lucide:ticket" className="text-xs" />
-                          <span>Coupons, wallet and shipping are applied at checkout.</span>
+                          <Icon icon="lucide:truck" className="text-xs" />
+                          <span>Shipping & coupons applied at checkout.</span>
                         </div>
                       </div>
                     </div>

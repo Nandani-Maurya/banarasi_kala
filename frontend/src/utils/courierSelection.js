@@ -22,18 +22,19 @@ const getEtaDays = (courier = {}) => {
   if (directDays !== null) return directDays;
 
   const etd = String(courier.etd || courier.edd || "").trim();
-  const numeric = etd.match(/\d+/)?.[0];
-  if (numeric) return Number(numeric);
-
   const parsedDate = new Date(etd);
   if (!Number.isNaN(parsedDate.getTime())) {
     const diffMs = parsedDate.getTime() - Date.now();
     return Math.max(0, Math.ceil(diffMs / (24 * 60 * 60 * 1000)));
   }
 
+  const numeric = etd.match(/\d+/)?.[0];
+  if (numeric) return Number(numeric);
+
   return 99;
 };
 
+// Accepts both the camelCase/lowercase AND the PascalCase keys Shiprocket returns
 const getScoreValue = (courier = {}, keys = [], fallback = 0) => {
   for (const key of keys) {
     const value = toNumber(courier[key]);
@@ -60,7 +61,9 @@ const isBlockedCourier = (courier = {}) => {
   ].map(normalizeText);
 
   return blockedText.some((text) =>
-    ["blocked", "disable", "disabled", "inactive", "not available", "not_serviceable"].some((word) => text.includes(word)),
+    ["blocked", "disable", "disabled", "inactive", "not available", "not_serviceable"].some((word) =>
+      text.includes(word),
+    ),
   );
 };
 
@@ -69,14 +72,20 @@ const isServiceableCourier = (courier = {}) => {
   return !isBlockedCourier(courier);
 };
 
+// Only enforces air/surface max weight when the field is explicitly present.
+// min_weight in Shiprocket is a billing minimum (not a delivery restriction) so we skip it.
 const supportsWeight = (courier = {}, weightKg = null) => {
   const weight = toNumber(weightKg);
   if (weight === null || weight <= 0) return true;
 
-  const minWeight = toNumber(courier.min_weight ?? courier.min_weight_kg ?? courier.minimum_weight);
-  const maxWeight = toNumber(courier.max_weight ?? courier.max_weight_kg ?? courier.maximum_weight);
-  if (minWeight !== null && weight < minWeight) return false;
-  if (maxWeight !== null && weight > maxWeight) return false;
+  const isSurface = courier.is_surface === true || courier.mode === 0;
+  const maxWeightRaw = isSurface
+    ? (courier.surface_max_weight ?? courier.max_weight ?? courier.max_weight_kg ?? courier.maximum_weight)
+    : (courier.air_max_weight ?? courier.max_weight ?? courier.max_weight_kg ?? courier.maximum_weight);
+
+  const maxWeight = toNumber(maxWeightRaw);
+  if (maxWeight !== null && maxWeight > 0 && weight > maxWeight) return false;
+
   return true;
 };
 
@@ -89,25 +98,36 @@ const supportsCod = (courier = {}, requireCod = false) => {
 
 const scoreCourier = (option, preferredName = "") => {
   const courier = option.raw || {};
-  const deliveryPerformance = getScoreValue(courier, ["delivery_performance", "delivery_rating", "rating"], 0);
-  const ndrReattempt = getScoreValue(courier, ["ndr_reattempt", "ndr_reattempt_count", "reattempt", "call_before_delivery"], 0);
-  const tracking = getScoreValue(courier, ["tracking_performance", "tracking_rating", "tracking"], 0);
-  const attemptSpeed = getScoreValue(courier, ["attempt_speed", "pickup_performance", "pickup_rating"], 0);
+
+  // Shiprocket returns these with capital letters (NDR_Reattempt, Attempt_Speed, SLA_Adherence).
+  // Both variants listed so the lookup works regardless of API response casing.
+  const deliveryPerformance = getScoreValue(courier, ["delivery_performance", "delivery_rating"], 0);
+  const ndrReattempt       = getScoreValue(courier, ["NDR_Reattempt", "ndr_reattempt", "ndr_reattempt_count"], 0);
+  const attemptSpeed       = getScoreValue(courier, ["Attempt_Speed", "attempt_speed", "pickup_performance"], 0);
+  const slaAdherence       = getScoreValue(courier, ["SLA_Adherence", "sla_adherence"], 0);
+  const tracking           = getScoreValue(courier, ["tracking_performance", "tracking_rating"], 0);
+
   const etaDays = getEtaDays(courier);
-  const rate = option.rate ?? 999999;
-  const rto = getCourierRtoCharge(courier) ?? rate;
+  const rate    = option.rate ?? 999999;
+  const rto     = getCourierRtoCharge(courier) ?? rate;
+
   const preferredBoost = preferredName && normalizeText(option.courier).includes(normalizeText(preferredName)) ? 12 : 0;
-  const rtoPenalty = ndrReattempt > 0 ? 0 : rto * 0.03;
+
+  // RTO risk: a courier that reattempts well (high ndrReattempt) has lower effective RTO exposure.
+  // ndrFactor runs from 1 (no reattempt) down to 0.5 (perfect reattempt score of 5).
+  const ndrFactor = Math.max(0.5, 1 - ndrReattempt / 10);
+  const rtoRisk   = rto * 0.05 * ndrFactor;
 
   return (
-    preferredBoost +
-    deliveryPerformance * 4 +
-    ndrReattempt * 2.5 +
-    tracking * 2 +
-    attemptSpeed * 1.5 -
-    etaDays * 2 -
-    rate * 0.04 -
-    rtoPenalty
+    preferredBoost       +
+    deliveryPerformance * 5   + // reliability — top priority
+    ndrReattempt        * 4   + // reattempt capability — reduces failed deliveries & RTO
+    slaAdherence        * 2   + // consistent delivery date adherence
+    attemptSpeed        * 2   + // fast first attempt — fewer weather/availability misses
+    tracking            * 1.5 - // visibility (useful but not critical)
+    etaDays             * 1.5 - // speed (less critical when delivery is free)
+    rate                * 0.06- // cost to business — weighted higher since we absorb it
+    rtoRisk                     // proportional RTO risk (scaled by NDR capability)
   );
 };
 
