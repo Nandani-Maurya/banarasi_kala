@@ -144,6 +144,8 @@ exports.submitFeedback = async (req, res) => {
 
 exports.submitGeneralFeedback = async (req, res) => {
   try {
+    await ensureFeedbackColumns();
+
     const rating = toInt(req.body.rating);
     const comment = String(req.body.comment || '').trim();
     const customerId = req.user.id;
