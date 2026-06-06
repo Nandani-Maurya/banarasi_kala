@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useNotification } from "../context/NotificationContext";
@@ -38,6 +38,7 @@ const Header = () => {
   const profileMenuRef = useRef(null);
   const mobilePanelRef = useRef(null);
   const mobileMenuButtonRef = useRef(null);
+  const varietiesAbortRef = useRef(null);
 
   const isAuthPage = location.pathname === "/login";
   const userName = user?.name || "User";
@@ -106,46 +107,33 @@ const Header = () => {
     setHeaderSearch(query);
   }, [location.pathname, location.search]);
 
-  useEffect(() => {
+  const fetchSareeVarieties = useCallback(async () => {
+    varietiesAbortRef.current?.abort();
     const controller = new AbortController();
+    varietiesAbortRef.current = controller;
 
-    const fetchSareeVarieties = async () => {
-      setSareeVarietiesStatus("loading");
-
-      try {
-        const response = await fetch(
-          API_ENDPOINTS.varieties,
-          { signal: controller.signal },
-        );
-
-        if (!response.ok) {
-          throw new Error("Unable to load saree varieties");
-        }
-
-        const data = await response.json();
-        const varieties = Array.isArray(data)
-          ? data
-              .filter((item) => item?.id && item?.name)
-              .map((item) => ({
-                id: item.id,
-                name: item.name,
-              }))
-          : [];
-
-        setSareeVarieties(varieties);
-        setSareeVarietiesStatus("success");
-      } catch (error) {
-        if (error.name !== "AbortError") {
-          setSareeVarieties([]);
-          setSareeVarietiesStatus("error");
-        }
+    setSareeVarietiesStatus("loading");
+    try {
+      const response = await fetch(API_ENDPOINTS.varieties, { signal: controller.signal });
+      if (!response.ok) throw new Error("Unable to load saree varieties");
+      const data = await response.json();
+      const varieties = Array.isArray(data)
+        ? data.filter((item) => item?.id && item?.name).map((item) => ({ id: item.id, name: item.name }))
+        : [];
+      setSareeVarieties(varieties);
+      setSareeVarietiesStatus("success");
+    } catch (error) {
+      if (error.name !== "AbortError") {
+        setSareeVarieties([]);
+        setSareeVarietiesStatus("error");
       }
-    };
-
-    fetchSareeVarieties();
-
-    return () => controller.abort();
+    }
   }, []);
+
+  useEffect(() => {
+    fetchSareeVarieties();
+    return () => varietiesAbortRef.current?.abort();
+  }, [fetchSareeVarieties]);
 
   useEffect(() => {
     if (!mobileMenuOpen) return undefined;
@@ -385,7 +373,12 @@ const Header = () => {
                   <span className="bk-dropdown-status">Loading sarees...</span>
                 )}
                 {sareeVarietiesStatus === "error" && (
-                  <span className="bk-dropdown-status">Unable to load sarees</span>
+                  <span className="bk-dropdown-status bk-dropdown-status--error">
+                    Unable to load sarees
+                    <button type="button" className="bk-dropdown-retry" onClick={fetchSareeVarieties}>
+                      Retry
+                    </button>
+                  </span>
                 )}
                 {sareeVarietiesStatus === "success" &&
                   sareeVarieties.map((variety) => (
@@ -674,7 +667,12 @@ const Header = () => {
               <span className="bk-mobile-panel-muted">No varieties found</span>
             )}
             {sareeVarietiesStatus === "error" && (
-              <span className="bk-mobile-panel-muted">Unable to load varieties</span>
+              <span className="bk-mobile-panel-muted bk-mobile-panel-muted--error">
+                Unable to load varieties
+                <button type="button" className="bk-mobile-retry" onClick={fetchSareeVarieties}>
+                  Retry
+                </button>
+              </span>
             )}
             <Link to="/about" onClick={refreshNavClick("/about")}>
               About Us
