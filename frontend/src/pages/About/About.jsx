@@ -36,7 +36,7 @@ const About = () => {
         <div className="about-shell about-hero-content">
           <h1>About Us</h1>
           <p className="about-hero-subtitle">
-            The Essence of Banaras.
+            The Essence of Banaras.   
             <span>The Promise of Quality.</span>
           </p>
           <span className="about-ornament" aria-hidden="true" />
