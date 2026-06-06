@@ -77,8 +77,8 @@ const Feedback = () => {
             <article>
               <span><MessageSquare size={20} /></span>
               <div>
-                <h2>Your Voice</h2>
-                <p>Reviews are read by our team before publishing.</p>
+                <h2>Inspire Others</h2>
+                <p>Your review helps fellow shoppers find their perfect Banarasi saree.</p>
               </div>
             </article>
             <article>

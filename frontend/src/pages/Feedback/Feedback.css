@@ -10,16 +10,6 @@
     linear-gradient(90deg, #f7e7cc 0%, #fff5e5 50%, #f7e7cc 100%);
 }
 
-.feedback-page::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 5px;
-  background: #5b0710;
-}
-
 .feedback-shell {
   position: relative;
   width: 100%;

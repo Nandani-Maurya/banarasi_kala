@@ -10,16 +10,6 @@
   color: #341c14;
 }
 
-.contact-page::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 5px;
-  background: #5b0710;
-}
-
 .contact-shell {
   position: relative;
   width: 100%;
