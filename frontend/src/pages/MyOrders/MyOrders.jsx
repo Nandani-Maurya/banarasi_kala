@@ -76,7 +76,7 @@ const toNumber = (value) => {
 };
 const formatPrice = (value) => `Rs. ${toNumber(value).toLocaleString("en-IN")}`;
 const getItemImage = (item) => item.image_url || item.product_image_url || "";
-const getItemColorLabel = (item) => item.color_name || item.Color?.name || "Selected color";
+const getItemColorLabel = (item) => item.color_name || item.Color?.name || null;
 const isCancelled = (order) => ["cancelled", "seller cancelled"].includes(String(order.status || "").toLowerCase());
 const PRE_DELIVERY_STATUSES = new Set([
   "pending",
@@ -277,7 +277,7 @@ const ReviewStars = ({ rating = 0, onSelect, disabled = false }) => (
   </div>
 );
 
-const OrderCard = ({ order, onImagePreview, onFeedback }) => {
+const OrderCard = ({ order, onFeedback }) => {
   const navigate = useNavigate();
 
   const orderNumber = getOrderDisplayNumber(order);
@@ -298,7 +298,7 @@ const OrderCard = ({ order, onImagePreview, onFeedback }) => {
     <article className={`order-card ${isCancelled(order) ? "is-cancelled" : ""}`}>
       <div className="order-card-header">
         <div className="order-meta">
-          <span className="order-number">{statusMeta.label}</span>
+          <span className="order-number">#{orderNumber}</span>
           <span className="order-date">{orderDate}</span>
         </div>
         <span className="order-status-badge" style={{ backgroundColor: statusMeta.bg, color: statusMeta.color }}>
@@ -318,22 +318,24 @@ const OrderCard = ({ order, onImagePreview, onFeedback }) => {
 
         {items.map((item, index) => {
           const imageUrl = getItemImage(item);
-          const colorHex = item.color_hex || item.Color?.hex_code || "#b7822d";
+          const colorHex = item.color_hex || null;
           const productName = item.product_name || `Product #${item.product_id}`;
           const isItemCancelled = String(item.status || "").toLowerCase() === "cancelled";
           const itemRating = Number(item.feedback?.rating || 0);
+          const productUrl = item.product_slug
+            ? `/product/${item.product_slug}${item.colorId ? `?color=${item.colorId}` : ""}`
+            : null;
 
           return (
-            <div 
-              key={`${item.product_id}-${item.colorId || index}`} 
-              className={`order-product-item ${isItemCancelled ? "item-cancelled" : ""}`}
+            <div
+              key={`${item.product_id}-${item.colorId || index}`}
+              className={`order-product-item ${isItemCancelled ? "item-cancelled" : ""}${productUrl ? " is-clickable" : ""}`}
+              onClick={productUrl ? () => navigate(productUrl) : undefined}
+              role={productUrl ? "button" : undefined}
+              tabIndex={productUrl ? 0 : undefined}
+              onKeyDown={productUrl ? (e) => e.key === "Enter" && navigate(productUrl) : undefined}
             >
-              <button
-                type="button"
-                className="order-product-media"
-                onClick={() => imageUrl && onImagePreview({ imageUrl, productName })}
-                aria-label={`Open ${productName} image`}
-              >
+              <div className="order-product-media">
                 {imageUrl ? (
                   <img src={imageUrl} alt={productName} loading="lazy" />
                 ) : (
@@ -341,23 +343,27 @@ const OrderCard = ({ order, onImagePreview, onFeedback }) => {
                     <Icon icon="lucide:image-off" />
                   </div>
                 )}
-              </button>
+              </div>
 
               <div className="order-product-details">
                 <h3>{productName}</h3>
                 <div className="order-product-subline">
                   <span>Qty {item.quantity}</span>
                 </div>
-                <div className="order-product-color">
-                  <span className="order-color-swatch" style={{ backgroundColor: colorHex }} />
-                  <span>{getItemColorLabel(item)}</span>
-                </div>
-                <span className="order-item-status">{getItemDisplayStatus(order, item)}</span>
+                {(colorHex || getItemColorLabel(item)) && (
+                  <div className="order-product-color">
+                    {colorHex && <span className="order-color-swatch" style={{ backgroundColor: colorHex }} />}
+                    {getItemColorLabel(item) && <span>{getItemColorLabel(item)}</span>}
+                  </div>
+                )}
+                {String(item?.status || "").trim().toLowerCase() !== "active" && item?.status && (
+                  <span className="order-item-status">{getItemDisplayStatus(order, item)}</span>
+                )}
               </div>
               {canReviewOrderItem(order, item) && (
                 <div className="order-feedback-row">
                   <ReviewStars rating={itemRating} disabled />
-                  <button type="button" onClick={() => onFeedback(order, item)}>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); onFeedback(order, item); }}>
                     {item.feedback ? "Edit feedback" : "Add feedback"}
                   </button>
                 </div>
@@ -454,7 +460,6 @@ export default function MyOrders() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [previewImage, setPreviewImage] = useState(null);
 
   const [actionModal, setActionModal] = useState({
     isOpen: false,
@@ -482,17 +487,21 @@ export default function MyOrders() {
   });
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
 
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order) =>
+      selectedFilter === "all" || getOrderFilterGroup(order.status) === selectedFilter
+    );
+  }, [orders, selectedFilter]);
+
   const visibleOrders = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return orders.filter((order) => {
-      const matchesFilter = selectedFilter === "all" || getOrderFilterGroup(order.status) === selectedFilter;
-      if (!matchesFilter) return false;
-      if (!query) return true;
+    if (!query) return filteredOrders;
+    return filteredOrders.filter((order) => {
       const orderNumber = getOrderDisplayNumber(order).toLowerCase();
       const productNames = (order.OrderItems || []).map((item) => item.product_name || "").join(" ").toLowerCase();
       return orderNumber.includes(query) || productNames.includes(query) || String(order.status || "").toLowerCase().includes(query);
     });
-  }, [orders, searchQuery, selectedFilter]);
+  }, [filteredOrders, searchQuery]);
 
   const fetchOrders = useCallback(async () => {
     if (!user?.id) return;
@@ -656,24 +665,32 @@ export default function MyOrders() {
       <section className="orders-hero">
         <div className="orders-hero-content">
           <h1>My Orders</h1>
+        </div>
+      </section>
+
+      <main className="orders-container">
+        {!loading && !error && orders.length > 0 && (
           <div className="orders-search-row">
             <label>
               <Icon icon="lucide:search" />
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search orders"
+                placeholder="Search by product name or order number"
               />
+              {searchQuery && (
+                <button type="button" className="orders-search-clear" onClick={() => setSearchQuery("")} aria-label="Clear search">
+                  <Icon icon="lucide:x" />
+                </button>
+              )}
             </label>
             <button type="button" onClick={openFilterModal}>
               <Icon icon="lucide:list-filter" />
               {FILTER_OPTIONS.find((item) => item.id === selectedFilter)?.label || "Filters"}
             </button>
           </div>
-        </div>
-      </section>
+        )}
 
-      <main className="orders-container">
         {loading && (
           <div className="orders-loading">
             {[1, 2, 3].map((item) => (
@@ -703,16 +720,42 @@ export default function MyOrders() {
         )}
         {!loading && !error && orders.length > 0 && (
           <div className="orders-list">
-            {visibleOrders.map((order) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                onImagePreview={setPreviewImage}
-                onFeedback={handleFeedbackTrigger}
-              />
-            ))}
-            {visibleOrders.length === 0 && (
-              <div className="orders-filter-empty">No orders match this filter.</div>
+            {visibleOrders.length === 0 && searchQuery.trim() ? (
+              <>
+                <div className="orders-search-no-match">
+                  <Icon icon="lucide:search-x" />
+                  <p>No orders found for <strong>"{searchQuery.trim()}"</strong></p>
+                  <button type="button" onClick={() => setSearchQuery("")}>Clear search</button>
+                </div>
+                {filteredOrders.length > 0 && (
+                  <>
+                    <p className="orders-search-showing-all">Showing all {selectedFilter !== "all" ? `${FILTER_OPTIONS.find(f => f.id === selectedFilter)?.label} ` : ""}orders:</p>
+                    {filteredOrders.map((order) => (
+                      <OrderCard key={order.id} order={order} onFeedback={handleFeedbackTrigger} />
+                    ))}
+                  </>
+                )}
+              </>
+            ) : visibleOrders.length === 0 && selectedFilter !== "all" ? (
+              <>
+                <div className="orders-search-no-match">
+                  <Icon icon="lucide:filter-x" />
+                  <p>No <strong>{FILTER_OPTIONS.find(f => f.id === selectedFilter)?.label}</strong> orders found</p>
+                  <button type="button" onClick={clearFilter}>Clear filter</button>
+                </div>
+                {orders.length > 0 && (
+                  <>
+                    <p className="orders-search-showing-all">Showing all orders:</p>
+                    {orders.map((order) => (
+                      <OrderCard key={order.id} order={order} onFeedback={handleFeedbackTrigger} />
+                    ))}
+                  </>
+                )}
+              </>
+            ) : (
+              visibleOrders.map((order) => (
+                <OrderCard key={order.id} order={order} onFeedback={handleFeedbackTrigger} />
+              ))
             )}
           </div>
         )}
@@ -745,15 +788,6 @@ export default function MyOrders() {
               <button type="button" onClick={applyFilter}>Apply</button>
             </div>
           </div>
-        </div>
-      )}
-
-      {previewImage?.imageUrl && (
-        <div className="order-image-preview" role="dialog" aria-modal="true" onClick={() => setPreviewImage(null)}>
-          <button type="button" onClick={() => setPreviewImage(null)} aria-label="Close image preview">
-            <Icon icon="lucide:x" />
-          </button>
-          <img src={previewImage.imageUrl} alt={previewImage.productName || "Order product"} onClick={(event) => event.stopPropagation()} />
         </div>
       )}
 

@@ -1755,3 +1755,81 @@
   font-size: 14px;
   color: #d5ae45;
 }
+
+/* ── Search moved out of hero ──────────────────────────────── */
+.orders-search-row {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.orders-search-clear {
+  background: none;
+  border: none;
+  padding: 0;
+  min-height: unset !important;
+  color: rgba(50, 21, 15, 0.42) !important;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
+.orders-search-clear:hover {
+  color: #800020 !important;
+}
+
+/* ── Search no-match ───────────────────────────────────────── */
+.orders-search-no-match {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 20px;
+  border: 1px dashed rgba(116, 40, 19, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 253, 248, 0.7);
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.orders-search-no-match svg {
+  width: 32px;
+  height: 32px;
+  color: rgba(116, 40, 19, 0.35);
+}
+
+.orders-search-no-match p {
+  font-size: 14px;
+  color: rgba(50, 21, 15, 0.65);
+  margin: 0;
+}
+
+.orders-search-no-match button {
+  font-size: 13px;
+  font-weight: 600;
+  color: #9b1746;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.orders-search-showing-all {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(50, 21, 15, 0.45);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 10px;
+}
+
+/* ── Clickable product item rows ───────────────────────────── */
+.order-product-item.is-clickable {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.order-product-item.is-clickable:hover {
+  background: rgba(128, 0, 32, 0.04);
+  border-radius: 8px;
+}

@@ -105,6 +105,12 @@ const Checkout = () => {
   const [addrFormErrors, setAddrFormErrors] = useState({});
   const rootRef = useRef(null);
   const orderingRef = useRef(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   const [formData, setFormData] = useState({
     fullName: user?.name || "",
@@ -535,6 +541,13 @@ const Checkout = () => {
         theme: { color: "#800020" },
         handler: async (response) => {
           setPaymentVerifying(true);
+
+          const onBeforeUnload = (e) => {
+            e.preventDefault();
+            e.returnValue = "";
+          };
+          window.addEventListener("beforeunload", onBeforeUnload);
+
           try {
             const verifyRes = await api.post(API_ENDPOINTS.razorpay.verifyPayment, response);
             const verifyData = verifyRes.data;
@@ -559,10 +572,13 @@ const Checkout = () => {
             clearCart();
             navigate(`/order-confirmation?orderId=${dbRes.data.orderId}`);
           } catch (error) {
-            setPaymentVerifying(false);
-            showNotification(error.message || "Unable to save paid order.", "error");
+            if (isMountedRef.current) {
+              setPaymentVerifying(false);
+              showNotification(error.message || "Unable to save paid order.", "error");
+            }
           } finally {
-            setLoading(false);
+            window.removeEventListener("beforeunload", onBeforeUnload);
+            if (isMountedRef.current) setLoading(false);
           }
         },
         modal: {

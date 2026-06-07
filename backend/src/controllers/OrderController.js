@@ -129,8 +129,9 @@ const ensureOrderAccountingColumns = async () => {
   return columns;
 };
 
+const camelToSnake = (str) => str.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 const keepExistingColumns = (payload, columns) =>
-  Object.fromEntries(Object.entries(payload).filter(([key]) => columns[key]));
+  Object.fromEntries(Object.entries(payload).filter(([key]) => columns[key] || columns[camelToSnake(key)]));
 
 
 let orderItemColumnsReady = false;
@@ -337,7 +338,7 @@ class OrderController {
       const colors = colorIds.length
         ? await Color.findAll({
           where: { id: colorIds },
-          attributes: ['id', 'name', 'slug'],
+          attributes: ['id', 'name', 'slug', 'hex_code'],
           transaction: t,
         })
         : [];

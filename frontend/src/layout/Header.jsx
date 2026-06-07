@@ -41,6 +41,7 @@ const Header = () => {
   const varietiesAbortRef = useRef(null);
 
   const isAuthPage = location.pathname === "/login";
+  const hideHeaderSearch = location.pathname === "/my-orders";
   const userName = user?.name || "User";
   const firstName = userName.split(" ")[0];
   const userPhone = user?.phone || "Welcome to Banarasi Kala";
@@ -413,30 +414,32 @@ const Header = () => {
         </Link>
 
         <div className="bk-actions">
-          <form
-            className="bk-search bk-search-desktop"
-            onSubmit={handleHeaderSearch}
-          >
-            <input
-              type="search"
-              value={headerSearch}
-              onChange={(e) => setHeaderSearch(e.target.value)}
-              placeholder="Search for Banarasi Sarees"
-            />
-            <button type="submit" aria-label="Search">
-              <svg
-                width="19"
-                height="19"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                viewBox="0 0 24 24"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <path d="M21 21l-4.35-4.35" />
-              </svg>
-            </button>
-          </form>
+          {!hideHeaderSearch && (
+            <form
+              className="bk-search bk-search-desktop"
+              onSubmit={handleHeaderSearch}
+            >
+              <input
+                type="search"
+                value={headerSearch}
+                onChange={(e) => setHeaderSearch(e.target.value)}
+                placeholder="Search for Banarasi Sarees"
+              />
+              <button type="submit" aria-label="Search">
+                <svg
+                  width="19"
+                  height="19"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  viewBox="0 0 24 24"
+                >
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="M21 21l-4.35-4.35" />
+                </svg>
+              </button>
+            </form>
+          )}
 
           {!isAuthPage && (
             <div
@@ -602,27 +605,29 @@ const Header = () => {
           </button>
         </div>
 
-        <form className="bk-search bk-search-mobile" onSubmit={handleHeaderSearch}>
-          <button type="submit" aria-label="Search">
-            <svg
-              width="22"
-              height="22"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              viewBox="0 0 24 24"
-            >
-              <circle cx="11" cy="11" r="8" />
-              <path d="M21 21l-4.35-4.35" />
-            </svg>
-          </button>
-          <input
-            type="search"
-            value={headerSearch}
-            onChange={(e) => setHeaderSearch(e.target.value)}
-            placeholder="Search for Banarasi Sarees"
-          />
-        </form>
+        {!hideHeaderSearch && (
+          <form className="bk-search bk-search-mobile" onSubmit={handleHeaderSearch}>
+            <button type="submit" aria-label="Search">
+              <svg
+                width="22"
+                height="22"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                viewBox="0 0 24 24"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="M21 21l-4.35-4.35" />
+              </svg>
+            </button>
+            <input
+              type="search"
+              value={headerSearch}
+              onChange={(e) => setHeaderSearch(e.target.value)}
+              placeholder="Search for Banarasi Sarees"
+            />
+          </form>
+        )}
       </div>
 
       {mobileMenuOpen && (

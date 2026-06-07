@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
+const { config } = require('../config/env');
 
 const Color = sequelize.define('Color', {
   id: {
@@ -25,7 +26,8 @@ const Color = sequelize.define('Color', {
     allowNull: true
   }
 }, {
-  tableName: 'colors'
+  tableName: 'colors',
+  schema: config.dbSchema,
 });
 
 module.exports = Color;
