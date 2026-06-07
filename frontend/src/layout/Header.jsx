@@ -317,7 +317,7 @@ const Header = () => {
 
   return (
     <header
-      className="bk-header"
+      className={`bk-header${hideHeaderSearch ? " bk-header--no-search" : ""}`}
       style={{ "--bk-header-bg": `url(${headerBackground})` }}
     >
       <div className="bk-topline" aria-hidden="true">

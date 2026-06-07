@@ -1344,3 +1344,18 @@ body.menu-open {
   }
 }
 
+
+/* ── No-search header (e.g. My Orders page) ─────────────────── */
+@media (max-width: 1190px) {
+  .bk-header--no-search .bk-header-shell {
+    grid-template-rows: 72px;
+    min-height: unset;
+    padding-bottom: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .bk-header--no-search .bk-header-shell {
+    grid-template-rows: 72px;
+  }
+}

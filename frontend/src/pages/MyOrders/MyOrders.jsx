@@ -662,7 +662,7 @@ export default function MyOrders() {
 
   return (
     <div className="my-orders-page">
-      <section className="orders-hero">
+      <section className="orders-hero orders-hero--compact">
         <div className="orders-hero-content">
           <h1>My Orders</h1>
         </div>

@@ -48,6 +48,16 @@
   text-align: center;
 }
 
+.orders-hero.orders-hero--compact {
+  padding-top: 0;
+  padding-bottom: 0;
+  margin-top: -40px;
+}
+
+.orders-hero.orders-hero--compact + .orders-container {
+  padding-top: 6px;
+}
+
 .orders-search-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
