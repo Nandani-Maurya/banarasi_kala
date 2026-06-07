@@ -974,6 +974,8 @@ const ProductDetail = () => {
         weightKg: Math.max(0.1, Number(totalWeightKg.toFixed(3))),
         requireCod: canUseCod,
       });
+
+      console.log("Delivery options: product", data?.data?.available_courier_companies, "Selected:", selectedOption);
       if (!selectedOption) {
         setDeliveryQuote({ unavailable: true });
         return;

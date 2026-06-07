@@ -273,6 +273,7 @@ class OrderController {
         gateway_signature = null, gateway_amount_paise = null, gateway_currency = 'INR',
         payment_gateway_response = null
       } = req.body;
+
       if (!Array.isArray(items) || items.length === 0) {
         await t.rollback();
         return res.status(400).json({ message: 'Order items are required' });
@@ -905,6 +906,46 @@ class OrderController {
         return res.status(400).json({ message: 'Cancellation is available only within 24 hours of placing the order.' });
       }
 
+      // Restock all non-cancelled items
+      const activeOrderItems = await OrderItem.findAll({
+        where: { order_id: id, status: { [Op.ne]: 'Cancelled' } },
+        transaction: t,
+        lock: t.LOCK.UPDATE,
+      });
+      for (const oi of activeOrderItems) {
+        const prod = await Product.findByPk(oi.product_id, {
+          attributes: ['id', 'stock_quantity', 'color_stocks'],
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        });
+        if (prod) {
+          const qty = Number(oi.quantity || 1);
+          const colorId = oi.colorId || oi.color_id;
+          const stocks = { ...(prod.color_stocks || {}) };
+          const hasColor = colorId !== null && colorId !== undefined && colorId !== '';
+          const restockPayload = { stock_quantity: Number(prod.stock_quantity || 0) + qty };
+          if (hasColor) {
+            stocks[String(colorId)] = Number(stocks[String(colorId)] ?? prod.stock_quantity ?? 0) + qty;
+            restockPayload.color_stocks = stocks;
+          }
+          await prod.update(restockPayload, { transaction: t });
+        }
+      }
+      await OrderItem.update(
+        { status: 'Cancelled' },
+        { where: { order_id: id, status: { [Op.ne]: 'Cancelled' } }, transaction: t },
+      );
+
+      // Decrement coupon usage count
+      if (order.coupon_code) {
+        const Coupon = require('../models/Coupon');
+        await Coupon.decrement('usage_count', {
+          by: 1,
+          where: { code: order.coupon_code, usage_count: { [Op.gt]: 0 } },
+          transaction: t,
+        });
+      }
+
       let shiprocketCancel = null;
       if (order.shiprocket_order_id) {
         try {
@@ -931,10 +972,30 @@ class OrderController {
         cancelled_at: new Date(),
         refund_status: paymentMethod.toUpperCase() === 'COD' ? 'Not Required' : 'Refund Pending',
         refund_note: refundNote,
+        refund_amount: paymentMethod.toUpperCase() === 'COD' ? 0 : paidAmount,
         payment_status: paymentMethod.toUpperCase() === 'COD' ? 'Cancelled' : 'Refund Pending',
       }, columns);
 
       await order.update(updatePayload, { transaction: t });
+
+      // Refund wallet amount if customer paid with wallet
+      const walletRefund = Number(order.wallet_amount || 0);
+      if (walletRefund > 0 && order.customer_id) {
+        await WalletTransaction.create({
+          customer_id: order.customer_id,
+          amount: walletRefund,
+          type: 'ORDER_CANCELLATION_REFUND',
+          status: 'completed',
+          available_at: null,
+          dedupe_key: `order_cancel_wallet:${order.id}`,
+          meta: { order_id: order.id },
+        }, { transaction: t });
+        await Customer.increment(
+          { wallet_balance: walletRefund },
+          { where: { id: order.customer_id }, transaction: t },
+        );
+      }
+
       await t.commit();
 
       // Initiate Razorpay refund for prepaid orders (fire & forget — wallet credit already given)
@@ -1079,11 +1140,40 @@ class OrderController {
           cancelled_at: new Date(),
           refund_status: paymentMethod.toUpperCase() === 'COD' ? 'Not Required' : 'Refund Pending',
           refund_note: refundNote,
+          refund_amount: paymentMethod.toUpperCase() === 'COD' ? 0 : paidAmount,
           payment_status: paymentMethod.toUpperCase() === 'COD' ? 'Cancelled' : 'Refund Pending',
         }, columns);
 
         await order.update(updatePayload, { transaction: t });
         await item.update({ status: 'Cancelled' }, { transaction: t });
+
+        // Decrement coupon usage count on full cancellation
+        if (order.coupon_code) {
+          const Coupon = require('../models/Coupon');
+          await Coupon.decrement('usage_count', {
+            by: 1,
+            where: { code: order.coupon_code, usage_count: { [Op.gt]: 0 } },
+            transaction: t,
+          });
+        }
+
+        // Refund wallet amount if customer paid with wallet
+        const walletRefund = Number(order.wallet_amount || 0);
+        if (walletRefund > 0 && order.customer_id) {
+          await WalletTransaction.create({
+            customer_id: order.customer_id,
+            amount: walletRefund,
+            type: 'ORDER_CANCELLATION_REFUND',
+            status: 'completed',
+            available_at: null,
+            dedupe_key: `order_cancel_wallet:${order.id}`,
+            meta: { order_id: order.id },
+          }, { transaction: t });
+          await Customer.increment(
+            { wallet_balance: walletRefund },
+            { where: { id: order.customer_id }, transaction: t },
+          );
+        }
       } else {
         // Recalculate and update order totals
         const newSubtotal = Math.max(0, Number(order.subtotal_amount || 0) - itemPrice);
@@ -1098,7 +1188,8 @@ class OrderController {
           refundNote += ` | Item Reason: ${reason.trim()}`;
         }
 
-        // Cancel the old Shiprocket order so merchant can update it
+        // Cancel the old Shiprocket order so merchant can re-push with updated items.
+        // Clear the stored IDs so the order is not confused with a cancelled SR shipment.
         if (order.shiprocket_order_id) {
           try {
             shiprocketCancel = await ShipRocketService.cancelOrders([order.shiprocket_order_id]);
@@ -1114,6 +1205,8 @@ class OrderController {
           payable_amount: newPayable,
           refund_note: order.refund_note ? `${order.refund_note} | ${refundNote}` : refundNote,
           refund_status: paymentMethod.toUpperCase() === 'COD' ? 'Not Required' : 'Refund Pending',
+          shiprocket_order_id: null,
+          shiprocket_awb: null,
         }, columns);
 
         await order.update(updatePayload, { transaction: t });

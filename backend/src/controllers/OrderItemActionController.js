@@ -3,6 +3,8 @@ const OrderItem = require('../models/OrderItem');
 const OrderItemAction = require('../models/OrderItemAction');
 const Product = require('../models/Product');
 const Color = require('../models/Color');
+const Customer = require('../models/Customer');
+const WalletTransaction = require('../models/WalletTransaction');
 const { Transaction } = require('sequelize');
 const { sequelize } = require('../config/db');
 const {
@@ -331,6 +333,30 @@ class OrderItemActionController {
       }
 
       await order.update(orderUpdate, { transaction });
+
+      // Refund wallet on full cancellation
+      if (actionType === ACTION_TYPES.CANCEL) {
+        const remainingQtyCheck = getRemainingQuantityAfterCancellation(orderItems, cancelledSelections);
+        if (remainingQtyCheck <= 0) {
+          const walletRefund = Number(order.wallet_amount || 0);
+          if (walletRefund > 0 && order.customer_id) {
+            await WalletTransaction.create({
+              customer_id: order.customer_id,
+              amount: walletRefund,
+              type: 'ORDER_CANCELLATION_REFUND',
+              status: 'completed',
+              available_at: null,
+              dedupe_key: `order_cancel_wallet:${order.id}`,
+              meta: { order_id: order.id },
+            }, { transaction });
+            await Customer.increment(
+              { wallet_balance: walletRefund },
+              { where: { id: order.customer_id }, transaction },
+            );
+          }
+        }
+      }
+
       await transaction.commit();
 
       if (actionType === ACTION_TYPES.CANCEL) {

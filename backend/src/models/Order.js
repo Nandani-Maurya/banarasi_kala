@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
+const { config } = require('../config/env');
 
 const Order = sequelize.define('Order', {
   id: {
@@ -267,7 +268,7 @@ const Order = sequelize.define('Order', {
   }
 }, {
   tableName: 'orders',
-  schema: 'vns_saree',
+  schema: config.dbSchema,
   timestamps: true,
   underscored: true,
 });

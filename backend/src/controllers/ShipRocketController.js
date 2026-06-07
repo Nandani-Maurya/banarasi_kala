@@ -292,10 +292,11 @@ class ShipRocketController {
       if (order.exchange_requested_at) {
         return res.status(400).json({ message: 'Exchange already used. Return is not available after exchange.' });
       }
-      const deliveredTime = order.delivered_at || order.updatedAt || new Date();
-      const returnWindowDays = 7;
-      const returnLastDate = new Date(deliveredTime);
-      returnLastDate.setDate(returnLastDate.getDate() + returnWindowDays);
+      if (!order.delivered_at) {
+        return res.status(400).json({ message: 'Return is available only after the delivery date is confirmed.' });
+      }
+      const returnLastDate = new Date(order.delivered_at);
+      returnLastDate.setDate(returnLastDate.getDate() + 7);
       if (new Date() > returnLastDate) {
         return res.status(400).json({ message: 'Return window expired' });
       }
@@ -322,10 +323,10 @@ class ShipRocketController {
         : `Return initiated. Estimated refund Rs. ${estimatedRefund.toLocaleString('en-IN')}; no delivery charge deduction applies.`;
 
       await order.update({
-        status: `Return Initiated${reason ? `: ${String(reason).slice(0, 120)}` : ''}`,
+        status: 'Return Initiated',
         return_requested_at: new Date(),
         refund_status: 'Return Refund Pending',
-        refund_note: refundNote,
+        refund_note: reason ? `${refundNote} | Reason: ${String(reason).slice(0, 200)}` : refundNote,
         shiprocket_return_order_id: data.order_id ? String(data.order_id) : null
       });
       await WalletService.cancelPendingReferralCreditsForOrder(
@@ -372,10 +373,11 @@ class ShipRocketController {
       if (order.return_requested_at) {
         return res.status(400).json({ message: 'Return already used. Exchange is not available after return.' });
       }
-      const deliveredTime = order.delivered_at || order.updatedAt || new Date();
-      const exchangeWindowDays = 7;
-      const exchangeLastDate = new Date(deliveredTime);
-      exchangeLastDate.setDate(exchangeLastDate.getDate() + exchangeWindowDays);
+      if (!order.delivered_at) {
+        return res.status(400).json({ message: 'Exchange is available only after the delivery date is confirmed.' });
+      }
+      const exchangeLastDate = new Date(order.delivered_at);
+      exchangeLastDate.setDate(exchangeLastDate.getDate() + 7);
       if (new Date() > exchangeLastDate) {
         return res.status(400).json({ message: 'Exchange window expired' });
       }
@@ -391,15 +393,15 @@ class ShipRocketController {
       const data = await ShipRocketService.createReturnOrder({
         order,
         items,
-        reason: `Exchange requested${reason ? `: ${reason}` : ''}`,
+        reason: reason ? `Exchange: ${String(reason).slice(0, 200)}` : 'Exchange requested',
       });
       const note = 'Exchange initiated. No delivery deduction applies for one approved exchange.';
 
       await order.update({
-        status: `Exchange Initiated${reason ? `: ${String(reason).slice(0, 120)}` : ''}`,
+        status: 'Exchange Initiated',
         exchange_requested_at: new Date(),
         refund_status: 'Exchange Pending',
-        refund_note: note,
+        refund_note: reason ? `${note} | Reason: ${String(reason).slice(0, 200)}` : note,
         shiprocket_exchange_order_id: data.order_id ? String(data.order_id) : null
       });
 

@@ -315,6 +315,86 @@ const getActionConfig = (type) => {
   return { title: "Cancel Products", label: "Cancellation reason", reasons: CANCEL_REASONS, button: "Submit Cancellation", tone: "danger" };
 };
 
+const SkLine = ({ w, h = 12, mb = 0 }) => (
+  <div className="oc-sk" style={{ width: w, height: h, borderRadius: 5, marginBottom: mb || undefined }} />
+);
+
+const OrderConfirmationSkeleton = () => (
+  <main className="order-confirmation-page">
+    <section className="order-success-hero">
+      <div className="oc-sk oc-sk-hero-icon" />
+      <div style={{ display: "grid", gap: 6 }}>
+        <SkLine w={70} h={10} />
+        <SkLine w={200} h={22} />
+        <SkLine w={300} h={11} />
+      </div>
+    </section>
+
+    <section className="order-confirmation-grid">
+      <div className="order-confirmation-main">
+        <div className="order-panel">
+          <div className="order-panel-head">
+            <SkLine w={140} h={14} />
+            <SkLine w={80} h={11} />
+          </div>
+          <div className="confirmation-timeline">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="confirmation-step">
+                <div className="oc-sk oc-sk-step-icon" />
+                <div style={{ display: "grid", gap: 6 }}>
+                  <SkLine w={130} h={13} />
+                  <SkLine w={190} h={11} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="order-panel">
+          <div className="order-panel-head">
+            <SkLine w={50} h={14} />
+            <SkLine w={55} h={11} />
+          </div>
+          <div className="confirmation-items">
+            {[1, 2].map((i) => (
+              <div key={i} className="oc-sk-item-row">
+                <div className="oc-sk oc-sk-item-img" />
+                <div style={{ display: "grid", gap: 7, flex: 1 }}>
+                  <SkLine w="70%" h={13} />
+                  <SkLine w="45%" h={11} />
+                  <SkLine w={90} h={20} />
+                </div>
+                <SkLine w={65} h={13} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <aside className="order-confirmation-side">
+        <div className="order-panel">
+          <SkLine w={130} h={14} mb={14} />
+          {[130, 110, 90, 120, 100, 80].map((w, i) => (
+            <div key={i} className="oc-sk-summary-row">
+              <SkLine w={w} h={12} />
+              <SkLine w={55} h={12} />
+            </div>
+          ))}
+        </div>
+
+        <div className="order-panel">
+          <SkLine w={130} h={14} mb={12} />
+          <SkLine w="80%" h={12} mb={7} />
+          <SkLine w="65%" h={12} mb={7} />
+          <SkLine w="55%" h={12} />
+        </div>
+
+        <div className="oc-sk oc-sk-btn" />
+      </aside>
+    </section>
+  </main>
+);
+
 export default function OrderConfirmation() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -560,16 +640,7 @@ export default function OrderConfirmation() {
     }
   };
 
-  if (loading) {
-    return (
-      <main className="order-confirmation-page">
-        <div className="order-confirmation-state">
-          <span className="order-loader" />
-          <p>Loading your order details...</p>
-        </div>
-      </main>
-    );
-  }
+  if (loading) return <OrderConfirmationSkeleton />;
 
   if (error || !order) {
     return (

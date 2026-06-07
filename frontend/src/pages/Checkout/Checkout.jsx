@@ -78,6 +78,7 @@ const Checkout = () => {
   const isCodAllowed = isProductCodAllowed && subtotal <= COD_MAX_AMOUNT;
   const [activePayment, setActivePayment] = useState("online");
   const [loading, setLoading] = useState(false);
+  const [paymentVerifying, setPaymentVerifying] = useState(false);
   const [shippingCharge, setShippingCharge] = useState(0);
   const [shippingDeliveryDate, setShippingDeliveryDate] = useState(null);
   const [selectedShippingCourier, setSelectedShippingCourier] = useState(null);
@@ -533,6 +534,7 @@ const Checkout = () => {
         }),
         theme: { color: "#800020" },
         handler: async (response) => {
+          setPaymentVerifying(true);
           try {
             const verifyRes = await api.post(API_ENDPOINTS.razorpay.verifyPayment, response);
             const verifyData = verifyRes.data;
@@ -557,6 +559,7 @@ const Checkout = () => {
             clearCart();
             navigate(`/order-confirmation?orderId=${dbRes.data.orderId}`);
           } catch (error) {
+            setPaymentVerifying(false);
             showNotification(error.message || "Unable to save paid order.", "error");
           } finally {
             setLoading(false);
@@ -583,7 +586,7 @@ const Checkout = () => {
           <div className="checkout-modal-card">
             <div className="checkout-modal-header">
               <div>
-                <span>{checkoutStep === "review" ? "Review order" : "Checkout"}</span>
+                <span>Checkout</span>
                 <h2>Complete your order</h2>
               </div>
               <button type="button" onClick={() => navigate("/cart")} aria-label="Close checkout">
@@ -672,31 +675,17 @@ const Checkout = () => {
                 walletBalance,
                 useWallet,
                 setUseWallet,
-                rows: (() => {
-                  const hasSavings = paymentDiscount > 0 || appliedCoupon || walletUsableAmount > 0 || (!shippingLoading && shippingCharge > 0);
-                  return [
-                    // ── Charges ──────────────────────────────────────────
-                    { label: "Subtotal", value: `Rs. ${subtotal.toLocaleString("en-IN")}` },
-                    ...(unavailableCart.length > 0 ? [{ label: "Unavailable items", value: `${unavailableCart.length} excluded`, tone: "accent" }] : []),
-                    { label: "Platform fee", value: `Rs. ${platformFee.toLocaleString("en-IN")}` },
-                    ...(paymentFee > 0 ? [{ label: "COD charge", value: `Rs. ${paymentFee.toLocaleString("en-IN")}`, tone: "accent" }] : []),
-                    // Show delivery here only when there is no saving to display below
-                    ...(!hasSavings || shippingLoading ? [{ label: "Delivery", value: shippingLoading ? "Calculating..." : "Free", tone: shippingLoading ? undefined : "success" }] : []),
-
-                    // ── Savings ───────────────────────────────────────────
-                    ...(hasSavings ? [{ divider: true, label: "Savings" }] : []),
-                    ...(!shippingLoading && shippingCharge > 0 ? [{ label: "Free delivery", value: <><s>Rs. {shippingCharge.toLocaleString("en-IN")}</s>{" "}Free</>, tone: "success" }] : []),
-                    ...(paymentDiscount > 0 ? [{ label: "Prepaid discount", value: `-Rs. ${paymentDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
-                    ...(appliedCoupon ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-Rs. ${effectiveCouponDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
-                    ...(walletUsableAmount > 0 ? [{ label: "Wallet used", value: `-Rs. ${walletUsableAmount.toLocaleString("en-IN")}`, tone: "success" }] : []),
-                  ];
-                })(),
-                logistics: shippingCharge > 0 ? {
-                  label: "Returns & exchange available",
-                  tooltip: shippingDiscountReason === "first_order"
-                    ? "Return and exchange are available. For your first order, delivery charge will not be deducted."
-                    : `Return and exchange are available. On return, refund may deduct Rs. ${returnDeliveryDeduction.toLocaleString("en-IN")} delivery charge.`,
-                } : null,
+                rows: [
+                  { label: "Subtotal", value: `Rs. ${subtotal.toLocaleString("en-IN")}` },
+                  ...(unavailableCart.length > 0 ? [{ label: "Unavailable items", value: `${unavailableCart.length} excluded`, tone: "accent" }] : []),
+                  { label: "Platform fee", value: `Rs. ${platformFee.toLocaleString("en-IN")}` },
+                  ...(paymentFee > 0 ? [{ label: "COD charge", value: `Rs. ${paymentFee.toLocaleString("en-IN")}`, tone: "accent" }] : []),
+                  { label: "Delivery", value: shippingLoading ? "Calculating..." : shippingCharge > 0 ? <><s>Rs. {shippingCharge.toLocaleString("en-IN")}</s>{" "}Free</> : "Free", tone: shippingLoading ? undefined : "success" },
+                  ...(paymentDiscount > 0 ? [{ label: "Prepaid discount", value: `-Rs. ${paymentDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
+                  ...(appliedCoupon ? [{ label: `Coupon (${appliedCoupon.code})`, value: `-Rs. ${effectiveCouponDiscount.toLocaleString("en-IN")}`, tone: "success" }] : []),
+                  ...(walletUsableAmount > 0 ? [{ label: "Wallet used", value: `-Rs. ${walletUsableAmount.toLocaleString("en-IN")}`, tone: "success" }] : []),
+                ],
+                logistics: null,
                 deliveryPromise: shippingDeliveryDate ? {
                   title: `Arriving ${shippingDeliveryDate}`,
                   subtitle: "Free standard delivery",
@@ -706,11 +695,9 @@ const Checkout = () => {
                 total,
                 formatMoney: (value) => `Rs. ${Number(value || 0).toLocaleString("en-IN")}`,
                 action: {
-                  label: checkoutStep === "details"
-                    ? (shippingLoading ? "Checking delivery..." : "Continue")
-                    : (loading ? "Processing..." : activePayment === "cod" ? "Place COD Order" : "Pay & Place Order"),
-                  onClick: checkoutStep === "details" ? proceedToReview : handlePlaceOrder,
-                  disabled: checkoutStep === "details" ? (shippingLoading || payableCart.length === 0) : (loading || payableCart.length === 0),
+                  label: loading ? "Processing..." : activePayment === "cod" ? "Place COD Order" : "Pay & Place Order",
+                  onClick: handlePlaceOrder,
+                  disabled: loading || shippingLoading || payableCart.length === 0,
                 },
                 couponModalOpen,
                 setCouponModalOpen,
@@ -1224,6 +1211,16 @@ const Checkout = () => {
         onClose={() => setMapOpen(false)}
         onConfirm={confirmMapLocation}
       />
+
+      {paymentVerifying && (
+        <div className="checkout-processing-overlay">
+          <div className="checkout-processing-card">
+            <span className="checkout-processing-spinner" />
+            <strong>Processing your payment…</strong>
+            <p>Please wait, do not close this page.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
