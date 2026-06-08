@@ -755,7 +755,17 @@ export default function OrderConfirmation() {
                     <div className="confirmation-item-copy">
                       {productUrl ? <Link to={productUrl} className="confirmation-product-link"><h3>{item.product_name}</h3></Link> : <h3>{item.product_name}</h3>}
                       <p>{getItemColor(item)}</p>
-                      <p>Qty {item.quantity}{item.sku ? ` - SKU: ${item.sku}` : ""}</p>
+                      {(() => {
+                        const cancelledQty = toNumber(item.cancelled_quantity);
+                        const activeQty = Math.max(0, toNumber(item.quantity) - cancelledQty);
+                        return (
+                          <p>
+                            Qty {activeQty}
+                            {cancelledQty > 0 ? ` · ${cancelledQty} cancelled` : ""}
+                            {item.sku ? ` - SKU: ${item.sku}` : ""}
+                          </p>
+                        );
+                      })()}
                       <span className="confirmation-item-status">{getItemDisplayStatus(order, item)}</span>
                     </div>
                   </div>
@@ -785,7 +795,7 @@ export default function OrderConfirmation() {
                       ))}
                     </div>
                   )}
-                  <strong>{formatPrice(toNumber(item.price) * Math.max(1, toNumber(item.quantity) || 1))}</strong>
+                  <strong>{formatPrice(toNumber(item.price) * Math.max(0, toNumber(item.quantity) - toNumber(item.cancelled_quantity)))}</strong>
                 </article>
                 );
               })}

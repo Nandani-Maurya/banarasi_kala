@@ -247,7 +247,7 @@ export default function Orders() {
                         <div key={item.id} className="mb-2">
                           <span className="block font-semibold text-[#4A3F35]">{item.product_name}</span>
                           <span className="mt-1 inline-flex rounded-full bg-[#FAF8F6] px-2 py-0.5 text-[10px] font-semibold text-[#800020]">
-                            Qty {item.quantity} - {getItemStatusLabel(item.status)}
+                            Qty {Math.max(0, (item.quantity || 0) - (item.cancelled_quantity || 0))}{item.cancelled_quantity > 0 ? ` (${item.cancelled_quantity} cancelled)` : ""} - {getItemStatusLabel(item.status)}
                           </span>
                         </div>
                       ))}
