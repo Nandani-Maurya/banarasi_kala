@@ -417,7 +417,7 @@ class OrderController {
             return res.status(400).json({ message: 'This coupon has reached its usage limit.' });
           }
           if (coupon.discount_type === 'percentage') {
-            discount_amount = (final_total * coupon.discount_percent) / 100;
+            discount_amount = (itemSubtotal * coupon.discount_percent) / 100;
             if (coupon.max_discount_amount) {
               discount_amount = Math.min(discount_amount, coupon.max_discount_amount);
             }

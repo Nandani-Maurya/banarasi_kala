@@ -2,19 +2,36 @@ const crypto = require('crypto');
 const { config } = require('../config/env');
 const { createOrder: razorpayCreateOrder } = require('../services/RazorpayService');
 
+const roundMoney = (value) => Math.round((Number(value) || 0) * 100) / 100;
+
 class RazorpayController {
   async createOrder(req, res) {
     try {
-      const amount = Number(req.body.amount || 0);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        return res.status(400).json({ message: 'Valid amount is required.' });
-      }
-      if (amount < 1) {
-        return res.status(400).json({ message: 'Online payment amount must be at least Rs. 1.' });
+      // Accept either a legacy `amount` field or structured cart fields.
+      // Structured fields (subtotal_amount + discount_amount + wallet_amount) are
+      // preferred because the backend computes fees from its own env vars, which
+      // guarantees the Razorpay order amount always matches the order-creation check.
+      const { subtotal_amount, discount_amount = 0, wallet_amount = 0 } = req.body;
+      const subtotal = roundMoney(Number(subtotal_amount || 0));
+
+      let finalAmount;
+      if (subtotal > 0) {
+        const platformFee = roundMoney(Math.max(0, Number(config.platformFeeAmount || 0)));
+        const paymentDiscount = roundMoney(Math.min(Number(config.prepaidDiscountAmount || 0), subtotal));
+        const grossBeforeCoupon = roundMoney(Math.max(0, subtotal + platformFee - paymentDiscount));
+        const couponDiscount = roundMoney(Math.max(0, Math.min(Number(discount_amount || 0), grossBeforeCoupon)));
+        const grossAfterCoupon = roundMoney(Math.max(0, grossBeforeCoupon - couponDiscount));
+        const walletDebit = roundMoney(Math.min(Math.max(0, Number(wallet_amount || 0)), grossAfterCoupon));
+        finalAmount = roundMoney(Math.max(1, grossAfterCoupon - walletDebit));
+      } else {
+        // Legacy path: direct amount in rupees
+        finalAmount = roundMoney(Number(req.body.amount || 0));
+        if (!Number.isFinite(finalAmount) || finalAmount < 1) {
+          return res.status(400).json({ message: 'Valid order amount is required.' });
+        }
       }
 
-      const order = await razorpayCreateOrder(amount);
-
+      const order = await razorpayCreateOrder(finalAmount);
       return res.status(200).json(order);
     } catch (error) {
       console.error('[Razorpay] createOrder error:', error?.message || error);

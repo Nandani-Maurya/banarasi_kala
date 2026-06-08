@@ -522,7 +522,11 @@ const Checkout = () => {
         throw new Error("Payment gateway is still loading. Please try again.");
       }
 
-      const orderResponse = await api.post(API_ENDPOINTS.razorpay.createOrder, { amount: total });
+      const orderResponse = await api.post(API_ENDPOINTS.razorpay.createOrder, {
+        subtotal_amount: subtotal,
+        discount_amount: effectiveCouponDiscount,
+        wallet_amount: walletUsableAmount,
+      });
       const razorpayOrder = orderResponse.data;
       if (!orderResponse.status || orderResponse.status >= 400) throw new Error(razorpayOrder.message || "Unable to start payment.");
 
