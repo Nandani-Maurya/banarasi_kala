@@ -131,6 +131,9 @@ const ProductDetail = () => {
   const [buyNowStep, setBuyNowStep] = useState("details");
   const [buyNowLoading, setBuyNowLoading] = useState(false);
   const [buyNowPlacing, setBuyNowPlacing] = useState(false);
+  const [buyNowProcessing, setBuyNowProcessing] = useState(false);
+  const [buyNowDeletingAddressId, setBuyNowDeletingAddressId] = useState(null);
+  const [buyNowAddrFormErrors, setBuyNowAddrFormErrors] = useState({});
   const [buyNowPayment, setBuyNowPayment] = useState("prepaid");
   const [buyNowAddresses, setBuyNowAddresses] = useState([]);
   const [selectedBuyNowAddressId, setSelectedBuyNowAddressId] = useState("");
@@ -155,6 +158,7 @@ const ProductDetail = () => {
 
   const frameRef = useRef(null);
   const perspectiveRef = useRef(null);
+  const isMountedRef = useRef(true);
   const rootRef = useRef(null);
   const removingFromBagRef = useRef(false);
 
@@ -177,6 +181,11 @@ const ProductDetail = () => {
     if (replace) window.history.replaceState(null, "", nextUrl);
     else window.history.pushState(null, "", nextUrl);
   };
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -575,6 +584,7 @@ const ProductDetail = () => {
   const resetBuyNowForm = () => {
     setEditingBuyNowAddressId(null);
     setBuyNowAddressForm(getEmptyBuyNowAddress(user));
+    setBuyNowAddrFormErrors({});
   };
 
   const openBuyNowAddressModal = (address = null) => {
@@ -584,6 +594,7 @@ const ProductDetail = () => {
     } else {
       resetBuyNowForm();
     }
+    setBuyNowAddrFormErrors({});
     setShowBuyNowAddressForm(true);
     setBuyNowAddressModalOpen(true);
   };
@@ -735,14 +746,36 @@ const ProductDetail = () => {
 
   const handleBuyNowAddressChange = (event) => {
     const { name, value, type, checked } = event.target;
+    if (buyNowAddrFormErrors[name]) setBuyNowAddrFormErrors((prev) => ({ ...prev, [name]: undefined }));
     setBuyNowAddressForm((current) => ({
       ...current,
-      [name]: type === "checkbox" ? checked : name === "pincode" ? value.replace(/\D/g, "").slice(0, 6) : value,
+      [name]: type === "checkbox" ? checked
+        : name === "pincode" ? value.replace(/\D/g, "").slice(0, 6)
+        : name === "phone" ? value.replace(/\D/g, "").slice(0, 10)
+        : value,
     }));
   };
 
   const editBuyNowAddress = (address) => {
     openBuyNowAddressModal(address);
+  };
+
+  const deleteBuyNowAddress = async (address) => {
+    try {
+      setBuyNowDeletingAddressId(String(address.id));
+      await api.delete(`/api/addresses/${address.id}`);
+      const next = buyNowAddresses.filter((a) => String(a.id) !== String(address.id));
+      setBuyNowAddresses(next);
+      if (String(selectedBuyNowAddressId) === String(address.id)) {
+        const fallback = next.find((a) => a.is_default) || next[0];
+        setSelectedBuyNowAddressId(fallback ? String(fallback.id) : "");
+      }
+      showNotification("Address deleted.", "success");
+    } catch (error) {
+      showNotification(error?.response?.data?.message || "Unable to delete address.", "warning");
+    } finally {
+      setBuyNowDeletingAddressId(null);
+    }
   };
 
   const confirmBuyNowLocation = (location) => {
@@ -763,17 +796,26 @@ const ProductDetail = () => {
 
   const saveBuyNowAddress = async () => {
     const form = cleanAddress(buyNowAddressForm);
-    if (!form.house_building || !form.city || !form.state || !/^\d{6}$/.test(form.pincode) || !form.phone) {
-      showNotification("Please fill complete delivery address.", "warning");
+    const phone = String(form.phone || "").replace(/\D/g, "");
+    const errors = {};
+    if (!form.house_building?.trim()) errors.house_building = "Address is required.";
+    if (!form.city?.trim()) errors.city = "City is required.";
+    if (!form.state?.trim()) errors.state = "State is required.";
+    if (!form.pincode || !/^\d{6}$/.test(form.pincode)) errors.pincode = "Enter a valid 6-digit pincode.";
+    if (!phone) errors.phone = "Phone is required.";
+    else if (!/^[6-9]\d{9}$/.test(phone)) errors.phone = "Enter a valid 10-digit mobile number.";
+    if (Object.keys(errors).length > 0) {
+      setBuyNowAddrFormErrors(errors);
       return;
     }
+    setBuyNowAddrFormErrors({});
 
     try {
       setBuyNowLoading(true);
       const payload = {
         ...form,
         name: form.name || user?.name || "",
-        phone: form.phone || user?.phone || "",
+        phone: phone || user?.phone || "",
       };
       const response = editingBuyNowAddressId
         ? await api.put(`/api/addresses/${editingBuyNowAddressId}`, payload)
@@ -888,6 +930,9 @@ const ProductDetail = () => {
         }),
         theme: { color: "#800020" },
         handler: async (response) => {
+          setBuyNowProcessing(true);
+          const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = ""; };
+          window.addEventListener("beforeunload", onBeforeUnload);
           try {
             const verifyRes = await api.post(API_ENDPOINTS.razorpay.verifyPayment, response);
             const verifyData = verifyRes.data;
@@ -907,16 +952,21 @@ const ProductDetail = () => {
                 verification: verifyData,
               },
             });
-            showNotification("Order placed successfully.", "success");
             navigate(`/order-confirmation?orderId=${created.orderId}`);
           } catch (error) {
-            showNotification(error.message || "Unable to place paid order.", "error");
+            if (isMountedRef.current) {
+              setBuyNowProcessing(false);
+              showNotification(error.message || "Unable to place paid order.", "error");
+            }
           } finally {
-            setBuyNowPlacing(false);
+            window.removeEventListener("beforeunload", onBeforeUnload);
+            if (isMountedRef.current) setBuyNowPlacing(false);
           }
         },
         modal: {
-          ondismiss: () => setBuyNowPlacing(false),
+          ondismiss: () => {
+            if (isMountedRef.current) setBuyNowPlacing(false);
+          },
         },
       });
       razorpay.open();
@@ -1582,6 +1632,8 @@ const ProductDetail = () => {
                 onSelectAddress={(address) => setSelectedBuyNowAddressId(String(address.id))}
                 onAddAddress={() => openBuyNowAddressModal()}
                 onEditAddress={editBuyNowAddress}
+                onDeleteAddress={deleteBuyNowAddress}
+                deletingAddressId={buyNowDeletingAddressId}
                 getAddressLine={getAddressLine}
                 user={user}
                 addressLoading={buyNowLoading}
@@ -1608,13 +1660,14 @@ const ProductDetail = () => {
                   },
                 ]}
                 deliveryError={buyNowShipping?.unavailable ? (buyNowShipping.message || "Delivery is not possible at this location right now.") : null}
-                proceedAction={{
-                  label: buyNowShippingLoading ? "Checking delivery..." : "Proceed",
-                  onClick: proceedToFinalPayment,
-                  disabled: buyNowLoading || buyNowShippingLoading || !selectedBuyNowAddress || !buyNowShipping || buyNowShipping?.unavailable,
-                }}
                 reviewTitle="Review details"
-                reviewItems={[]}
+                reviewItems={[{
+                  key: product.id,
+                  image: mainImage,
+                  name: productName,
+                  meta: `Qty ${quantity} × ${formatMoney(Number(product.selling_price || 0))}`,
+                  total: formatMoney(buyNowSubtotal),
+                }]}
                 reviewAddress={{
                   name: selectedBuyNowAddress?.name || user?.name,
                   line: getAddressLine(selectedBuyNowAddress),
@@ -1625,14 +1678,14 @@ const ProductDetail = () => {
                   description: buyNowPayment === "cod" ? "Pay when your order is delivered." : "Pay securely using Razorpay.",
                 }}
                 onEditDetails={() => setBuyNowStep("details")}
-                showSummary={buyNowStep === "payment"}
+                showSummary
                 summaryProps={{
                   title: "Order Summary",
                   items: [{
                     key: product.id,
                     image: mainImage,
                     name: productName,
-                    meta: `${selectedColor?.name ? `${selectedColor.name} - ` : ""}Qty ${quantity}${selectedSku ? ` - SKU: ${selectedSku}` : ""}`,
+                    meta: `${selectedColor?.name ? `${selectedColor.name} · ` : ""}${quantity} × ${formatMoney(Number(product.selling_price || 0))}`,
                     total: formatMoney(buyNowSubtotal),
                   }],
                   coupons: availableCoupons,
@@ -1670,9 +1723,13 @@ const ProductDetail = () => {
                   total: buyNowTotal,
                   formatMoney,
                   action: {
-                    label: buyNowPlacing ? "Processing..." : "Place Order",
-                    onClick: placeBuyNowOrder,
-                    disabled: buyNowLoading || buyNowShippingLoading || buyNowPlacing || !selectedBuyNowAddress || !buyNowShipping || buyNowShipping?.unavailable,
+                    label: buyNowStep === "details"
+                      ? (buyNowShippingLoading ? "Checking delivery..." : "Continue")
+                      : (buyNowPlacing ? "Processing..." : buyNowPayment === "cod" ? "Place COD Order" : "Pay & Place Order"),
+                    onClick: buyNowStep === "details" ? proceedToFinalPayment : placeBuyNowOrder,
+                    disabled: buyNowStep === "details"
+                      ? (buyNowLoading || buyNowShippingLoading || !selectedBuyNowAddress || !buyNowShipping || buyNowShipping?.unavailable)
+                      : (buyNowLoading || buyNowShippingLoading || buyNowPlacing || !selectedBuyNowAddress || !buyNowShipping || buyNowShipping?.unavailable),
                   },
                   couponModalOpen: buyNowCouponModalOpen,
                   setCouponModalOpen: setBuyNowCouponModalOpen,
@@ -1861,6 +1918,15 @@ const ProductDetail = () => {
               </>
               )}
             </div>
+            {buyNowProcessing && (
+              <div className="buy-now-processing-overlay">
+                <div className="buy-now-processing-card">
+                  <span className="buy-now-processing-spinner" />
+                  <strong>Processing your payment…</strong>
+                  <p>Please wait, do not close this page.</p>
+                </div>
+              </div>
+            )}
           </div>
           {buyNowAddressModalOpen && (
             <div className="buy-now-address-modal" role="dialog" aria-modal="true" aria-label={editingBuyNowAddressId ? "Edit address" : "Add new address"}>
@@ -1922,6 +1988,7 @@ const ProductDetail = () => {
                     <label>
                       <span>Flat, House no., Building *</span>
                       <input name="house_building" value={buyNowAddressForm.house_building} onChange={handleBuyNowAddressChange} />
+                      {buyNowAddrFormErrors.house_building && <em className="buy-now-field-error">{buyNowAddrFormErrors.house_building}</em>}
                     </label>
                     <label>
                       <span>Area, Street, Sector</span>
@@ -1931,20 +1998,27 @@ const ProductDetail = () => {
                       <label>
                         <span>City *</span>
                         <input name="city" value={buyNowAddressForm.city} onChange={handleBuyNowAddressChange} />
+                        {buyNowAddrFormErrors.city && <em className="buy-now-field-error">{buyNowAddrFormErrors.city}</em>}
                       </label>
                       <label>
                         <span>State *</span>
                         <input name="state" value={buyNowAddressForm.state} onChange={handleBuyNowAddressChange} />
+                        {buyNowAddrFormErrors.state && <em className="buy-now-field-error">{buyNowAddrFormErrors.state}</em>}
                       </label>
                     </div>
                     <div className="buy-now-form-row">
                       <label>
                         <span>Pincode *</span>
                         <input name="pincode" inputMode="numeric" value={buyNowAddressForm.pincode} onChange={handleBuyNowAddressChange} />
+                        {buyNowAddrFormErrors.pincode && <em className="buy-now-field-error">{buyNowAddrFormErrors.pincode}</em>}
                       </label>
                       <label>
                         <span>Phone *</span>
-                        <input name="phone" inputMode="tel" value={buyNowAddressForm.phone} onChange={handleBuyNowAddressChange} />
+                        <div className="buy-now-phone-input">
+                          <span className="buy-now-country-code"><span className="buy-now-flag-india" aria-hidden="true" />+91</span>
+                          <input name="phone" inputMode="tel" maxLength={10} placeholder="10-digit mobile number" value={buyNowAddressForm.phone} onChange={handleBuyNowAddressChange} />
+                        </div>
+                        {buyNowAddrFormErrors.phone && <em className="buy-now-field-error">{buyNowAddrFormErrors.phone}</em>}
                       </label>
                     </div>
                     <label>

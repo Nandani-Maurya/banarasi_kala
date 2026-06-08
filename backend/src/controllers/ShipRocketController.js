@@ -2,6 +2,8 @@ const { Op } = require('sequelize');
 const ShipRocketService = require('../services/ShipRocketService');
 const Order = require('../models/Order');
 const OrderItem = require('../models/OrderItem');
+const OrderItemAction = require('../models/OrderItemAction');
+const OrderRefund = require('../models/OrderRefund');
 const EmailService = require('../services/EmailService');
 const WalletService = require('../services/WalletService');
 const { config } = require('../config/env');
@@ -13,6 +15,8 @@ const {
   getForwardShippingCharge,
   getRtoShippingCharge,
 } = require('../utils/orderLifecycle');
+const { ACTION_TYPES, ACTION_STATUS } = require('../utils/orderItemActions');
+const { REFUND_TYPE, REFUND_STATUS, REFUND_PAYMENT_METHOD } = require('../utils/orderTransactions');
 
 const mapShiprocketStatus = (value = '') => {
   const status = String(value || '').toLowerCase();
@@ -273,7 +277,6 @@ class ShipRocketController {
       const { orderId, reason } = req.body;
       if (!orderId) return res.status(400).json({ message: 'orderId is required' });
 
-      // Fetch order + items from DB
       const order = await Order.findByPk(orderId, { include: [OrderItem] });
       if (!order) return res.status(404).json({ message: 'Order not found' });
       const isOwnedByCustomerId = Number(order.customer_id) === Number(req.user?.id);
@@ -286,12 +289,17 @@ class ShipRocketController {
       if (String(order.status).toLowerCase() !== 'delivered') {
         return res.status(400).json({ message: 'Return is allowed only after delivery' });
       }
-      if (order.return_requested_at) {
-        return res.status(400).json({ message: 'Return has already been requested for this order.' });
-      }
-      if (order.exchange_requested_at) {
-        return res.status(400).json({ message: 'Exchange already used. Return is not available after exchange.' });
-      }
+
+      const activeReturnAction = await OrderItemAction.findOne({
+        where: { order_id: orderId, action_type: ACTION_TYPES.RETURN, status: { [Op.notIn]: [ACTION_STATUS.REJECTED, ACTION_STATUS.CANCELLED] } },
+      });
+      if (activeReturnAction) return res.status(400).json({ message: 'Return has already been requested for this order.' });
+
+      const activeExchangeAction = await OrderItemAction.findOne({
+        where: { order_id: orderId, action_type: ACTION_TYPES.EXCHANGE, status: { [Op.notIn]: [ACTION_STATUS.REJECTED, ACTION_STATUS.CANCELLED] } },
+      });
+      if (activeExchangeAction) return res.status(400).json({ message: 'Exchange already used. Return is not available after exchange.' });
+
       if (!order.delivered_at) {
         return res.status(400).json({ message: 'Return is available only after the delivery date is confirmed.' });
       }
@@ -311,24 +319,48 @@ class ShipRocketController {
 
       const data = await ShipRocketService.createReturnOrder({ order, items, reason });
 
-      // Update local order status
       const logisticsDeduction = order.OrderItems.reduce((sum, item) => {
         const rules = item.shipping_meta?.refund_rules || {};
         return sum + Number(rules.return_delivery_deduction || 0);
       }, 0);
       const paidAmount = Number(order.payable_amount ?? order.total_amount ?? 0);
-      const estimatedRefund = Math.max(0, paidAmount - logisticsDeduction);
-      const refundNote = logisticsDeduction > 0
-        ? `Return initiated. Estimated refund Rs. ${estimatedRefund.toLocaleString('en-IN')} after Rs. ${logisticsDeduction.toLocaleString('en-IN')} delivery charge deduction.`
-        : `Return initiated. Estimated refund Rs. ${estimatedRefund.toLocaleString('en-IN')}; no delivery charge deduction applies.`;
+      const isCod = String(order.payment_method || '').toUpperCase() === 'COD';
+      const estimatedRefund = isCod ? 0 : Math.max(0, paidAmount - logisticsDeduction);
+      const refundNote = isCod
+        ? 'Return initiated for COD order. No monetary refund applies.'
+        : logisticsDeduction > 0
+          ? `Return initiated. Estimated refund Rs. ${estimatedRefund.toLocaleString('en-IN')} after Rs. ${logisticsDeduction.toLocaleString('en-IN')} delivery charge deduction.`
+          : `Return initiated. Estimated refund Rs. ${estimatedRefund.toLocaleString('en-IN')}; no delivery charge deduction applies.`;
+      const fullNote = reason ? `${refundNote} | Reason: ${String(reason).slice(0, 200)}` : refundNote;
 
-      await order.update({
-        status: 'Return Initiated',
-        return_requested_at: new Date(),
-        refund_status: 'Return Refund Pending',
-        refund_note: reason ? `${refundNote} | Reason: ${String(reason).slice(0, 200)}` : refundNote,
-        shiprocket_return_order_id: data.order_id ? String(data.order_id) : null
+      // Create action rows for all items, linking ShipRocket ID to the first row
+      const srReturnId = data.order_id ? String(data.order_id) : null;
+      let firstActionId = null;
+      for (let i = 0; i < order.OrderItems.length; i++) {
+        const oi = order.OrderItems[i];
+        const action = await OrderItemAction.create({
+          order_id: order.id,
+          order_item_id: oi.id,
+          product_id: oi.product_id,
+          action_type: ACTION_TYPES.RETURN,
+          quantity: oi.quantity,
+          status: ACTION_STATUS.APPROVED,
+          shiprocket_return_order_id: i === 0 ? srReturnId : null,
+        });
+        if (i === 0) firstActionId = action.id;
+      }
+
+      await OrderRefund.create({
+        order_id: order.id,
+        order_item_action_id: firstActionId,
+        refund_type: REFUND_TYPE.RETURN,
+        amount: estimatedRefund,
+        status: isCod ? REFUND_STATUS.NOT_REQUIRED : REFUND_STATUS.PENDING,
+        payment_method: isCod ? REFUND_PAYMENT_METHOD.NOT_REQUIRED : REFUND_PAYMENT_METHOD.ORIGINAL_GATEWAY,
+        note: fullNote,
       });
+
+      await order.update({ status: 'Return Initiated' });
       await WalletService.cancelPendingReferralCreditsForOrder(
         order.id,
         'Customer requested return within the reward hold period.',
@@ -339,7 +371,7 @@ class ShipRocketController {
         refund_message: refundNote,
         shiprocket_return_order_id: data.order_id,
         shipment_id: data.shipment_id,
-        detail: data
+        detail: data,
       });
     } catch (error) {
       console.error('[ShipRocket] createReturn error:', error?.response?.data || error.message);
@@ -367,12 +399,17 @@ class ShipRocketController {
       if (String(order.status).toLowerCase() !== 'delivered') {
         return res.status(400).json({ message: 'Exchange is allowed only after delivery' });
       }
-      if (order.exchange_requested_at) {
-        return res.status(400).json({ message: 'Exchange has already been requested for this order.' });
-      }
-      if (order.return_requested_at) {
-        return res.status(400).json({ message: 'Return already used. Exchange is not available after return.' });
-      }
+
+      const activeExchangeAction = await OrderItemAction.findOne({
+        where: { order_id: orderId, action_type: ACTION_TYPES.EXCHANGE, status: { [Op.notIn]: [ACTION_STATUS.REJECTED, ACTION_STATUS.CANCELLED] } },
+      });
+      if (activeExchangeAction) return res.status(400).json({ message: 'Exchange has already been requested for this order.' });
+
+      const activeReturnAction = await OrderItemAction.findOne({
+        where: { order_id: orderId, action_type: ACTION_TYPES.RETURN, status: { [Op.notIn]: [ACTION_STATUS.REJECTED, ACTION_STATUS.CANCELLED] } },
+      });
+      if (activeReturnAction) return res.status(400).json({ message: 'Return already used. Exchange is not available after return.' });
+
       if (!order.delivered_at) {
         return res.status(400).json({ message: 'Exchange is available only after the delivery date is confirmed.' });
       }
@@ -396,14 +433,35 @@ class ShipRocketController {
         reason: reason ? `Exchange: ${String(reason).slice(0, 200)}` : 'Exchange requested',
       });
       const note = 'Exchange initiated. No delivery deduction applies for one approved exchange.';
+      const fullNote = reason ? `${note} | Reason: ${String(reason).slice(0, 200)}` : note;
+      const srReturnId = data.order_id ? String(data.order_id) : null;
 
-      await order.update({
-        status: 'Exchange Initiated',
-        exchange_requested_at: new Date(),
-        refund_status: 'Exchange Pending',
-        refund_note: reason ? `${note} | Reason: ${String(reason).slice(0, 200)}` : note,
-        shiprocket_exchange_order_id: data.order_id ? String(data.order_id) : null
+      let firstActionId = null;
+      for (let i = 0; i < order.OrderItems.length; i++) {
+        const oi = order.OrderItems[i];
+        const action = await OrderItemAction.create({
+          order_id: order.id,
+          order_item_id: oi.id,
+          product_id: oi.product_id,
+          action_type: ACTION_TYPES.EXCHANGE,
+          quantity: oi.quantity,
+          status: ACTION_STATUS.APPROVED,
+          shiprocket_return_order_id: i === 0 ? srReturnId : null,
+        });
+        if (i === 0) firstActionId = action.id;
+      }
+
+      await OrderRefund.create({
+        order_id: order.id,
+        order_item_action_id: firstActionId,
+        refund_type: REFUND_TYPE.EXCHANGE,
+        amount: 0,
+        status: REFUND_STATUS.NOT_REQUIRED,
+        payment_method: REFUND_PAYMENT_METHOD.NOT_REQUIRED,
+        note: fullNote,
       });
+
+      await order.update({ status: 'Exchange Initiated' });
 
       return res.status(200).json({
         message: 'Exchange pickup created on ShipRocket successfully',
@@ -442,68 +500,49 @@ class ShipRocketController {
         return res.status(200).json({ message: 'Webhook ignored' });
       }
 
-      // Find order by matching forward or reverse IDs or AWBs
+      // Find order — check order_item_actions first for reverse shipments, then orders for forward
       let order = null;
+      let reverseAction = null;
+
       if (srOrderId) {
-        order = await Order.findOne({
-          where: {
-            [Op.or]: [
-              { shiprocket_order_id: String(srOrderId) },
-              { shiprocket_return_order_id: String(srOrderId) },
-              { shiprocket_exchange_order_id: String(srOrderId) }
-            ]
-          }
-        });
+        reverseAction = await OrderItemAction.findOne({ where: { shiprocket_return_order_id: String(srOrderId) } });
+        if (reverseAction) {
+          order = await Order.findByPk(reverseAction.order_id);
+        } else {
+          order = await Order.findOne({ where: { shiprocket_order_id: String(srOrderId) } });
+        }
       }
       if (!order && awb) {
-        order = await Order.findOne({
-          where: {
-            [Op.or]: [
-              { shiprocket_awb: String(awb) },
-              { shiprocket_return_awb: String(awb) },
-              { shiprocket_exchange_awb: String(awb) }
-            ]
-          }
-        });
+        reverseAction = await OrderItemAction.findOne({ where: { shiprocket_return_awb: String(awb) } });
+        if (reverseAction) {
+          order = await Order.findByPk(reverseAction.order_id);
+        } else {
+          order = await Order.findOne({ where: { shiprocket_awb: String(awb) } });
+        }
       }
 
       if (!order) return res.status(200).json({ message: 'Order not found locally' });
 
-      // Determine if this is a reverse tracking webhook
-      const isReverse = 
-        (order.shiprocket_return_order_id && String(order.shiprocket_return_order_id) === String(srOrderId)) ||
-        (order.shiprocket_return_awb && String(order.shiprocket_return_awb) === String(awb)) ||
-        (order.shiprocket_exchange_order_id && String(order.shiprocket_exchange_order_id) === String(srOrderId)) ||
-        (order.shiprocket_exchange_awb && String(order.shiprocket_exchange_awb) === String(awb)) ||
-        (String(order.status).toLowerCase().includes('return') || String(order.status).toLowerCase().includes('exchange'));
-
+      const isReverse = Boolean(reverseAction);
       const updatePayload = {};
 
       if (isReverse) {
-        const isExchange = 
-          (order.shiprocket_exchange_order_id && String(order.shiprocket_exchange_order_id) === String(srOrderId)) ||
-          (order.shiprocket_exchange_awb && String(order.shiprocket_exchange_awb) === String(awb)) ||
-          String(order.status).toLowerCase().includes('exchange');
-
-        const prefix = isExchange ? "Exchange" : "Return";
+        const isExchange = reverseAction.action_type === ACTION_TYPES.EXCHANGE;
+        const prefix = isExchange ? 'Exchange' : 'Return';
         let reverseStatus = nextStatus;
-        if (nextStatus === "Shipped") reverseStatus = `${prefix} Shipped`;
-        else if (nextStatus === "Returned") reverseStatus = `${prefix} Completed`;
-        else if (nextStatus === "RTO Delivered") reverseStatus = `${prefix} Completed`;
-        else if (nextStatus === "Cancelled") reverseStatus = `${prefix} Cancelled`;
-        else if (nextStatus === "Delivered") reverseStatus = `${prefix} Delivered`;
-        else if (nextStatus === "Return Picked Up") reverseStatus = `${prefix} Picked Up`;
-        else if (nextStatus === "Out For Pickup") reverseStatus = `Out For ${prefix} Pickup`;
-        else if (nextStatus === "Pickup Scheduled") reverseStatus = `${prefix} Pickup Scheduled`;
-        
+        if (nextStatus === 'Shipped') reverseStatus = `${prefix} Shipped`;
+        else if (nextStatus === 'Returned') reverseStatus = `${prefix} Completed`;
+        else if (nextStatus === 'RTO Delivered') reverseStatus = `${prefix} Completed`;
+        else if (nextStatus === 'Cancelled') reverseStatus = `${prefix} Cancelled`;
+        else if (nextStatus === 'Delivered') reverseStatus = `${prefix} Delivered`;
+        else if (nextStatus === 'Return Picked Up') reverseStatus = `${prefix} Picked Up`;
+        else if (nextStatus === 'Out For Pickup') reverseStatus = `Out For ${prefix} Pickup`;
+        else if (nextStatus === 'Pickup Scheduled') reverseStatus = `${prefix} Pickup Scheduled`;
+
         updatePayload.status = reverseStatus;
 
-        if (awb) {
-          if (isExchange && !order.shiprocket_exchange_awb) {
-            updatePayload.shiprocket_exchange_awb = String(awb);
-          } else if (!isExchange && !order.shiprocket_return_awb) {
-            updatePayload.shiprocket_return_awb = String(awb);
-          }
+        if (awb && !reverseAction.shiprocket_return_awb) {
+          await reverseAction.update({ shiprocket_return_awb: String(awb) });
         }
       } else {
         // Forward shipment updates
@@ -547,20 +586,21 @@ class ShipRocketController {
             updatePayload.customer_cod_blocked = true;
             updatePayload.cod_blocked_at = blockedAt;
             updatePayload.cod_block_reason = COD_RTO_BLOCK_REASON;
-            updatePayload.refund_status = 'Not Required';
-            updatePayload.refund_amount = 0;
-            updatePayload.refund_note = 'Your order has been cancelled due to unsuccessful delivery. Please place a new order if you still wish to purchase the product. COD is now blocked for this account.';
-
             await blockCustomerCodForOrder(order, COD_RTO_BLOCK_REASON);
+            await OrderRefund.create({
+              order_id: order.id,
+              refund_type: REFUND_TYPE.RTO,
+              amount: 0,
+              status: REFUND_STATUS.NOT_REQUIRED,
+              payment_method: REFUND_PAYMENT_METHOD.NOT_REQUIRED,
+              note: 'Your order has been cancelled due to unsuccessful delivery. Please place a new order if you still wish to purchase the product. COD is now blocked for this account.',
+            });
           } else {
             const refundAmount = calculateRtoRefundAmount(order, actualRtoCount);
             const forwardCharge = getForwardShippingCharge(order);
             const rtoCharge = getRtoShippingCharge(order);
             const hasRedispatch = Number(order.redispatch_count || 0) > 0 || actualRtoCount > 1;
-
-            updatePayload.refund_amount = refundAmount;
-            updatePayload.refund_status = hasRedispatch ? 'Refund Pending' : 'RTO Action Required';
-            updatePayload.refund_note = hasRedispatch
+            const rtoNote = hasRedispatch
               ? `Your order could not be delivered after multiple attempts and has been cancelled. Refund eligible amount: Rs. ${refundAmount.toLocaleString('en-IN')} after delivery deductions. Please place a fresh order if you still wish to purchase this item.`
               : `Order returned to seller. Refund eligible amount: Rs. ${refundAmount.toLocaleString('en-IN')} after Rs. ${forwardCharge.toLocaleString('en-IN')} forward charge and Rs. ${rtoCharge.toLocaleString('en-IN')} RTO charge deduction. You may choose refund or re-dispatch.`;
 
@@ -568,6 +608,14 @@ class ShipRocketController {
               updatePayload.status = 'Seller Cancelled';
               updatePayload.cancelled_at = new Date();
             }
+            await OrderRefund.create({
+              order_id: order.id,
+              refund_type: REFUND_TYPE.RTO,
+              amount: refundAmount,
+              status: hasRedispatch ? REFUND_STATUS.PENDING : 'RTO Action Required',
+              payment_method: REFUND_PAYMENT_METHOD.ORIGINAL_GATEWAY,
+              note: rtoNote,
+            });
           }
         }
       }
@@ -600,26 +648,31 @@ class ShipRocketController {
         return res.status(403).json({ message: 'This order does not belong to this customer.' });
       }
 
-      if (!order.return_requested_at) {
+      const returnActions = await OrderItemAction.findAll({
+        where: { order_id: orderId, action_type: ACTION_TYPES.RETURN, status: { [Op.notIn]: [ACTION_STATUS.REJECTED, ACTION_STATUS.CANCELLED] } },
+      });
+      if (!returnActions.length) {
         return res.status(400).json({ message: 'No active return request found for this order.' });
       }
 
-      if (order.shiprocket_return_order_id) {
+      const srId = returnActions.find((a) => a.shiprocket_return_order_id)?.shiprocket_return_order_id;
+      if (srId) {
         try {
-          await ShipRocketService.cancelOrders([order.shiprocket_return_order_id]);
+          await ShipRocketService.cancelOrders([srId]);
         } catch (srErr) {
           console.error('[ShipRocket] cancelReturn reverse order cancel warning:', srErr.message);
         }
       }
 
-      await order.update({
-        status: 'Delivered',
-        return_requested_at: null,
-        refund_status: null,
-        refund_note: reason ? `Return cancelled: ${reason}` : 'Return request cancelled by customer.',
-        shiprocket_return_order_id: null,
-        shiprocket_return_awb: null
-      });
+      await OrderItemAction.update(
+        { status: ACTION_STATUS.CANCELLED },
+        { where: { order_id: orderId, action_type: ACTION_TYPES.RETURN, status: { [Op.notIn]: [ACTION_STATUS.REJECTED, ACTION_STATUS.CANCELLED] } } },
+      );
+      await OrderRefund.update(
+        { status: REFUND_STATUS.NOT_REQUIRED, note: reason ? `Return cancelled: ${reason}` : 'Return request cancelled by customer.' },
+        { where: { order_id: orderId, refund_type: REFUND_TYPE.RETURN } },
+      );
+      await order.update({ status: 'Delivered' });
 
       return res.status(200).json({ message: 'Return request cancelled successfully and order status reverted to Delivered.' });
     } catch (error) {
@@ -644,26 +697,31 @@ class ShipRocketController {
         return res.status(403).json({ message: 'This order does not belong to this customer.' });
       }
 
-      if (!order.exchange_requested_at) {
+      const exchangeActions = await OrderItemAction.findAll({
+        where: { order_id: orderId, action_type: ACTION_TYPES.EXCHANGE, status: { [Op.notIn]: [ACTION_STATUS.REJECTED, ACTION_STATUS.CANCELLED] } },
+      });
+      if (!exchangeActions.length) {
         return res.status(400).json({ message: 'No active exchange request found for this order.' });
       }
 
-      if (order.shiprocket_exchange_order_id) {
+      const srId = exchangeActions.find((a) => a.shiprocket_return_order_id)?.shiprocket_return_order_id;
+      if (srId) {
         try {
-          await ShipRocketService.cancelOrders([order.shiprocket_exchange_order_id]);
+          await ShipRocketService.cancelOrders([srId]);
         } catch (srErr) {
           console.error('[ShipRocket] cancelExchange reverse order cancel warning:', srErr.message);
         }
       }
 
-      await order.update({
-        status: 'Delivered',
-        exchange_requested_at: null,
-        refund_status: null,
-        refund_note: reason ? `Exchange cancelled: ${reason}` : 'Exchange request cancelled by customer.',
-        shiprocket_exchange_order_id: null,
-        shiprocket_exchange_awb: null
-      });
+      await OrderItemAction.update(
+        { status: ACTION_STATUS.CANCELLED },
+        { where: { order_id: orderId, action_type: ACTION_TYPES.EXCHANGE, status: { [Op.notIn]: [ACTION_STATUS.REJECTED, ACTION_STATUS.CANCELLED] } } },
+      );
+      await OrderRefund.update(
+        { status: REFUND_STATUS.NOT_REQUIRED, note: reason ? `Exchange cancelled: ${reason}` : 'Exchange request cancelled by customer.' },
+        { where: { order_id: orderId, refund_type: REFUND_TYPE.EXCHANGE } },
+      );
+      await order.update({ status: 'Delivered' });
 
       return res.status(200).json({ message: 'Exchange request cancelled successfully and order status reverted to Delivered.' });
     } catch (error) {

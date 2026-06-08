@@ -1,11 +1,13 @@
 const Order = require('../models/Order');
 const OrderItem = require('../models/OrderItem');
 const OrderItemAction = require('../models/OrderItemAction');
+const OrderRefund = require('../models/OrderRefund');
+const { REFUND_TYPE, REFUND_STATUS, REFUND_PAYMENT_METHOD } = require('../utils/orderTransactions');
 const Product = require('../models/Product');
 const Color = require('../models/Color');
 const Customer = require('../models/Customer');
 const WalletTransaction = require('../models/WalletTransaction');
-const { Transaction } = require('sequelize');
+const { Transaction, Op } = require('sequelize');
 const { sequelize } = require('../config/db');
 const {
   ACTION_TYPES,
@@ -17,6 +19,7 @@ const {
   statusForRequestedAction,
   statusAfterCompletedAction,
   isDeliveredEnoughForPostDeliveryAction,
+  appendOrderStatusHistory,
   roundMoney,
 } = require('../utils/orderItemActions');
 
@@ -30,21 +33,25 @@ const customerOwnsOrder = (order, user) => {
 
 const canCancelOrderItems = (order) => {
   const status = String(order?.status || '').toLowerCase();
-  if (['cancelled', 'seller cancelled', 'delivered', 'shipped', 'out for delivery'].includes(status) || status.startsWith('rto ')) {
+  if (['cancelled', 'seller cancelled', 'delivered', 'shipped', 'out for delivery', 'picked up', 'picked_up', 'awb assigned', 'awb_assigned'].includes(status) || status.startsWith('rto ')) {
     return false;
   }
+  if (order.is_modified) return false;
   const createdAt = new Date(order.createdAt).getTime();
   return Number.isFinite(createdAt) && Date.now() - createdAt <= 24 * 60 * 60 * 1000;
 };
 
 const normalizeItems = (items = []) => {
   if (!Array.isArray(items)) return [];
-  const itemIds = new Set();
+  const itemMap = new Map();
   items.forEach((item) => {
     const orderItemId = Number(item.orderItemId || item.order_item_id || item.id);
-    if (Number.isInteger(orderItemId) && orderItemId > 0) itemIds.add(orderItemId);
+    if (Number.isInteger(orderItemId) && orderItemId > 0) {
+      const qty = Number(item.quantity || item.qty || 0);
+      itemMap.set(orderItemId, qty > 0 ? qty : null);
+    }
   });
-  return Array.from(itemIds).map((orderItemId) => ({ orderItemId }));
+  return Array.from(itemMap.entries()).map(([orderItemId, quantity]) => ({ orderItemId, quantity }));
 };
 
 const isActionClosedByRejection = (action) => {
@@ -61,8 +68,7 @@ const hasUsableAction = (item, actionType = null) => {
 };
 
 const hasOrderExchangeHistory = (order) => (
-  Boolean(order?.exchange_requested_at)
-  || (order?.OrderItems || []).some((item) => hasUsableAction(item, ACTION_TYPES.EXCHANGE))
+  (order?.OrderItems || []).some((item) => hasUsableAction(item, ACTION_TYPES.EXCHANGE))
 );
 
 const getWholeProductActionQuantity = (item) => getActionableQuantity(item);
@@ -131,7 +137,10 @@ class OrderItemActionController {
       }
 
       if (actionType === ACTION_TYPES.CANCEL && !canCancelOrderItems(order)) {
-        return res.status(400).json({ message: 'Cancellation is available only before dispatch and within 24 hours.' });
+        const msg = order.is_modified
+          ? 'This order has already been modified and cannot be changed again.'
+          : 'Cancellation is available only before dispatch and within 24 hours.';
+        return res.status(400).json({ message: msg });
       }
       if ([ACTION_TYPES.RETURN, ACTION_TYPES.EXCHANGE].includes(actionType) && !isDeliveredEnoughForPostDeliveryAction(order)) {
         return res.status(400).json({ message: 'Return or exchange is available after delivery.' });
@@ -148,7 +157,8 @@ class OrderItemActionController {
         if (actionType === ACTION_TYPES.EXCHANGE && hasOrderExchangeHistory(order)) {
           return null;
         }
-        const quantity = getWholeProductActionQuantity(item);
+        const maxQty = getWholeProductActionQuantity(item);
+        const quantity = (selection.quantity > 0) ? Math.min(selection.quantity, maxQty) : maxQty;
         if (quantity < 1) return null;
         return {
           order_item_id: item.id,
@@ -215,7 +225,10 @@ class OrderItemActionController {
 
       if (actionType === ACTION_TYPES.CANCEL && !canCancelOrderItems(order)) {
         await transaction.rollback();
-        return res.status(400).json({ message: 'Cancellation is available only before dispatch and within 24 hours.' });
+        const msg = order.is_modified
+          ? 'This order has already been modified and cannot be changed again.'
+          : 'Cancellation is available only before dispatch and within 24 hours.';
+        return res.status(400).json({ message: msg });
       }
       if ([ACTION_TYPES.RETURN, ACTION_TYPES.EXCHANGE].includes(actionType) && !isDeliveredEnoughForPostDeliveryAction(order)) {
         await transaction.rollback();
@@ -251,7 +264,8 @@ class OrderItemActionController {
             message: `${item.product_name || 'This product'} already has an action request. Please choose another product.`,
           });
         }
-        const quantity = getWholeProductActionQuantity(item);
+        const maxQty = getWholeProductActionQuantity(item);
+        const quantity = (selection.quantity > 0) ? Math.min(Number(selection.quantity), maxQty) : maxQty;
         if (quantity < 1) {
           await transaction.rollback();
           return res.status(400).json({ message: `${item.product_name || 'This product'} is not available for this request.` });
@@ -265,6 +279,7 @@ class OrderItemActionController {
           action_type: actionType,
           quantity,
           status: actionType === ACTION_TYPES.CANCEL ? ACTION_STATUS.COMPLETED : ACTION_STATUS.INITIATED,
+          completed_at: actionType === ACTION_TYPES.CANCEL ? new Date() : null,
           reason,
           ...calculation,
           requested_by: req.userRole === 'admin' ? null : req.user?.id,
@@ -298,12 +313,18 @@ class OrderItemActionController {
 
       const paymentMethod = String(order.payment_method || '').toUpperCase();
       const orderUpdate = { status: actionOrderStatus(actionType) };
+      let refundToCreate = null;
       if (actionType === ACTION_TYPES.RETURN) {
-        orderUpdate.refund_status = paymentMethod === 'COD' ? 'Bank Details Required' : 'Refund Pending';
-        orderUpdate.refund_amount = roundMoney(createdActions.reduce((sum, action) => sum + Number(action.estimated_refund_amount || 0), 0));
-        orderUpdate.refund_note = paymentMethod === 'COD'
-          ? 'Customer bank details are required before manual refund.'
-          : 'Refund will be processed back to the original prepaid payment method.';
+        const returnRefundAmount = roundMoney(createdActions.reduce((sum, action) => sum + Number(action.estimated_refund_amount || 0), 0));
+        refundToCreate = {
+          refund_type: REFUND_TYPE.RETURN,
+          amount: returnRefundAmount,
+          status: REFUND_STATUS.PENDING,
+          payment_method: paymentMethod === 'COD' ? REFUND_PAYMENT_METHOD.BANK_TRANSFER : REFUND_PAYMENT_METHOD.ORIGINAL_GATEWAY,
+          note: paymentMethod === 'COD'
+            ? 'Customer bank details are required before manual refund.'
+            : 'Refund will be processed back to the original prepaid payment method.',
+        };
       } else if (actionType === ACTION_TYPES.CANCEL) {
         const remainingQty = getRemainingQuantityAfterCancellation(orderItems, cancelledSelections);
         const isFullCancellation = remainingQty <= 0;
@@ -311,28 +332,86 @@ class OrderItemActionController {
         const nextSubtotal = isFullCancellation
           ? 0
           : roundMoney(Math.max(0, Number(order.subtotal_amount || 0) - cancelledAmount));
+
+        // Coupon recalculation on partial cancel
+        let newCouponDiscount = roundMoney(Number(order.discount_amount || 0));
+        if (!isFullCancellation && order.coupon_code) {
+          const Coupon = require('../models/Coupon');
+          const coupon = await Coupon.findOne({ where: { code: order.coupon_code, is_active: true }, transaction });
+          if (coupon) {
+            if (String(coupon.discount_type || '').toLowerCase() === 'percentage') {
+              newCouponDiscount = (nextSubtotal * Number(coupon.discount_percent || 0)) / 100;
+              if (coupon.max_discount_amount) {
+                newCouponDiscount = Math.min(newCouponDiscount, Number(coupon.max_discount_amount));
+              }
+            } else {
+              newCouponDiscount = Math.min(Number(coupon.discount_amount || 0), nextSubtotal);
+            }
+            newCouponDiscount = roundMoney(newCouponDiscount);
+          } else {
+            newCouponDiscount = 0;
+          }
+        }
+
+        // Recalculate total from fixed charges + new subtotal - new discount
+        const fixedCharges = roundMoney(
+          Number(order.shipping_charge || 0)
+          - Number(order.shipping_discount || 0)
+          + Number(order.payment_fee || 0)
+          - Number(order.payment_discount || 0),
+        );
+        const walletUsed = roundMoney(Number(order.wallet_amount || 0));
         const nextTotal = isFullCancellation
           ? 0
-          : roundMoney(Math.max(0, Number(order.total_amount || 0) - cancelledAmount));
-        const nextPayable = isFullCancellation
-          ? 0
-          : roundMoney(Math.max(0, paidAmount - cancelledAmount));
+          : roundMoney(Math.max(0, nextSubtotal + fixedCharges - newCouponDiscount - walletUsed));
+        const nextPayable = nextTotal;
+        const refundAmount = isFullCancellation
+          ? paidAmount
+          : roundMoney(Math.max(0, paidAmount - nextPayable));
+
         orderUpdate.status = remainingQty > 0 ? 'Partially Cancelled' : 'Cancelled';
         if (isFullCancellation) orderUpdate.cancelled_at = new Date();
         orderUpdate.subtotal_amount = nextSubtotal;
+        orderUpdate.discount_amount = isFullCancellation ? 0 : newCouponDiscount;
         orderUpdate.total_amount = nextTotal;
         orderUpdate.payable_amount = nextPayable;
-        orderUpdate.refund_status = paymentMethod === 'COD' ? 'Not Required' : 'Refund Pending';
-        orderUpdate.refund_amount = paymentMethod === 'COD' ? 0 : (isFullCancellation ? paidAmount : roundMoney(cancelledAmount));
+        // Lock order against further modifications after any cancel/update
+        orderUpdate.is_modified = true;
+        orderUpdate.modified_at = new Date();
         orderUpdate.payment_status = paymentMethod === 'COD'
           ? (remainingQty > 0 ? order.payment_status : 'Cancelled')
           : 'Refund Pending';
-        orderUpdate.refund_note = paymentMethod === 'COD'
-          ? `Cancellation completed. COD amount adjusted by Rs. ${roundMoney(cancelledAmount).toLocaleString('en-IN')}.`
-          : `Cancellation completed. Refund of Rs. ${roundMoney(orderUpdate.refund_amount).toLocaleString('en-IN')} will be processed.`;
+        refundToCreate = {
+          refund_type: isFullCancellation ? REFUND_TYPE.FULL_CANCEL : REFUND_TYPE.PARTIAL_CANCEL,
+          amount: paymentMethod === 'COD' ? 0 : refundAmount,
+          status: paymentMethod === 'COD' ? REFUND_STATUS.NOT_REQUIRED : REFUND_STATUS.PENDING,
+          payment_method: paymentMethod === 'COD' ? REFUND_PAYMENT_METHOD.NOT_REQUIRED : REFUND_PAYMENT_METHOD.ORIGINAL_GATEWAY,
+          note: paymentMethod === 'COD'
+            ? `Cancellation completed. Remaining COD amount: Rs. ${nextTotal.toLocaleString('en-IN')}.`
+            : `Cancellation completed. Refund of Rs. ${refundAmount.toLocaleString('en-IN')} will be processed.`,
+        };
+
+        // Decrement coupon usage count on full cancellation
+        if (isFullCancellation && order.coupon_code) {
+          const Coupon = require('../models/Coupon');
+          await Coupon.decrement('usage_count', {
+            by: 1,
+            where: { code: order.coupon_code, usage_count: { [Op.gt]: 0 } },
+            transaction,
+          });
+        }
       }
 
+      orderUpdate.status_history = appendOrderStatusHistory(order, orderUpdate.status, 'customer', null);
       await order.update(orderUpdate, { transaction });
+
+      if (refundToCreate) {
+        await OrderRefund.create({
+          order_id: order.id,
+          order_item_action_id: createdActions[0]?.id || null,
+          ...refundToCreate,
+        }, { transaction });
+      }
 
       // Refund wallet on full cancellation
       if (actionType === ACTION_TYPES.CANCEL) {
@@ -470,15 +549,29 @@ class OrderItemActionController {
           : statusForRequestedAction(action.action_type);
 
       await item.update(itemUpdate, { transaction });
+
+      const isTerminal = [ACTION_STATUS.COMPLETED, ACTION_STATUS.REJECTED, ACTION_STATUS.CANCELLED].includes(nextStatus);
       await action.update({
         status: nextStatus,
         reviewed_by: req.user?.id || null,
         reviewed_at: new Date(),
+        completed_at: isTerminal ? new Date() : null,
         meta: {
           ...(action.meta || {}),
           admin_note: req.body.note || null,
         },
       }, { transaction });
+
+      // Append terminal action outcome to order's status_history
+      if (isTerminal) {
+        const orderForHistory = await Order.findByPk(action.order_id, { transaction });
+        if (orderForHistory) {
+          const historyNote = `${action.action_type} ${nextStatus.toLowerCase()} — qty ${action.quantity}${req.body.note ? ': ' + req.body.note : ''}`;
+          await orderForHistory.update({
+            status_history: appendOrderStatusHistory(orderForHistory, `${action.action_type} ${nextStatus}`, 'admin', historyNote),
+          }, { transaction });
+        }
+      }
 
       await transaction.commit();
 

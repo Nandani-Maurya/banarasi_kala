@@ -47,6 +47,9 @@ const ORDER_ITEM_ACTION_COLUMNS = {
   requested_by: { type: DataTypes.INTEGER, allowNull: true },
   reviewed_by: { type: DataTypes.INTEGER, allowNull: true },
   reviewed_at: { type: DataTypes.DATE, allowNull: true },
+  completed_at: { type: DataTypes.DATE, allowNull: true },
+  shiprocket_return_order_id: { type: DataTypes.STRING, allowNull: true },
+  shiprocket_return_awb: { type: DataTypes.STRING, allowNull: true },
   created_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
   updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
 };
@@ -168,6 +171,16 @@ const isDeliveredEnoughForPostDeliveryAction = (order) => {
   return Boolean(order?.delivered_at) || status === 'delivered';
 };
 
+/**
+ * Append one entry to an order's status_history array.
+ * actor: 'customer' | 'admin' | 'system'
+ */
+const appendOrderStatusHistory = (order, status, actor, note = null) => {
+  const history = Array.isArray(order.status_history) ? [...order.status_history] : [];
+  history.push({ status, timestamp: new Date().toISOString(), actor, note });
+  return history;
+};
+
 module.exports = {
   ACTION_TYPES,
   ACTION_STATUS,
@@ -179,5 +192,6 @@ module.exports = {
   statusForRequestedAction,
   statusAfterCompletedAction,
   isDeliveredEnoughForPostDeliveryAction,
+  appendOrderStatusHistory,
   roundMoney,
 };

@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Banarasi Kala — Order Management Database Schema</title>
+<style>
+  /* ── Print + Screen reset ─────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 15px; }
+  body {
+    font-family: "Segoe UI", system-ui, sans-serif;
+    color: #1a1a1a;
+    line-height: 1.65;
+    background: #fff;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 36px 80px;
+  }
+
+  /* ── Typography ───────────────────────────────────────────────── */
+  h1 { font-size: 2.2rem; color: #800020; margin-bottom: 6px; }
+  h2 { font-size: 1.45rem; color: #5d170d; margin: 36px 0 10px; border-bottom: 2px solid #f0d0bc; padding-bottom: 6px; }
+  h3 { font-size: 1.1rem; color: #44140a; margin: 26px 0 8px; }
+  h4 { font-size: 0.95rem; color: #663300; margin: 18px 0 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+  p  { margin-bottom: 10px; color: #3a3330; }
+  ul, ol { padding-left: 22px; margin-bottom: 10px; }
+  li { margin-bottom: 4px; }
+  code {
+    font-family: "Consolas", "Cascadia Code", monospace;
+    font-size: 0.88em;
+    background: #fff3e8;
+    border: 1px solid #f0d0b8;
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: #800020;
+  }
+  pre {
+    background: #1e1510;
+    color: #f0c88a;
+    border-radius: 8px;
+    padding: 16px 20px;
+    font-family: "Consolas", monospace;
+    font-size: 0.85rem;
+    overflow-x: auto;
+    margin: 12px 0 18px;
+    line-height: 1.55;
+  }
+  strong { color: #2a0e00; }
+  a { color: #800020; }
+
+  /* ── Cover ────────────────────────────────────────────────────── */
+  .cover {
+    text-align: center;
+    padding: 60px 0 50px;
+    border-bottom: 3px solid #800020;
+    margin-bottom: 40px;
+  }
+  .cover .subtitle { color: #9a6b20; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.88rem; margin-bottom: 14px; }
+  .cover h1 { font-size: 2.6rem; line-height: 1.2; }
+  .cover .meta { margin-top: 18px; color: #765f52; font-size: 0.92rem; }
+  .cover .tag { display: inline-block; background: #800020; color: #f5c94d; border-radius: 4px; padding: 3px 10px; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin: 2px; }
+
+  /* ── Tables ───────────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 24px; font-size: 0.87rem; }
+  thead th { background: #800020; color: #f5c94d; padding: 9px 12px; text-align: left; font-weight: 700; }
+  tbody tr:nth-child(even) { background: #fff7f2; }
+  tbody tr:hover { background: #ffeee4; }
+  td, th { border: 1px solid #e8d0c0; padding: 8px 12px; vertical-align: top; }
+  td.col-name { font-family: "Consolas", monospace; font-size: 0.84rem; color: #800020; white-space: nowrap; }
+  td.col-type { font-family: "Consolas", monospace; font-size: 0.82rem; color: #444; white-space: nowrap; }
+  td.col-null { text-align: center; font-size: 0.82rem; }
+  td.col-default { font-family: "Consolas", monospace; font-size: 0.82rem; color: #555; }
+  .badge { display: inline-block; border-radius: 3px; padding: 1px 6px; font-size: 0.74rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .badge-pk { background: #800020; color: #fff; }
+  .badge-fk { background: #1a5c8a; color: #fff; }
+  .badge-idx { background: #4a7a00; color: #fff; }
+  .badge-dep { background: #888; color: #fff; }
+  .badge-new { background: #087a55; color: #fff; }
+
+  /* ── Info boxes ───────────────────────────────────────────────── */
+  .box { border-radius: 8px; padding: 14px 18px; margin: 14px 0 22px; }
+  .box-info  { background: #e8f4fb; border-left: 4px solid #1a7abf; }
+  .box-warn  { background: #fff8e6; border-left: 4px solid #d4880a; }
+  .box-green { background: #e8f7f2; border-left: 4px solid #087a55; }
+  .box-red   { background: #fef2f2; border-left: 4px solid #cc2233; }
+  .box strong { display: block; margin-bottom: 4px; }
+
+  /* ── ERD ASCII ────────────────────────────────────────────────── */
+  .erd {
+    font-family: "Consolas", monospace;
+    font-size: 0.78rem;
+    background: #fdf6ee;
+    border: 1px solid #e0c8a8;
+    border-radius: 8px;
+    padding: 20px 24px;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+    margin: 14px 0 24px;
+  }
+
+  /* ── Flow steps ───────────────────────────────────────────────── */
+  .flow { counter-reset: flow-step; margin: 10px 0 20px; }
+  .flow-step {
+    display: grid;
+    grid-template-columns: 32px 1fr;
+    gap: 0 14px;
+    margin-bottom: 10px;
+    align-items: start;
+  }
+  .flow-step::before {
+    counter-increment: flow-step;
+    content: counter(flow-step);
+    background: #800020;
+    color: #f5c94d;
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+  }
+  .flow-step p { margin: 4px 0 0; }
+  .flow-step strong { display: block; }
+
+  /* ── TOC ──────────────────────────────────────────────────────── */
+  .toc { background: #fffdf8; border: 1px solid #f0d0bc; border-radius: 8px; padding: 18px 22px; margin: 0 0 32px; }
+  .toc h3 { margin: 0 0 10px; font-size: 1rem; color: #800020; }
+  .toc ol { padding-left: 20px; }
+  .toc li { margin-bottom: 4px; font-size: 0.9rem; }
+
+  /* ── Section divider ──────────────────────────────────────────── */
+  hr { border: 0; border-top: 1px solid #e8cdb8; margin: 36px 0; }
+
+  /* ── Print overrides ──────────────────────────────────────────── */
+  @media print {
+    body { padding: 20px 28px 40px; font-size: 11pt; }
+    h2 { page-break-before: always; }
+    h2:first-of-type { page-break-before: avoid; }
+    pre, table, .erd { font-size: 8pt; }
+    .box { break-inside: avoid; }
+    a { color: inherit; text-decoration: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════ COVER -->
+<div class="cover">
+  <div class="subtitle">Internal Technical Document</div>
+  <h1>Order Management<br>Database Schema</h1>
+  <p style="margin-top:14px;color:#765f52;font-size:1.05rem;">Banarasi Kala — Complete redesign and normalisation</p>
+  <div class="meta">
+    Prepared: June 2026 &nbsp;·&nbsp; Version 2.0
+    <br><br>
+    <span class="tag">PostgreSQL</span>
+    <span class="tag">Sequelize ORM</span>
+    <span class="tag">Node.js</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ TOC -->
+<div class="toc">
+  <h3>Table of Contents</h3>
+  <ol>
+    <li><a href="#sec-overview">Overview — Why We Normalised</a></li>
+    <li><a href="#sec-erd">Entity Relationship Diagram</a></li>
+    <li><a href="#sec-tables">Table Definitions</a>
+      <ol>
+        <li>orders</li>
+        <li>order_items</li>
+        <li>payments <span class="badge badge-new">NEW</span></li>
+        <li>order_refunds <span class="badge badge-new">NEW</span></li>
+        <li>order_item_actions</li>
+        <li>customers</li>
+        <li>wallet_transactions</li>
+      </ol>
+    </li>
+    <li><a href="#sec-flows">Data Flows</a>
+      <ol>
+        <li>Order placement (Prepaid + COD)</li>
+        <li>Full cancellation within 24 h</li>
+        <li>Partial cancellation / quantity decrease</li>
+        <li>Return after delivery</li>
+        <li>Exchange after delivery</li>
+        <li>RTO (Return to Origin)</li>
+      </ol>
+    </li>
+    <li><a href="#sec-rules">Business Rules</a></li>
+    <li><a href="#sec-deprecated">Deprecated Fields</a></li>
+    <li><a href="#sec-migration">Migration Checklist</a></li>
+  </ol>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ S1 OVERVIEW -->
+<h2 id="sec-overview">1. Overview — Why We Normalised</h2>
+
+<p>The original <code>orders</code> table had grown to <strong>50+ columns</strong> mixing five separate concerns into one row:</p>
+
+<table>
+  <thead><tr><th>Concern</th><th>Columns</th><th>Problem</th></tr></thead>
+  <tbody>
+    <tr><td>Core order data</td><td>status, subtotal, shipping, coupon …</td><td>OK — stays in <code>orders</code></td></tr>
+    <tr><td>Payment gateway</td><td>gateway_order_id, gateway_payment_id, gateway_signature, gateway_response …</td><td>One order can have multiple payment attempts (e.g. first try fails). A single column per order cannot model this. <strong>→ moved to <code>payments</code></strong></td></tr>
+    <tr><td>Refund tracking</td><td>refund_amount, refund_status, refund_note, refund_bank_details …</td><td>An order can have multiple refund events (partial cancel + later return). A single <code>refund_amount</code> can only represent one event. <strong>→ moved to <code>order_refunds</code></strong></td></tr>
+    <tr><td>Reverse logistics</td><td>shiprocket_return_order_id, shiprocket_return_awb, shiprocket_exchange_awb …</td><td>Each return/exchange action generates its own shipment. These belong on <code>order_item_actions</code>, not on the order. <strong>→ moved to <code>order_item_actions</code></strong></td></tr>
+    <tr><td>Derived timestamps</td><td>return_requested_at, exchange_requested_at</td><td>Directly derivable from <code>order_item_actions.created_at</code>. <strong>→ deprecated (derived)</strong></td></tr>
+  </tbody>
+</table>
+
+<div class="box box-green">
+  <strong>Result after normalisation</strong>
+  The <code>orders</code> table drops from ~50 columns to ~30 meaningful columns. Each concern has its own table with clean foreign-key relationships and the ability to have multiple rows per order where the business logic requires it.
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ S2 ERD -->
+<h2 id="sec-erd">2. Entity Relationship Diagram</h2>
+
+<div class="erd">
+customers (1) ──────────────────────────────────────────────────────── (M) wallet_transactions
+    │                                                                           │
+    │ 1                                                               order_id (ref)
+    │                                                                           │
+    └──(M) orders ──────────────────────────────────────────────────────────────┘
+               │
+               ├──(M) order_items
+               │          │
+               │          └──(M) order_item_actions
+               │                       │
+               │                       │  shiprocket_return_order_id
+               │                       │  shiprocket_return_awb  ← reverse-shipment per action
+               │                       │
+               │                       └──(M) order_refunds ──── order_item_action_id (nullable)
+               │
+               ├──(M) payments          ← one row per payment attempt
+               │
+               └──(M) order_refunds     ← also directly linked for order-level refunds
+                                          (e.g. full cancellation: order_item_action_id = NULL)
+
+
+Foreign key legend
+──────────────────
+orders.customer_id              → customers.id
+order_items.order_id            → orders.id
+order_items.product_id          → products.id
+order_item_actions.order_id     → orders.id
+order_item_actions.order_item_id → order_items.id
+payments.order_id               → orders.id
+order_refunds.order_id          → orders.id
+order_refunds.order_item_action_id → order_item_actions.id  (nullable)
+wallet_transactions.customer_id → customers.id
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ S3 TABLES -->
+<h2 id="sec-tables">3. Table Definitions</h2>
+
+<!-- ─── 3.1 orders ─── -->
+<h3>3.1 &nbsp;<code>orders</code></h3>
+<p>The master record for each customer order. Holds the snapshot of what was ordered, how much was charged, the current fulfilment status, and logistics identifiers for the <em>forward</em> shipment only. All payment and refund detail has moved to separate tables.</p>
+
+<table>
+  <thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td class="col-name">id <span class="badge badge-pk">PK</span></td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">auto</td><td>Internal primary key</td></tr>
+    <tr><td class="col-name">order_number</td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">—</td><td>Human-readable order number e.g. BK-20260601-0042. Generated after INSERT using the DB id.</td></tr>
+    <tr><td class="col-name">customer_id <span class="badge badge-fk">FK</span></td><td class="col-type">INTEGER</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Link to <code>customers</code>. Nullable because guest checkout is supported.</td></tr>
+    <tr><td class="col-name">customer_name</td><td class="col-type">VARCHAR</td><td class="col-null">✗</td><td class="col-default">—</td><td>Snapshot of the name at order time. Preserved even if the customer later changes their profile name.</td></tr>
+    <tr><td class="col-name">customer_email</td><td class="col-type">VARCHAR</td><td class="col-null">✗</td><td class="col-default">—</td><td>Snapshot email for communication and lookup.</td></tr>
+    <tr><td class="col-name">phone</td><td class="col-type">VARCHAR</td><td class="col-null">✗</td><td class="col-default">—</td><td>Delivery phone number.</td></tr>
+    <tr><td class="col-name">address, city, state, pincode</td><td class="col-type">TEXT/VARCHAR</td><td class="col-null">✗</td><td class="col-default">—</td><td>Snapshot of the delivery address. Never updated after creation.</td></tr>
+    <tr><td class="col-name">subtotal_amount</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✓</td><td class="col-default">0</td><td>Sum of (unit_price × qty) for all items. Updated when items are partially cancelled.</td></tr>
+    <tr><td class="col-name">shipping_charge</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✓</td><td class="col-default">0</td><td>Gross shipping cost before any discount.</td></tr>
+    <tr><td class="col-name">shipping_discount</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✓</td><td class="col-default">0</td><td>Free-delivery discount applied (often equals shipping_charge).</td></tr>
+    <tr><td class="col-name">payment_fee</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✓</td><td class="col-default">0</td><td>Total payment surcharge = platform_fee + cod_fee.</td></tr>
+    <tr><td class="col-name">platform_fee</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✓</td><td class="col-default">0</td><td>Fixed platform convenience fee charged on all orders.</td></tr>
+    <tr><td class="col-name">cod_fee</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✓</td><td class="col-default">0</td><td>Extra COD handling fee (zero for prepaid orders).</td></tr>
+    <tr><td class="col-name">payment_discount</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✓</td><td class="col-default">0</td><td>Prepaid discount deducted (zero for COD orders).</td></tr>
+    <tr><td class="col-name">discount_amount</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✓</td><td class="col-default">0</td><td>Coupon discount. <strong>Updated when items are partially cancelled</strong> (coupon is recalculated against the new subtotal).</td></tr>
+    <tr><td class="col-name">wallet_amount</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✓</td><td class="col-default">0</td><td>Wallet credit applied at checkout. Does not change after placement.</td></tr>
+    <tr><td class="col-name">total_amount</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✗</td><td class="col-default">—</td><td>Grand total before wallet deduction.</td></tr>
+    <tr><td class="col-name">payable_amount</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✓</td><td class="col-default">0</td><td>Actual amount charged to the customer = total − wallet. <strong>Updated on partial cancellation.</strong></td></tr>
+    <tr><td class="col-name">coupon_code</td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Coupon code applied. Kept for historical display even after coupon benefit is removed.</td></tr>
+    <tr><td class="col-name">payment_method</td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">Prepaid</td><td><code>COD</code> or <code>Prepaid</code></td></tr>
+    <tr><td class="col-name">payment_status</td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">Paid</td><td>Current payment collection status: <code>Pending</code>, <code>Paid</code>, <code>Failed</code>, <code>Refund Pending</code>, <code>Refunded</code></td></tr>
+    <tr><td class="col-name">status</td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">Pending</td><td>Overall order fulfilment status. See full lifecycle below.</td></tr>
+    <tr><td class="col-name">status_history</td><td class="col-type">JSONB</td><td class="col-null">✓</td><td class="col-default">[]</td><td>Array of <code>{status, timestamp, actor, note}</code>. Every status change appends an entry. Drives the frontend timeline.</td></tr>
+    <tr><td class="col-name">is_modified</td><td class="col-type">BOOLEAN</td><td class="col-null">✗</td><td class="col-default">false</td><td><code>true</code> after the order has been partially cancelled or quantity-decreased. Blocks any further modification within the 24 h window.</td></tr>
+    <tr><td class="col-name">modified_at</td><td class="col-type">TIMESTAMP</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>When <code>is_modified</code> was set.</td></tr>
+    <tr><td class="col-name">shiprocket_order_id</td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>ShipRocket forward order ID.</td></tr>
+    <tr><td class="col-name">shiprocket_awb</td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>AWB / tracking number for the forward shipment.</td></tr>
+    <tr><td class="col-name">selected_courier_data</td><td class="col-type">JSONB</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Full courier quote snapshot used at dispatch time. Used to calculate deductions for RTO refunds.</td></tr>
+    <tr><td class="col-name">is_rto</td><td class="col-type">BOOLEAN</td><td class="col-null">✗</td><td class="col-default">false</td><td>Set to <code>true</code> when admin marks status as "RTO Delivered".</td></tr>
+    <tr><td class="col-name">rto_count</td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">0</td><td>Incremented each time this order returns to seller (supports re-dispatch loop).</td></tr>
+    <tr><td class="col-name">is_redispatched</td><td class="col-type">BOOLEAN</td><td class="col-null">✗</td><td class="col-default">false</td><td>True if the order was re-dispatched after an RTO.</td></tr>
+    <tr><td class="col-name">redispatch_count</td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">0</td><td>Number of re-dispatch attempts.</td></tr>
+    <tr><td class="col-name">original_order_id</td><td class="col-type">BIGINT</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>For redispatched orders: points to the original order.</td></tr>
+    <tr><td class="col-name">customer_cod_blocked</td><td class="col-type">BOOLEAN</td><td class="col-null">✗</td><td class="col-default">false</td><td>Whether this specific order caused a COD block. Used as a fast lookup (canonical block is on <code>customers.is_cod_blocked</code>).</td></tr>
+    <tr><td class="col-name">delivered_at, cancelled_at</td><td class="col-type">TIMESTAMP</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Timestamps for terminal delivery/cancellation events.</td></tr>
+    <tr><td class="col-name">created_at, updated_at</td><td class="col-type">TIMESTAMP</td><td class="col-null">✗</td><td class="col-default">NOW</td><td>Sequelize automatic timestamps.</td></tr>
+  </tbody>
+</table>
+
+<h4>Order status lifecycle</h4>
+<pre>Pending → Processing → AWB Assigned → Picked Up → Shipped → Out for Delivery
+       ↘ Cancelled (within 24 h, customer or seller)
+
+Out for Delivery → Delivered
+                 → Undelivered → RTO Initiated → RTO In Transit → RTO Delivered
+
+Delivered → [item actions only — order status may update to reflect returns/exchanges]</pre>
+
+<hr>
+
+<!-- ─── 3.2 order_items ─── -->
+<h3>3.2 &nbsp;<code>order_items</code></h3>
+<p>One row per product-colour variant per order. Tracks original quantity and how much has been cancelled, returned, or exchanged over the item's lifetime.</p>
+
+<table>
+  <thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td class="col-name">id <span class="badge badge-pk">PK</span></td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">auto</td><td>Internal primary key</td></tr>
+    <tr><td class="col-name">order_id <span class="badge badge-fk">FK</span></td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">—</td><td>Parent order</td></tr>
+    <tr><td class="col-name">product_id <span class="badge badge-fk">FK</span></td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">—</td><td>Product reference</td></tr>
+    <tr><td class="col-name">color_id <span class="badge badge-fk">FK</span></td><td class="col-type">INTEGER</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Colour variant selected</td></tr>
+    <tr><td class="col-name">product_name</td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Snapshot name — preserved if product is later renamed or deleted</td></tr>
+    <tr><td class="col-name">sku</td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Snapshot SKU for the selected colour variant at order time</td></tr>
+    <tr><td class="col-name">price</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✗</td><td class="col-default">—</td><td>Unit price per item at the time of order. Never updated.</td></tr>
+    <tr><td class="col-name">quantity</td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">—</td><td>Original ordered quantity. Never decremented (use cancelled_quantity instead).</td></tr>
+    <tr><td class="col-name">status</td><td class="col-type">VARCHAR</td><td class="col-null">✗</td><td class="col-default">Active</td><td>Current item-level status. See table below.</td></tr>
+    <tr><td class="col-name">cancelled_quantity</td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">0</td><td>How many units of this item have been successfully cancelled.</td></tr>
+    <tr><td class="col-name">returned_quantity</td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">0</td><td>How many units have been returned after delivery.</td></tr>
+    <tr><td class="col-name">exchanged_quantity</td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">0</td><td>How many units have been exchanged after delivery.</td></tr>
+    <tr><td class="col-name">pending_action_quantity</td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">0</td><td>Units currently locked by an in-progress action (a return/exchange that is Requested but not yet Completed). Prevents double-actions on the same units.</td></tr>
+    <tr><td class="col-name">shipping_meta</td><td class="col-type">JSONB</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Per-item shipping weight + refund rule snapshot. Used to calculate return deductions without re-reading the courier data. See structure below.</td></tr>
+  </tbody>
+</table>
+
+<h4>Item status values</h4>
+<table>
+  <thead><tr><th>Value</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>Active</code></td><td>Normal state — no action in progress</td></tr>
+    <tr><td><code>Cancel Requested</code></td><td>Within 24 h, cancellation submitted by customer</td></tr>
+    <tr><td><code>Partially Cancelled</code></td><td>Some units cancelled, remaining units still active</td></tr>
+    <tr><td><code>Cancelled</code></td><td>All units cancelled</td></tr>
+    <tr><td><code>Return Initiated</code></td><td>Return request created after delivery</td></tr>
+    <tr><td><code>Partially Returned</code></td><td>Some units returned, rest still with customer</td></tr>
+    <tr><td><code>Return Completed</code></td><td>All returned units received by seller</td></tr>
+    <tr><td><code>Exchange Initiated</code></td><td>Exchange request created after delivery</td></tr>
+    <tr><td><code>Partially Exchanged</code></td><td>Some units exchanged</td></tr>
+    <tr><td><code>Exchange Completed</code></td><td>Exchange fulfilled</td></tr>
+  </tbody>
+</table>
+
+<h4>shipping_meta structure</h4>
+<pre>{
+  "product_weight_kg": 0.5,
+  "box_weight_kg": 0.2,
+  "quantity": 1,
+  "delivery_charge": 60.00,
+  "delivery_discount": 60.00,
+  "delivery_paid": 0.00,
+  "refund_rules": {
+    "return_delivery_deduction": 60.00,
+    "free_shipping_reason": "free_delivery",
+    "note": "Return refund deducts the forward delivery charge."
+  }
+}</pre>
+
+<hr>
+
+<!-- ─── 3.3 payments ─── -->
+<h3>3.3 &nbsp;<code>payments</code> <span class="badge badge-new">NEW TABLE</span></h3>
+<p>One row per payment attempt for an order. A prepaid order whose first attempt failed will have two rows (one <code>Failed</code>, one <code>Paid</code>). A COD order has one row starting as <code>Pending</code> and updated to <code>Paid</code> when the seller confirms collection.</p>
+<p>This table replaces the <code>gateway_*</code> columns that previously lived on the <code>orders</code> table.</p>
+
+<table>
+  <thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td class="col-name">id <span class="badge badge-pk">PK</span></td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">auto</td><td></td></tr>
+    <tr><td class="col-name">order_id <span class="badge badge-fk">FK</span></td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">—</td><td>Parent order</td></tr>
+    <tr><td class="col-name">payment_method</td><td class="col-type">VARCHAR</td><td class="col-null">✗</td><td class="col-default">COD</td><td><code>COD</code> or <code>Prepaid</code></td></tr>
+    <tr><td class="col-name">payment_gateway</td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">NULL</td><td><code>razorpay</code>, <code>phonepe</code>, or NULL for COD</td></tr>
+    <tr><td class="col-name">gateway_order_id</td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Razorpay/PhonePe order object ID used to verify signature</td></tr>
+    <tr><td class="col-name">gateway_payment_id</td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Razorpay payment ID (e.g. <code>pay_XYZ</code>). Also used for idempotency dedup on createOrder.</td></tr>
+    <tr><td class="col-name">gateway_signature</td><td class="col-type">TEXT</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>HMAC-SHA256 signature verified server-side before order is confirmed</td></tr>
+    <tr><td class="col-name">amount</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✗</td><td class="col-default">0</td><td>Amount in Indian Rupees</td></tr>
+    <tr><td class="col-name">amount_paise</td><td class="col-type">INTEGER</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Amount × 100 (paise) — what was sent to the gateway for cross-check</td></tr>
+    <tr><td class="col-name">currency</td><td class="col-type">VARCHAR</td><td class="col-null">✗</td><td class="col-default">INR</td><td>Currency code</td></tr>
+    <tr><td class="col-name">status</td><td class="col-type">VARCHAR</td><td class="col-null">✗</td><td class="col-default">Initiated</td><td><code>Initiated</code> → <code>Paid</code> / <code>Failed</code>; then <code>Refunded</code> / <code>Partially Refunded</code></td></tr>
+    <tr><td class="col-name">failure_reason</td><td class="col-type">TEXT</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Set if status = Failed</td></tr>
+    <tr><td class="col-name">gateway_response</td><td class="col-type">JSONB</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Full gateway webhook/callback payload for audit and debugging</td></tr>
+    <tr><td class="col-name">verified_at</td><td class="col-type">TIMESTAMP</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>When the server-side signature check passed</td></tr>
+    <tr><td class="col-name">created_at, updated_at</td><td class="col-type">TIMESTAMP</td><td class="col-null">✗</td><td class="col-default">NOW</td><td></td></tr>
+  </tbody>
+</table>
+
+<div class="box box-info">
+  <strong>Why one payments row per attempt, not per order?</strong>
+  A customer may start payment, face a bank timeout (status = Failed), and retry successfully (status = Paid). Storing both rows gives a complete audit trail instead of overwriting the failed attempt. The order confirmation only fires on the successful Paid row.
+</div>
+
+<hr>
+
+<!-- ─── 3.4 order_refunds ─── -->
+<h3>3.4 &nbsp;<code>order_refunds</code> <span class="badge badge-new">NEW TABLE</span></h3>
+<p>One row per refund event. Multiple refund events can exist for a single order (e.g. a partial cancellation refund followed by a return refund later). This table replaces the flat <code>refund_*</code> columns on the <code>orders</code> table.</p>
+
+<table>
+  <thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td class="col-name">id <span class="badge badge-pk">PK</span></td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">auto</td><td></td></tr>
+    <tr><td class="col-name">order_id <span class="badge badge-fk">FK</span></td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">—</td><td>Parent order</td></tr>
+    <tr><td class="col-name">order_item_action_id <span class="badge badge-fk">FK</span></td><td class="col-type">INTEGER</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>The action that triggered this refund. NULL for a full order cancellation (no action row exists in that case).</td></tr>
+    <tr><td class="col-name">refund_type</td><td class="col-type">VARCHAR</td><td class="col-null">✗</td><td class="col-default">—</td><td>Why the refund exists: <code>full_cancel</code> · <code>partial_cancel</code> · <code>return</code> · <code>exchange</code> · <code>rto</code></td></tr>
+    <tr><td class="col-name">amount</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✗</td><td class="col-default">0</td><td>Amount to be refunded in INR. 0 for COD orders that owe nothing and for exchanges.</td></tr>
+    <tr><td class="col-name">status</td><td class="col-type">VARCHAR</td><td class="col-null">✗</td><td class="col-default">Pending</td><td><code>Pending</code> → <code>Processing</code> → <code>Completed</code> / <code>Failed</code><br>or <code>Not Required</code> (COD orders)</td></tr>
+    <tr><td class="col-name">payment_method</td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>How the refund will be sent: <code>original_gateway</code> · <code>wallet</code> · <code>bank_transfer</code> · <code>not_required</code></td></tr>
+    <tr><td class="col-name">gateway_refund_id</td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Razorpay refund ID (e.g. <code>rfnd_XYZ</code>) for tracing the reversal in the payment gateway dashboard</td></tr>
+    <tr><td class="col-name">bank_details</td><td class="col-type">JSONB</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Bank transfer details for COD orders requiring an NEFT refund: <code>{account_holder_name, account_number, ifsc_code, bank_name, branch_name}</code></td></tr>
+    <tr><td class="col-name">note</td><td class="col-type">TEXT</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Human-readable explanation shown in the admin panel and optionally to the customer</td></tr>
+    <tr><td class="col-name">processed_at</td><td class="col-type">TIMESTAMP</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>When the admin marked this refund as Completed</td></tr>
+    <tr><td class="col-name">processed_by</td><td class="col-type">INTEGER</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Admin user ID who processed it</td></tr>
+    <tr><td class="col-name">created_at, updated_at</td><td class="col-type">TIMESTAMP</td><td class="col-null">✗</td><td class="col-default">NOW</td><td></td></tr>
+  </tbody>
+</table>
+
+<h4>refund_type reference</h4>
+<table>
+  <thead><tr><th>Type</th><th>When created</th><th>amount</th><th>payment_method</th></tr></thead>
+  <tbody>
+    <tr><td><code>full_cancel</code></td><td>Customer cancels entire order within 24 h</td><td>Full payable_amount</td><td><code>original_gateway</code> or <code>not_required</code> (COD)</td></tr>
+    <tr><td><code>partial_cancel</code></td><td>Customer cancels some items / decreases qty within 24 h</td><td>Difference after coupon recalculation</td><td><code>original_gateway</code> or <code>not_required</code> (COD)</td></tr>
+    <tr><td><code>return</code></td><td>Customer returns items after delivery</td><td>item_amount − forward_shipping − reverse_shipping</td><td><code>original_gateway</code> / <code>bank_transfer</code> / <code>wallet</code></td></tr>
+    <tr><td><code>exchange</code></td><td>Customer exchanges items after delivery</td><td>0 (swap, no money back)</td><td><code>not_required</code></td></tr>
+    <tr><td><code>rto</code></td><td>Admin marks order as "RTO Delivered"</td><td>payable − forward_shipping − rto_shipping × rto_count</td><td><code>original_gateway</code> or <code>not_required</code> (COD)</td></tr>
+  </tbody>
+</table>
+
+<hr>
+
+<!-- ─── 3.5 order_item_actions ─── -->
+<h3>3.5 &nbsp;<code>order_item_actions</code></h3>
+<p>Tracks every post-order customer action on an item: cancellation within 24 h, return after delivery, or exchange after delivery. Each row represents a single action request for a specific quantity of a specific item.</p>
+
+<table>
+  <thead><tr><th>Column</th><th>Type</th><th>Null</th><th>Default</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td class="col-name">id <span class="badge badge-pk">PK</span></td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">auto</td><td></td></tr>
+    <tr><td class="col-name">order_id <span class="badge badge-fk">FK</span></td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">—</td><td>Parent order (denormalised for faster queries)</td></tr>
+    <tr><td class="col-name">order_item_id <span class="badge badge-fk">FK</span></td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">—</td><td>Which order item this action is for</td></tr>
+    <tr><td class="col-name">product_id <span class="badge badge-fk">FK</span></td><td class="col-type">INTEGER</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Product reference (denormalised snapshot)</td></tr>
+    <tr><td class="col-name">action_type</td><td class="col-type">VARCHAR</td><td class="col-null">✗</td><td class="col-default">—</td><td><code>cancel</code> · <code>return</code> · <code>exchange</code></td></tr>
+    <tr><td class="col-name">quantity</td><td class="col-type">INTEGER</td><td class="col-null">✗</td><td class="col-default">1</td><td>Number of units this action applies to</td></tr>
+    <tr><td class="col-name">status</td><td class="col-type">VARCHAR</td><td class="col-null">✗</td><td class="col-default">Requested</td><td>Action lifecycle: <code>Requested</code> → <code>Approved</code> → <code>Completed</code> / <code>Rejected</code> / <code>Cancelled</code></td></tr>
+    <tr><td class="col-name">reason</td><td class="col-type">TEXT</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Reason given by the customer</td></tr>
+    <tr><td class="col-name">item_amount</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✗</td><td class="col-default">0</td><td>unit_price × quantity for this action</td></tr>
+    <tr><td class="col-name">forward_shipping_deduction</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✗</td><td class="col-default">0</td><td>Forward delivery charge deducted from refund (applies to returns)</td></tr>
+    <tr><td class="col-name">reverse_shipping_deduction</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✗</td><td class="col-default">0</td><td>Reverse pickup charge deducted from refund (applies to returns)</td></tr>
+    <tr><td class="col-name">estimated_refund_amount</td><td class="col-type">DECIMAL(10,2)</td><td class="col-null">✗</td><td class="col-default">0</td><td>item_amount − deductions. Shown to customer as an estimate before approval.</td></tr>
+    <tr><td class="col-name">meta</td><td class="col-type">JSONB</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>Flexible data: for exchanges, stores the target product_id/color_id the customer wants. Can also store admin notes.</td></tr>
+    <tr><td class="col-name">requested_by <span class="badge badge-fk">FK</span></td><td class="col-type">INTEGER</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>customer_id of who raised the request</td></tr>
+    <tr><td class="col-name">reviewed_by <span class="badge badge-fk">FK</span></td><td class="col-type">INTEGER</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>admin_id who approved or rejected</td></tr>
+    <tr><td class="col-name">reviewed_at</td><td class="col-type">TIMESTAMP</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>When admin took action</td></tr>
+    <tr><td class="col-name">completed_at</td><td class="col-type">TIMESTAMP</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>When the action reached a terminal state (Completed/Rejected/Cancelled). Used in frontend display.</td></tr>
+    <tr><td class="col-name">shiprocket_return_order_id <span class="badge badge-new">NEW</span></td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>ShipRocket return order ID for the reverse pickup. Stored here — not on orders — because each return/exchange has its own reverse shipment.</td></tr>
+    <tr><td class="col-name">shiprocket_return_awb <span class="badge badge-new">NEW</span></td><td class="col-type">VARCHAR</td><td class="col-null">✓</td><td class="col-default">NULL</td><td>AWB/tracking number for the reverse pickup shipment</td></tr>
+    <tr><td class="col-name">created_at, updated_at</td><td class="col-type">TIMESTAMP</td><td class="col-null">✗</td><td class="col-default">NOW</td><td></td></tr>
+  </tbody>
+</table>
+
+<h4>meta field structure — exchange example</h4>
+<pre>{
+  "exchange_target": {
+    "product_id": 42,
+    "color_id": 7,
+    "notes": "Customer wants the same saree in Maroon instead of Blue"
+  }
+}</pre>
+
+<hr>
+
+<!-- ─── 3.6 customers ─── -->
+<h3>3.6 &nbsp;<code>customers</code></h3>
+<p>Standard customer profile. Three fields were added for COD-fraud blocking.</p>
+<table>
+  <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td class="col-name">id <span class="badge badge-pk">PK</span></td><td class="col-type">INTEGER</td><td>Primary key</td></tr>
+    <tr><td class="col-name">name, email, phone, password</td><td class="col-type">VARCHAR</td><td>Core profile fields. email and phone are UNIQUE.</td></tr>
+    <tr><td class="col-name">wallet_balance</td><td class="col-type">DECIMAL(10,2)</td><td>Current wallet credit. Debited at checkout, credited on refunds when payment_method = wallet.</td></tr>
+    <tr><td class="col-name">referral_code, referred_by_id</td><td class="col-type">VARCHAR / INTEGER</td><td>Referral programme tracking</td></tr>
+    <tr><td class="col-name">is_cod_blocked</td><td class="col-type">BOOLEAN</td><td>Set to true when a COD order returns to seller (RTO). Prevents future COD orders.</td></tr>
+    <tr><td class="col-name">cod_block_reason</td><td class="col-type">TEXT</td><td>Reason shown when COD is blocked at checkout</td></tr>
+    <tr><td class="col-name">blocked_at</td><td class="col-type">TIMESTAMP</td><td>When the block was applied</td></tr>
+  </tbody>
+</table>
+
+<hr>
+
+<!-- ─── 3.7 wallet_transactions ─── -->
+<h3>3.7 &nbsp;<code>wallet_transactions</code></h3>
+<p>Full ledger of wallet credit and debit events for each customer.</p>
+<table>
+  <thead><tr><th>Column</th><th>Type</th><th>Purpose</th></tr></thead>
+  <tbody>
+    <tr><td class="col-name">id <span class="badge badge-pk">PK</span></td><td class="col-type">INTEGER</td><td></td></tr>
+    <tr><td class="col-name">customer_id <span class="badge badge-fk">FK</span></td><td class="col-type">INTEGER</td><td>Owner of the wallet</td></tr>
+    <tr><td class="col-name">amount</td><td class="col-type">DECIMAL(10,2)</td><td>Positive = credit, Negative = debit</td></tr>
+    <tr><td class="col-name">type</td><td class="col-type">VARCHAR</td><td>E.g. ORDER_PAYMENT, REFUND_CREDIT, REFERRAL_BONUS, ADMIN_CREDIT</td></tr>
+    <tr><td class="col-name">status</td><td class="col-type">ENUM</td><td>pending · completed · cancelled</td></tr>
+    <tr><td class="col-name">available_at</td><td class="col-type">TIMESTAMP</td><td>For pending credits that are not spendable until a future date (e.g. referral bonus held for 7 days)</td></tr>
+    <tr><td class="col-name">dedupe_key</td><td class="col-type">VARCHAR UNIQUE</td><td>Prevents duplicate wallet events from network retries (e.g. <code>order_wallet:42</code>)</td></tr>
+    <tr><td class="col-name">meta</td><td class="col-type">JSONB</td><td>Context object: <code>{order_id: 42, reason: "..."}</code></td></tr>
+  </tbody>
+</table>
+
+<!-- ══════════════════════════════════════════════════════════════ S4 FLOWS -->
+<h2 id="sec-flows">4. Data Flows</h2>
+
+<!-- ─── 4.1 Order placement ─── -->
+<h3>4.1 &nbsp;Order placement (Prepaid)</h3>
+<div class="flow">
+  <div class="flow-step"><p><strong>Validate stock</strong> — Lock product rows (<code>SELECT FOR UPDATE</code>), validate all items have enough stock and are active. Return 400 on first failure before any writes.</p></div>
+  <div class="flow-step"><p><strong>Verify payment</strong> — Server-side HMAC-SHA256 check of gateway signature. Amount in paise is cross-checked against the expected total.</p></div>
+  <div class="flow-step"><p><strong>Apply coupon</strong> — Find coupon, check usage limit, calculate discount, increment <code>coupons.usage_count</code>.</p></div>
+  <div class="flow-step"><p><strong>Debit wallet</strong> (if used) — Decrement <code>customers.wallet_balance</code>, create <code>wallet_transactions</code> row.</p></div>
+  <div class="flow-step"><p><strong>Create order</strong> — INSERT into <code>orders</code> with all pricing, snapshot address, status = Pending, status_history = [{Pending}].</p></div>
+  <div class="flow-step"><p><strong>Create order items</strong> — INSERT one row per cart line into <code>order_items</code> with price snapshot and per-item shipping_meta.</p></div>
+  <div class="flow-step"><p><strong>Decrement stock</strong> — Update <code>products.stock_quantity</code> and <code>products.color_stocks[colorId]</code>.</p></div>
+  <div class="flow-step"><p><strong>Create payment record</strong> — INSERT into <code>payments</code> with gateway IDs, amount_paise, status = Paid, verified_at = now.</p></div>
+  <div class="flow-step"><p><strong>COMMIT</strong> — Fire-and-forget: send confirmation email + push to ShipRocket.</p></div>
+</div>
+
+<h4>COD variation</h4>
+<p>Same flow except: no signature verification. COD-block check is done first. The <code>payments</code> row is created with status = <code>Pending</code> (no gateway fields set).</p>
+
+<hr>
+
+<!-- ─── 4.2 Full cancel ─── -->
+<h3>4.2 &nbsp;Full cancellation within 24 h</h3>
+<div class="box box-warn">
+  <strong>Preconditions</strong>
+  Order must be: within 24 hours of creation, not yet shipped, <code>is_modified = false</code>, and in a cancellable status (Pending / Processing / AWB Assigned).
+</div>
+<div class="flow">
+  <div class="flow-step"><p><strong>Check guards</strong> — Fail if <code>is_modified</code> is true, or 24 h window has passed, or order is shipped.</p></div>
+  <div class="flow-step"><p><strong>Update all order items</strong> — Set status = Cancelled, <code>cancelled_quantity = quantity</code> for every item.</p></div>
+  <div class="flow-step"><p><strong>Restore inventory</strong> — Increment stock back for each item.</p></div>
+  <div class="flow-step"><p><strong>Decrement coupon</strong> — If a coupon was applied, decrement <code>coupons.usage_count</code> by 1.</p></div>
+  <div class="flow-step"><p><strong>Update order</strong> — Set status = Cancelled, cancelled_at = now, append to status_history.</p></div>
+  <div class="flow-step"><p><strong>Create OrderRefund</strong> (Prepaid only) — INSERT into <code>order_refunds</code>: refund_type = full_cancel, amount = payable_amount, status = Pending, payment_method = original_gateway. For COD: status = Not Required.</p></div>
+  <div class="flow-step"><p><strong>Update payment record</strong> — Set <code>payments.status = Refunded</code>.</p></div>
+</div>
+
+<hr>
+
+<!-- ─── 4.3 Partial cancel ─── -->
+<h3>4.3 &nbsp;Partial cancellation / quantity decrease within 24 h</h3>
+<div class="box box-warn">
+  <strong>This can only happen once.</strong> After a partial cancel, <code>orders.is_modified</code> is set to <code>true</code>. Any further cancel or update attempt is rejected with a clear error message.
+</div>
+<div class="flow">
+  <div class="flow-step"><p><strong>Check guards</strong> — Fail if <code>is_modified</code> is already true.</p></div>
+  <div class="flow-step"><p><strong>Calculate new subtotal</strong> — Subtract the cancelled item's price × quantity from <code>orders.subtotal_amount</code>.</p></div>
+  <div class="flow-step"><p><strong>Recalculate coupon</strong> — Re-apply the coupon percentage/fixed discount against the new subtotal. If the new subtotal falls below the coupon minimum or the coupon is no longer found, the discount is removed entirely. Cap percentage coupons at max_discount_amount.</p></div>
+  <div class="flow-step"><p><strong>Recalculate total</strong> — <code>newTotal = newSubtotal + fixedCharges − newCouponDiscount − walletUsed</code>. Fixed charges (shipping, fees) do not change.</p></div>
+  <div class="flow-step"><p><strong>Calculate refund</strong> — <code>refundAmount = paidAmount − newTotal</code>.</p></div>
+  <div class="flow-step"><p><strong>Update order item</strong> — Increment <code>cancelled_quantity</code>. Set status = Cancelled or Partially Cancelled depending on remaining units.</p></div>
+  <div class="flow-step"><p><strong>Restore inventory</strong> — Add back the cancelled units to product stock.</p></div>
+  <div class="flow-step"><p><strong>Update order</strong> — Set subtotal_amount, discount_amount, payable_amount to new values. Set <code>is_modified = true</code>, <code>modified_at = now</code>. Append "Partially Cancelled" to status_history.</p></div>
+  <div class="flow-step"><p><strong>Create OrderRefund</strong> (Prepaid only) — INSERT with refund_type = partial_cancel, amount = refundAmount, status = Pending.</p></div>
+</div>
+
+<hr>
+
+<!-- ─── 4.4 Return ─── -->
+<h3>4.4 &nbsp;Return after delivery</h3>
+<div class="box box-warn">
+  <strong>Precondition:</strong> Order must be in Delivered status. Return window is configurable (typically 7 days after delivery).
+</div>
+<div class="flow">
+  <div class="flow-step"><p><strong>Create OrderItemAction</strong> — INSERT with action_type = return, status = Requested. Set <code>order_items.pending_action_quantity += quantity</code>.</p></div>
+  <div class="flow-step"><p><strong>Calculate estimate</strong> — <code>estimatedRefund = itemAmount − forwardShipping − reverseShipping</code>. Shown to customer before they confirm.</p></div>
+  <div class="flow-step"><p><strong>Admin approves</strong> — Update action status = Approved. Arrange reverse pickup via ShipRocket. Store <code>shiprocket_return_order_id</code> and <code>shiprocket_return_awb</code> on the action row.</p></div>
+  <div class="flow-step"><p><strong>Courier picks up</strong> — Admin updates action status = Completed. <code>order_items.returned_quantity += quantity</code>. <code>pending_action_quantity -= quantity</code>. Set <code>completed_at = now</code>.</p></div>
+  <div class="flow-step"><p><strong>Create OrderRefund</strong> — INSERT with refund_type = return, amount = estimated_refund_amount, status = Pending.</p></div>
+  <div class="flow-step"><p><strong>Process refund</strong> — Admin marks refund as Completed, sets gateway_refund_id or bank_details, sets processed_at.</p></div>
+</div>
+
+<hr>
+
+<!-- ─── 4.5 Exchange ─── -->
+<h3>4.5 &nbsp;Exchange after delivery</h3>
+<div class="flow">
+  <div class="flow-step"><p><strong>Create OrderItemAction</strong> — INSERT with action_type = exchange. <code>meta.exchange_target</code> stores the desired replacement product/colour. Set <code>pending_action_quantity += quantity</code>.</p></div>
+  <div class="flow-step"><p><strong>Admin approves</strong> — Arrange reverse pickup (shiprocket_return_awb stored on action row). Simultaneously create a new forward shipment for the replacement item.</p></div>
+  <div class="flow-step"><p><strong>Both shipped</strong> — Update action status when reverse parcel arrives. <code>order_items.exchanged_quantity += quantity</code>. <code>pending_action_quantity -= quantity</code>. <code>completed_at = now</code>.</p></div>
+  <div class="flow-step"><p><strong>Create OrderRefund</strong> — INSERT with refund_type = exchange, amount = 0, status = Not Required (no money changes hands).</p></div>
+</div>
+
+<div class="box box-info">
+  <strong>Why does an exchange create an OrderRefund row with amount = 0?</strong>
+  The <code>order_refunds</code> table is a complete audit log of every financial decision, not just money-out events. A row saying "exchange — Not Required" gives the admin a clear record that this was assessed and intentionally has no monetary component.
+</div>
+
+<hr>
+
+<!-- ─── 4.6 RTO ─── -->
+<h3>4.6 &nbsp;RTO (Return to Origin)</h3>
+<p>This happens when the courier fails to deliver the order to the customer (usually after 3 attempts) and ships it back to the seller.</p>
+<div class="flow">
+  <div class="flow-step"><p><strong>ShipRocket webhook / admin action</strong> — Admin updates order status to "RTO Delivered".</p></div>
+  <div class="flow-step"><p><strong>Calculate RTO refund</strong> — <code>rtoRefund = payableAmount − (forwardCharge + rtoCharge) × rtoCount − redispatchPaid</code>. Values come from <code>orders.selected_courier_data</code>.</p></div>
+  <div class="flow-step"><p><strong>Update order</strong> — Set <code>is_rto = true</code>, <code>rto_count += 1</code>, <code>customer_cod_blocked = true</code> (on order), append to status_history.</p></div>
+  <div class="flow-step"><p><strong>Block customer COD</strong> — Set <code>customers.is_cod_blocked = true</code>. All future COD attempts by this customer (by email + phone match) will be rejected.</p></div>
+  <div class="flow-step"><p><strong>Create OrderRefund</strong> — Prepaid: refund_type = rto, amount = rtoRefund, status = Pending. COD: amount = 0, status = Not Required.</p></div>
+  <div class="flow-step"><p><strong>Optional re-dispatch</strong> — Admin can create a new order from the returned stock with <code>is_redispatched = true</code> and <code>original_order_id</code> pointing back. Customer pays again (or via COD after review).</p></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════ S5 RULES -->
+<h2 id="sec-rules">5. Business Rules</h2>
+
+<table>
+  <thead><tr><th>Rule</th><th>Where enforced</th><th>Detail</th></tr></thead>
+  <tbody>
+    <tr><td><strong>24-hour modification window</strong></td><td>Backend: <code>cancelOrder</code>, <code>cancelOrderItem</code>, <code>OrderItemActionController.create()</code></td><td>Order must be within 24 h of <code>orders.created_at</code>. Check: <code>Date.now() − createdAt ≤ 86400000</code>.</td></tr>
+    <tr><td><strong>One modification per order</strong></td><td>Same controllers (check <code>is_modified</code> first)</td><td>Once an order has been partially cancelled, <code>is_modified = true</code> and all further modification attempts return HTTP 400.</td></tr>
+    <tr><td><strong>COD maximum amount</strong></td><td><code>createOrder</code></td><td>COD is rejected if <code>subtotal &gt; config.codMaxAmount</code>.</td></tr>
+    <tr><td><strong>COD block check</strong></td><td><code>createOrder</code> COD path</td><td>Checks both <code>customers.is_cod_blocked</code> AND <code>orders.customer_cod_blocked</code> by email+phone match. Block is set permanently after any RTO.</td></tr>
+    <tr><td><strong>Coupon recalculation on partial cancel</strong></td><td><code>cancelOrderItem</code>, <code>OrderItemActionController.create()</code> cancel path</td><td>Percentage coupon: re-apply rate to new subtotal, cap at max_discount_amount. Fixed coupon: min(discount_amount, newSubtotal). If coupon is no longer found or inactive: discount_amount = 0.</td></tr>
+    <tr><td><strong>Stock restoration on cancel</strong></td><td>All cancel paths</td><td>Cancelled quantities are added back to <code>products.stock_quantity</code> and <code>color_stocks</code>.</td></tr>
+    <tr><td><strong>No double-action on same units</strong></td><td><code>OrderItemActionController.create()</code></td><td><code>getActionableQuantity = quantity − cancelled − returned − exchanged − pending</code>. Must be ≥ requested quantity, or action is rejected.</td></tr>
+    <tr><td><strong>Return only after delivery</strong></td><td><code>OrderItemActionController.canCancelOrderItems()</code></td><td>Return/exchange actions require <code>order.delivered_at</code> to be set.</td></tr>
+    <tr><td><strong>One exchange per order</strong></td><td>Frontend <code>getEligibleActionItems()</code></td><td>If any item in the order already has an exchange action (even historical), the exchange option is hidden. This is a business rule to prevent gaming.</td></tr>
+  </tbody>
+</table>
+
+<!-- ══════════════════════════════════════════════════════════════ S6 DEPRECATED -->
+<h2 id="sec-deprecated">6. Deprecated Fields</h2>
+
+<p>These columns still exist in the live database and the Sequelize model (so existing code does not break), but new code should write to the correct tables instead.</p>
+
+<div class="box box-warn">
+  <strong>Do not remove these columns from the DB yet.</strong> The frontend currently reads <code>orders.refund_status</code> and <code>orders.refund_note</code> for display. When the frontend is updated to read from <code>order_refunds</code>, these columns can be dropped in a future migration.
+</div>
+
+<table>
+  <thead><tr><th>Table</th><th>Column</th><th>Replaced by</th></tr></thead>
+  <tbody>
+    <tr><td><code>orders</code></td><td><code>payment_gateway</code></td><td><code>payments.payment_gateway</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>gateway_order_id</code></td><td><code>payments.gateway_order_id</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>gateway_payment_id</code></td><td><code>payments.gateway_payment_id</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>gateway_signature</code></td><td><code>payments.gateway_signature</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>gateway_amount_paise</code></td><td><code>payments.amount_paise</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>gateway_currency</code></td><td><code>payments.currency</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>payment_verified_at</code></td><td><code>payments.verified_at</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>payment_gateway_response</code></td><td><code>payments.gateway_response</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>payment_failure_reason</code></td><td><code>payments.failure_reason</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>refund_amount</code></td><td><code>SUM(order_refunds.amount) WHERE order_id = ?</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>refund_status</code></td><td><code>order_refunds.status</code> (latest row)</td></tr>
+    <tr><td><code>orders</code></td><td><code>refund_note</code></td><td><code>order_refunds.note</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>refund_bank_details</code></td><td><code>order_refunds.bank_details</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>refund_payment_reference</code></td><td><code>order_refunds.gateway_refund_id</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>refund_processed_at</code></td><td><code>order_refunds.processed_at</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>refund_processed_by</code></td><td><code>order_refunds.processed_by</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>return_requested_at</code></td><td>Query: <code>MIN(order_item_actions.created_at) WHERE action_type='return'</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>exchange_requested_at</code></td><td>Query: <code>MIN(order_item_actions.created_at) WHERE action_type='exchange'</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>shiprocket_return_order_id</code></td><td><code>order_item_actions.shiprocket_return_order_id</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>shiprocket_exchange_order_id</code></td><td><code>order_item_actions.shiprocket_return_order_id</code> (exchange action)</td></tr>
+    <tr><td><code>orders</code></td><td><code>shiprocket_return_awb</code></td><td><code>order_item_actions.shiprocket_return_awb</code></td></tr>
+    <tr><td><code>orders</code></td><td><code>shiprocket_exchange_awb</code></td><td><code>order_item_actions.shiprocket_return_awb</code> (exchange action)</td></tr>
+  </tbody>
+</table>
+
+<!-- ══════════════════════════════════════════════════════════════ S7 MIGRATION -->
+<h2 id="sec-migration">7. Migration Checklist</h2>
+
+<p>These are the steps needed to fully complete the normalisation. The items marked ✅ are already done. The items marked ⬜ are pending and should be done in order.</p>
+
+<table>
+  <thead><tr><th>#</th><th>Task</th><th>Status</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>Create <code>payments</code> table model + auto-migration</td><td>✅ Done</td><td><code>models/Payment.js</code>, <code>utils/orderTransactions.js</code></td></tr>
+    <tr><td>2</td><td>Create <code>order_refunds</code> table model + auto-migration</td><td>✅ Done</td><td><code>models/OrderRefund.js</code>, <code>utils/orderTransactions.js</code></td></tr>
+    <tr><td>3</td><td>Add <code>shiprocket_return_order_id</code> + <code>shiprocket_return_awb</code> to <code>order_item_actions</code></td><td>✅ Done</td><td>Auto-migrated on next server start</td></tr>
+    <tr><td>4</td><td>Write <code>payments</code> record on every <code>createOrder</code></td><td>✅ Done</td><td>Both Prepaid and COD paths covered</td></tr>
+    <tr><td>5</td><td>Mark deprecated columns in <code>Order.js</code> model with <code>@deprecated</code> comments</td><td>✅ Done</td><td>Fields still in model for backwards compat</td></tr>
+    <tr><td>6</td><td>Write <code>order_refunds</code> record on full cancellation</td><td>⬜ Pending</td><td>Update <code>OrderController.cancelOrder</code></td></tr>
+    <tr><td>7</td><td>Write <code>order_refunds</code> record on partial cancellation</td><td>⬜ Pending</td><td>Update <code>OrderController.cancelOrderItem</code> and <code>OrderItemActionController.create()</code> cancel path</td></tr>
+    <tr><td>8</td><td>Write <code>order_refunds</code> record when return action is Completed</td><td>⬜ Pending</td><td>Update <code>OrderItemActionController.updateAdminStatus()</code></td></tr>
+    <tr><td>9</td><td>Write <code>order_refunds</code> record on RTO Delivered</td><td>⬜ Pending</td><td>Update <code>OrderController.updateOrderStatus()</code></td></tr>
+    <tr><td>10</td><td>Store <code>shiprocket_return_awb</code> on action row instead of on order</td><td>⬜ Pending</td><td>Update ShipRocket return webhook handler</td></tr>
+    <tr><td>11</td><td>Frontend: read refund info from <code>order_refunds</code> via API</td><td>⬜ Pending</td><td>Add <code>/api/orders/:id/refunds</code> endpoint; update <code>OrderConfirmation.jsx</code></td></tr>
+    <tr><td>12</td><td>Admin panel: refund management screen using <code>order_refunds</code></td><td>⬜ Pending</td><td>New admin page for processing refunds</td></tr>
+    <tr><td>13</td><td>DROP deprecated columns from <code>orders</code> table</td><td>⬜ Future</td><td>Only after steps 6–12 are complete and deployed to production</td></tr>
+  </tbody>
+</table>
+
+<div class="box box-red">
+  <strong>Before running step 13 (DROP columns)</strong>
+  Ensure <code>orders.refund_status</code> and <code>orders.refund_note</code> are no longer referenced by any frontend query or API serialiser. Run <code>grep -r "refund_status\|refund_note" frontend/src</code> to verify.
+</div>
+
+<hr>
+<p style="color:#9a7b5e;font-size:0.85rem;text-align:center;margin-top:30px;">Banarasi Kala — Internal Technical Document — June 2026 — v2.0</p>
+
+</body>
+</html>

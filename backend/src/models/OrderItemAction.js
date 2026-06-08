@@ -79,6 +79,21 @@ const OrderItemAction = sequelize.define('OrderItemAction', {
     type: DataTypes.DATE,
     allowNull: true,
   },
+  // Set when action reaches a terminal state (Completed / Rejected / Cancelled)
+  completed_at: {
+    type: DataTypes.DATE,
+    allowNull: true,
+  },
+  // Shiprocket reverse-shipment IDs — stored here (not on orders) because
+  // each return/exchange action has its own independent reverse shipment.
+  shiprocket_return_order_id: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  shiprocket_return_awb: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
 }, {
   tableName: 'order_item_actions',
   schema: 'vns_saree',

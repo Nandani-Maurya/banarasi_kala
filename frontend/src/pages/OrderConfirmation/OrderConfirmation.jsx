@@ -35,6 +35,7 @@ const RatingStars = ({ rating = 0 }) => (
 );
 
 const getBreakdown = (order = {}) => {
+  console.log("Calculating breakdown for order:", order);
   const items = order.OrderItems || [];
   const itemSubtotal = items.reduce((sum, item) => sum + toNumber(item.price) * Math.max(1, toNumber(item.quantity) || 1), 0);
   const subtotal = toNumber(order.subtotal_amount) || itemSubtotal;
@@ -58,9 +59,10 @@ const getBreakdown = (order = {}) => {
 };
 
 const canCancelOrder = (order) => {
+  if (order?.is_modified) return false;
   const rawDate = order?.createdAt || order?.created_at;
   const status = String(order?.status || "").toLowerCase();
-  if (!rawDate || ["cancelled", "seller cancelled", "delivered", "shipped", "out for delivery", "rto delivered"].includes(status) || status.startsWith("rto ")) return false;
+  if (!rawDate || ["cancelled", "seller cancelled", "delivered", "shipped", "out for delivery", "rto delivered", "picked up", "picked_up", "awb assigned", "awb_assigned"].includes(status) || status.startsWith("rto ")) return false;
   const createdAt = new Date(rawDate).getTime();
   return Number.isFinite(createdAt) && Date.now() - createdAt <= 24 * 60 * 60 * 1000;
 };
@@ -68,7 +70,9 @@ const canCancelOrder = (order) => {
 const getCustomerOrderStatusLabel = (status) => {
   const normalized = String(status || "Pending").toLowerCase();
   if (normalized === "seller cancelled") return "Cancelled by seller";
-  if (normalized.includes("cancel")) return normalized.includes("partial") ? "Partially cancelled" : "Cancelled";
+  if (normalized.includes("partial") && normalized.includes("cancel")) return "Order updated";
+  if (normalized === "cancel requested") return "Cancellation pending";
+  if (normalized.includes("cancel")) return "Cancelled";
   if (normalized === "rto delivered") return "Order returned to seller";
   if (normalized === "rto initiated" || normalized === "rto in transit") return "Returning to seller";
   if (normalized.includes("return completed")) return "Return completed";
@@ -242,15 +246,16 @@ const buildOrderTimeline = (order) => {
   const status = String(order?.status || "Pending").toLowerCase();
 
   const forwardSteps = [
-    { title: "Order placed", detail: `${formatDate(order?.createdAt)} - Confirmation sent`, icon: "lucide:check-circle-2", matches: ["pending", "order placed", "processing"] },
-    { title: "Picked up", detail: "Courier pickup scheduled or completed", icon: "lucide:package-check", matches: ["picked up", "pickup", "awb assigned"] },
+    { title: "Order placed", detail: formatDate(order?.createdAt), icon: "lucide:check-circle-2", matches: ["pending", "order placed"] },
+    { title: "Processing", detail: "Seller is preparing your order", icon: "lucide:package-2", matches: ["processing"] },
+    { title: "Picked up", detail: "Courier has collected your order", icon: "lucide:package-check", matches: ["picked up", "picked_up", "pickup", "awb assigned", "awb_assigned"] },
     { title: "Shipped", detail: order?.shiprocket_awb ? `AWB ${order.shiprocket_awb}` : "Tracking appears after dispatch", icon: "lucide:truck", matches: ["shipped", "in transit"] },
     { title: "Out for delivery", detail: "Courier will attempt delivery at your address", icon: "lucide:navigation", matches: ["out for delivery"] },
     { title: "Delivered", detail: order?.delivered_at ? formatDate(order.delivered_at) : "Final delivery scan pending", icon: "lucide:badge-check", matches: ["delivered"] },
   ];
 
   const rtoSteps = [
-    ...forwardSteps.slice(0, 4),
+    ...forwardSteps.slice(0, 5),
     { title: "Delivery attempt failed", detail: "Courier could not complete delivery", icon: "lucide:triangle-alert", matches: ["undelivered"] },
     { title: "RTO initiated", detail: "Shipment is returning to seller", icon: "lucide:undo-2", matches: ["rto initiated"] },
     { title: "RTO in transit", detail: "Shipment is on the way back", icon: "lucide:truck", matches: ["rto in transit"] },
@@ -258,7 +263,7 @@ const buildOrderTimeline = (order) => {
   ];
 
   const cancelledSteps = [
-    { title: "Order placed", detail: `${formatDate(order?.createdAt)} - Confirmation sent`, icon: "lucide:check-circle-2", matches: ["order placed", "pending", "processing", "cancelled", "seller cancelled"] },
+    { title: "Order placed", detail: formatDate(order?.createdAt), icon: "lucide:check-circle-2", matches: ["order placed", "pending", "cancelled", "seller cancelled"] },
     { title: status === "seller cancelled" ? "Cancelled by seller" : "Cancelled", detail: "This order has been cancelled", icon: "lucide:x-circle", matches: ["cancelled", "seller cancelled"] },
   ];
 
@@ -278,8 +283,15 @@ const buildOrderTimeline = (order) => {
 
   if (status.includes("exchange")) return buildSteps(status, exchangeSteps);
   if (status.includes("return")) return buildSteps(status, returnSteps);
-  if (status.includes("cancel")) return buildSteps(status, cancelledSteps);
-  if (status.includes("rto") || status === "undelivered" || status === "seller cancelled") return buildSteps(status, rtoSteps);
+  if (status === "cancelled" || status === "seller cancelled") return buildSteps(status, cancelledSteps);
+  if (status.includes("rto") || status === "undelivered") return buildSteps(status, rtoSteps);
+  if (status.includes("partial") && status.includes("cancel")) {
+    return [
+      { title: "Order placed", detail: formatDate(order?.createdAt), icon: "lucide:check-circle-2", state: "done" },
+      { title: "Order updated", detail: `Some items cancelled${order?.modified_at ? ` · ${formatDate(order.modified_at)}` : ""}`, icon: "lucide:file-edit", state: "current" },
+      { title: "Remaining items in transit", detail: "The rest of your order will be shipped as scheduled", icon: "lucide:truck", state: "pending" },
+    ];
+  }
   return buildSteps(status, forwardSteps);
 };
 
@@ -313,6 +325,26 @@ const getActionConfig = (type) => {
   if (type === "return") return { title: "Request Return", label: "Return reason", reasons: RETURN_REASONS, button: "Submit Return Request", tone: "primary" };
   if (type === "exchange") return { title: "Request Exchange", label: "Exchange reason", reasons: EXCHANGE_REASONS, button: "Submit Exchange Request", tone: "primary" };
   return { title: "Cancel Products", label: "Cancellation reason", reasons: CANCEL_REASONS, button: "Submit Cancellation", tone: "danger" };
+};
+
+const OrderActivityPanel = ({ history }) => {
+  if (!Array.isArray(history) || history.length <= 1) return null;
+  return (
+    <section className="order-panel">
+      <div className="order-panel-head">
+        <h2>Order activity</h2>
+      </div>
+      <ol className="order-activity-list">
+        {[...history].reverse().map((entry, i) => (
+          <li key={i} className="order-activity-entry">
+            <span className="order-activity-time">{formatDate(entry.timestamp)}</span>
+            <span className="order-activity-label">{getCustomerOrderStatusLabel(entry.status)}</span>
+            {entry.note && <small className="order-activity-note">{entry.note}</small>}
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
 };
 
 const SkLine = ({ w, h = 12, mb = 0 }) => (
@@ -472,7 +504,7 @@ export default function OrderConfirmation() {
     const eligibleItems = getEligibleActionItems(order, type);
     const selected = eligibleItems.reduce((map, item, index) => ({
       ...map,
-      [item.id]: { checked: index === 0 },
+      [item.id]: { checked: index === 0, quantity: getActionableQty(item) },
     }), {});
     setCancelModal({
       isOpen: true,
@@ -557,7 +589,7 @@ export default function OrderConfirmation() {
 
   const selectedActionItems = useMemo(() => Object.entries(cancelModal.selected || {})
     .filter(([, value]) => value.checked)
-    .map(([id]) => ({ orderItemId: Number(id) })), [cancelModal.selected]);
+    .map(([id, value]) => ({ orderItemId: Number(id), quantity: value.quantity || null })), [cancelModal.selected]);
 
   useEffect(() => {
     let cancelled = false;
@@ -662,7 +694,7 @@ export default function OrderConfirmation() {
         <div>
           <p>Order confirmed</p>
           <h1>Order {orderNumber}</h1>
-          <span>Placed on {formatDate(order.createdAt)}. A confirmation email has been sent to {order.customer_email}.</span>
+          <span>Placed on {formatDate(order.createdAt)}</span>
         </div>
       </section>
 
@@ -676,8 +708,13 @@ export default function OrderConfirmation() {
             <div className="confirmation-timeline">
               {timeline.map((step, index) => (
                 <div key={`${step.title}-${index}`} className={`confirmation-step is-${step.state || "pending"}`}>
-                  <span className="confirmation-step-icon"><Icon icon={step.icon} /></span>
-                  <div>
+                  <div className="confirmation-step-track">
+                    <span className="confirmation-step-icon">
+                      {step.state === "done" ? <Icon icon="lucide:check" /> : <Icon icon={step.icon} />}
+                    </span>
+                    {index < timeline.length - 1 && <div className="confirmation-step-line" />}
+                  </div>
+                  <div className="confirmation-step-body">
                     <strong>{step.title}</strong>
                     <p>{step.detail}</p>
                   </div>
@@ -691,6 +728,8 @@ export default function OrderConfirmation() {
               </div>
             )}
           </section>
+
+          <OrderActivityPanel history={order.status_history} />
 
           <section className="order-panel">
             <div className="order-panel-head">
@@ -738,7 +777,9 @@ export default function OrderConfirmation() {
                           <strong>{action.status || "Initiated"}</strong>
                           <small>
                             Qty {action.quantity || 1}
-                            {action.created_at ? ` - ${formatDate(action.created_at)}` : ""}
+                            {action.completed_at
+                              ? ` · Completed ${formatDate(action.completed_at)}`
+                              : action.created_at ? ` · ${formatDate(action.created_at)}` : ""}
                           </small>
                         </div>
                       ))}
@@ -774,6 +815,27 @@ export default function OrderConfirmation() {
               <span>{order.payment_method || "Prepaid"}</span>
               <span>{order.payment_status || "Paid"}</span>
             </div>
+            {(() => {
+              const refundStatus = String(order.refund_status || "").toLowerCase();
+              const refundAmt = toNumber(order.refund_amount);
+              const isPartial = String(order.status || "").toLowerCase().includes("partial");
+              if (!refundStatus.includes("pending") && !refundStatus.includes("refund")) return null;
+              return (
+                <div className="refund-notice">
+                  <Icon icon="lucide:refresh-ccw" />
+                  <div>
+                    <strong>{isPartial ? "Partial refund pending" : "Refund pending"}</strong>
+                    <p>
+                      {order.refund_note || (
+                        refundAmt > 0
+                          ? `${formatPrice(refundAmt)} will be refunded to your original payment method.`
+                          : "Refund will be processed shortly."
+                      )}
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
           </section>
 
           <section className="order-panel">
@@ -828,12 +890,30 @@ export default function OrderConfirmation() {
             </section>
           )}
 
+          {order.is_modified && !["cancelled", "seller cancelled"].includes(String(order.status || "").toLowerCase()) && (
+            <div className="order-modified-notice">
+              <Icon icon="lucide:lock" />
+              <p>This order has been updated. No further changes are possible.</p>
+            </div>
+          )}
           {Object.values(orderActions).some(Boolean) && (
             <div className="order-action-list order-action-list-standalone">
               {orderActions.canCancel && (
-                <button className="cancel-order-btn" type="button" onClick={() => openActionModal("cancel")}>
-                  Cancel products
-                </button>
+                <>
+                  <button className="cancel-order-btn" type="button" onClick={() => openActionModal("cancel")}>
+                    Cancel products
+                  </button>
+                  {(() => {
+                    const rawDate = order.createdAt || order.created_at;
+                    if (!rawDate) return null;
+                    const remaining = 24 * 60 * 60 * 1000 - (Date.now() - new Date(rawDate).getTime());
+                    if (remaining <= 0) return null;
+                    const hrs = Math.floor(remaining / (1000 * 60 * 60));
+                    const mins = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+                    const label = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+                    return <p className="cancel-window-info"><Icon icon="lucide:clock" /> {label} left to cancel</p>;
+                  })()}
+                </>
               )}
               {orderActions.canReturnExchange && (
                 <button className="order-secondary-btn" type="button" onClick={() => openActionModal("return")}>
@@ -941,7 +1021,7 @@ export default function OrderConfirmation() {
             </button>
             <div className="cancel-modal-header">
               <h3>{getActionConfig(cancelModal.type).title}</h3>
-              <p>Select product for <strong>{cancelModal.itemName}</strong>. Full quantity of each selected product will be processed.</p>
+              <p>{cancelModal.type === "cancel" ? <>Select products and adjust quantities to cancel for <strong>{cancelModal.itemName}</strong>.</> : <>Select product for <strong>{cancelModal.itemName}</strong>.</>}</p>
             </div>
             
             <form onSubmit={handleModalSubmit} className="cancel-modal-form">
@@ -955,7 +1035,7 @@ export default function OrderConfirmation() {
                       setCancelModal((current) => ({
                         ...current,
                         type: "return",
-                        selected: eligible.reduce((map, item, index) => ({ ...map, [item.id]: { checked: index === 0 } }), {}),
+                        selected: eligible.reduce((map, item, index) => ({ ...map, [item.id]: { checked: index === 0, quantity: getActionableQty(item) } }), {}),
                       }));
                       setCancelForm({ reason: RETURN_REASONS[0], comments: "" });
                     }}
@@ -971,7 +1051,7 @@ export default function OrderConfirmation() {
                         setCancelModal((current) => ({
                           ...current,
                           type: "exchange",
-                          selected: eligible.reduce((map, item, index) => ({ ...map, [item.id]: { checked: index === 0 } }), {}),
+                          selected: eligible.reduce((map, item, index) => ({ ...map, [item.id]: { checked: index === 0, quantity: getActionableQty(item) } }), {}),
                         }));
                         setCancelForm({ reason: EXCHANGE_REASONS[0], comments: "" });
                       }}
@@ -983,27 +1063,76 @@ export default function OrderConfirmation() {
               )}
 
               <div className="action-item-picker">
+                {cancelModal.type === "cancel" && (() => {
+                  const eligibleItems = getEligibleActionItems(order, "cancel");
+                  if (eligibleItems.length <= 1) return null;
+                  const totalQty = eligibleItems.reduce((sum, it) => sum + getActionableQty(it), 0);
+                  const allSelected = eligibleItems.every((it) => cancelModal.selected?.[it.id]?.checked);
+                  return (
+                    <div className="action-select-all-row">
+                      <button
+                        type="button"
+                        className="action-select-all-btn"
+                        onClick={() => {
+                          const next = !allSelected;
+                          setCancelModal((current) => ({
+                            ...current,
+                            selected: eligibleItems.reduce((map, it) => ({
+                              ...map,
+                              [it.id]: { checked: next, quantity: getActionableQty(it) },
+                            }), {}),
+                          }));
+                        }}
+                      >
+                        {allSelected ? "Deselect all" : `Select all · ${totalQty} unit${totalQty !== 1 ? "s" : ""}`}
+                      </button>
+                    </div>
+                  );
+                })()}
                 {getEligibleActionItems(order, cancelModal.type).map((item) => {
-                  const selected = cancelModal.selected?.[item.id] || { checked: false };
+                  const sel = cancelModal.selected?.[item.id] || { checked: false, quantity: getActionableQty(item) };
                   const maxQty = getActionableQty(item);
                   return (
-                    <label className="action-item-row" key={item.id}>
-                      <input
-                        type="checkbox"
-                        checked={Boolean(selected.checked)}
-                        onChange={(event) => setCancelModal((current) => ({
-                          ...current,
-                          selected: {
-                            ...current.selected,
-                            [item.id]: { ...selected, checked: event.target.checked },
-                          },
-                        }))}
-                      />
-                      <span className="action-item-info">
-                        <strong>{item.product_name}</strong>
-                        <small>{getItemColor(item)} - Full qty {maxQty}</small>
-                      </span>
-                    </label>
+                    <div className={`action-item-row${sel.checked ? " is-selected" : ""}`} key={item.id}>
+                      <label className="action-item-check-wrap">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(sel.checked)}
+                          onChange={(event) => setCancelModal((current) => ({
+                            ...current,
+                            selected: {
+                              ...current.selected,
+                              [item.id]: { ...sel, checked: event.target.checked },
+                            },
+                          }))}
+                        />
+                        <span className="action-item-info">
+                          <strong>{item.product_name}</strong>
+                          <small>{getItemColor(item)}{cancelModal.type !== "cancel" && ` · Qty ${maxQty}`}</small>
+                        </span>
+                      </label>
+                      {cancelModal.type === "cancel" && sel.checked && maxQty > 1 && (
+                        <div className="action-qty-stepper">
+                          <button
+                            type="button"
+                            disabled={sel.quantity <= 1}
+                            onClick={() => setCancelModal((current) => ({
+                              ...current,
+                              selected: { ...current.selected, [item.id]: { ...sel, quantity: Math.max(1, sel.quantity - 1) } },
+                            }))}
+                          >−</button>
+                          <span>{sel.quantity} / {maxQty}</span>
+                          <button
+                            type="button"
+                            disabled={sel.quantity >= maxQty}
+                            onClick={() => setCancelModal((current) => ({
+                              ...current,
+                              selected: { ...current.selected, [item.id]: { ...sel, quantity: Math.min(maxQty, sel.quantity + 1) } },
+                            }))}
+                          >+</button>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>

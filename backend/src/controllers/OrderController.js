@@ -1,5 +1,7 @@
 const Order = require('../models/Order');
 const OrderItem = require('../models/OrderItem');
+const Payment = require('../models/Payment');
+const OrderRefund = require('../models/OrderRefund');
 const Product = require('../models/Product');
 const Color = require('../models/Color');
 const Customer = require('../models/Customer');
@@ -16,15 +18,18 @@ const { refundPayment: razorpayRefund } = require('../services/RazorpayService')
 const { config } = require('../config/env');
 const { Op } = require("sequelize");
 const { AppError } = require('../utils/http');
-const { formatOrderNumber, formatProductCode, formatVariantItemCode } = require('../utils/codes');
+const { formatOrderNumber, formatProductCode } = require('../utils/codes');
 const {
   ORDER_LIFECYCLE_COLUMNS,
   COD_BLOCK_MESSAGE,
   ensureOrderLifecycleColumns,
   isCodBlockedForContact,
+  blockCustomerCodForOrder,
+  calculateRtoRefundAmount,
 } = require('../utils/orderLifecycle');
 const { ensureFeedbackColumns } = require('../utils/feedbackSchema');
-const { ensureOrderItemActionSchema, getActionableQuantity } = require('../utils/orderItemActions');
+const { ensureOrderItemActionSchema, getActionableQuantity, appendOrderStatusHistory } = require('../utils/orderItemActions');
+const { ensureOrderTransactionTables, REFUND_TYPE, REFUND_STATUS, REFUND_PAYMENT_METHOD } = require('../utils/orderTransactions');
 
 const sortProductImages = (images = []) => [...images].sort((a, b) => {
   const left = Number.isFinite(Number(a.display_order)) ? Number(a.display_order) : 999;
@@ -87,6 +92,18 @@ const serializeOrder = (order, feedbackRows = [], actionRows = []) => {
     actions: actionsByItem.get(String(item.id)) || [],
     feedback: feedbackByItem.get(`${json.id}:${item.id}:${item.product_id}`) || null,
   }));
+  // Expose refunds array and flatten the latest one to top-level for frontend compat
+  const refunds = (json.Refunds || []).slice().sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  json.refunds = refunds;
+  const latestRefund = refunds[0] || null;
+  if (latestRefund) {
+    json.refund_status = latestRefund.status;
+    json.refund_amount = latestRefund.amount;
+    json.refund_note = latestRefund.note;
+    json.refund_bank_details = latestRefund.bank_details;
+    json.refund_payment_reference = latestRefund.gateway_refund_id;
+    json.refund_processed_at = latestRefund.processed_at;
+  }
   return json;
 };
 
@@ -95,25 +112,13 @@ let orderColumnCache = null;
 
 const REQUIRED_ORDER_COLUMNS = {
   platform_fee: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
-  cod_fee: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
-  payment_gateway: { type: DataTypes.STRING, allowNull: true },
-  gateway_order_id: { type: DataTypes.STRING, allowNull: true },
-  gateway_payment_id: { type: DataTypes.STRING, allowNull: true },
-  gateway_signature: { type: DataTypes.TEXT, allowNull: true },
-  gateway_amount_paise: { type: DataTypes.INTEGER, allowNull: true },
-  gateway_currency: { type: DataTypes.STRING, allowNull: true },
-  payment_verified_at: { type: DataTypes.DATE, allowNull: true },
-  payment_gateway_response: { type: DataTypes.JSONB, allowNull: true },
-  payment_failure_reason: { type: DataTypes.TEXT, allowNull: true },
-  refund_bank_details: { type: DataTypes.JSONB, allowNull: true },
-  refund_payment_reference: { type: DataTypes.STRING, allowNull: true },
-  refund_processed_at: { type: DataTypes.DATE, allowNull: true },
-  refund_processed_by: { type: DataTypes.INTEGER, allowNull: true },
+  cod_fee:      { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
   ...ORDER_LIFECYCLE_COLUMNS,
 };
 
 const ensureOrderAccountingColumns = async () => {
   await ensureOrderLifecycleColumns();
+  await ensureOrderTransactionTables();
   const queryInterface = sequelize.getQueryInterface();
   const table = { tableName: 'orders', schema: config.dbSchema };
   if (orderAccountingColumnsReady && orderColumnCache) return orderColumnCache;
@@ -265,8 +270,9 @@ class OrderController {
     const t = await sequelize.transaction();
     try {
       await ensureOrderLifecycleColumns();
-      const { 
-        customer_name, customer_email, address, city, state, pincode, phone, 
+      await ensureOrderTransactionTables();
+      const {
+        customer_name, customer_email, address, city, state, pincode, phone,
         subtotal_amount, shipping_charge = 0, shipping_discount_reason = null,
         selected_courier_data = null, items, coupon_code, wallet_amount = 0,
         payment_method = 'Prepaid', payment_status = 'Paid',
@@ -282,10 +288,13 @@ class OrderController {
 
       // Idempotency: prevent duplicate orders from network retries
       if (gateway_payment_id) {
-        const existing = await Order.findOne({ where: { gateway_payment_id }, transaction: t });
-        if (existing) {
-          await t.rollback();
-          return res.status(200).json({ orderId: existing.id, order_number: existing.order_number, duplicate: true });
+        const existingPayment = await Payment.findOne({ where: { gateway_payment_id }, transaction: t });
+        if (existingPayment) {
+          const existingOrder = await Order.findByPk(existingPayment.order_id, { transaction: t });
+          if (existingOrder) {
+            await t.rollback();
+            return res.status(200).json({ orderId: existingOrder.id, order_number: existingOrder.order_number, duplicate: true });
+          }
         }
       }
 
@@ -375,7 +384,6 @@ class OrderController {
         ? String(payment_gateway || 'razorpay').trim().toLowerCase()
         : null;
       let paymentVerifiedAt = null;
-      let paymentFailureReason = null;
 
       if (normalizedPaymentMethod === 'COD' && itemSubtotal > config.codMaxAmount) {
         await t.rollback();
@@ -499,25 +507,13 @@ class OrderController {
         selected_courier_data,
         payment_method: normalizedPaymentMethod,
         payment_status: normalizedPaymentStatus,
-        payment_gateway: normalizedGateway,
-        gateway_order_id: normalizedPaymentMethod === 'Prepaid' ? gateway_order_id : null,
-        gateway_payment_id: normalizedPaymentMethod === 'Prepaid' ? gateway_payment_id : null,
-        gateway_signature: normalizedPaymentMethod === 'Prepaid' ? gateway_signature : null,
-        gateway_amount_paise: normalizedPaymentMethod === 'Prepaid' ? expectedGatewayAmountPaise : null,
-        gateway_currency: normalizedPaymentMethod === 'Prepaid' ? String(gateway_currency || 'INR').toUpperCase() : null,
-        payment_verified_at: paymentVerifiedAt,
-        payment_gateway_response: normalizedPaymentMethod === 'Prepaid' ? payment_gateway_response : null,
-        payment_failure_reason: paymentFailureReason,
         is_rto: false,
         rto_count: 0,
         is_redispatched: false,
         redispatch_count: 0,
         original_order_id: null,
         redispatch_payment_amount: 0,
-        customer_cod_blocked: false,
-        cod_blocked_at: null,
-        cod_block_reason: null,
-        refund_amount: 0,
+        status_history: [{ status: 'Pending', timestamp: new Date().toISOString(), actor: 'customer', note: null }],
       }, orderColumns);
 
       const order = await Order.create(orderPayload, {
@@ -562,6 +558,24 @@ class OrderController {
           { where: { id: customer.id }, transaction: t },
         );
       }
+
+      // Write a canonical Payment record so payment data lives in its own table.
+      // The legacy gateway fields on the orders table are kept for backwards
+      // compatibility but this is the authoritative source going forward.
+      await Payment.create({
+        order_id: order.id,
+        payment_method: normalizedPaymentMethod,
+        payment_gateway: normalizedGateway,
+        gateway_order_id: normalizedPaymentMethod === 'Prepaid' ? gateway_order_id : null,
+        gateway_payment_id: normalizedPaymentMethod === 'Prepaid' ? gateway_payment_id : null,
+        gateway_signature: normalizedPaymentMethod === 'Prepaid' ? gateway_signature : null,
+        amount: roundMoney(final_total),
+        amount_paise: normalizedPaymentMethod === 'Prepaid' ? expectedGatewayAmountPaise : null,
+        currency: String(gateway_currency || 'INR').toUpperCase(),
+        status: normalizedPaymentMethod === 'COD' ? 'Pending' : 'Paid',
+        gateway_response: normalizedPaymentMethod === 'Prepaid' ? payment_gateway_response : null,
+        verified_at: paymentVerifiedAt,
+      }, { transaction: t });
 
       await t.commit();
 
@@ -631,14 +645,17 @@ class OrderController {
       }
       const orders = await Order.findAll({
         where,
-        include: [{
-          model: OrderItem,
-          include: [
-            { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
-            { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
-            { model: OrderItemAction },
-          ],
-        }],
+        include: [
+          {
+            model: OrderItem,
+            include: [
+              { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
+              { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
+              { model: OrderItemAction },
+            ],
+          },
+          { model: OrderRefund, as: 'Refunds' },
+        ],
         order: [['createdAt', 'DESC']],
       });
       res.status(200).json(orders.map((order) => serializeOrder(order)));
@@ -682,8 +699,21 @@ class OrderController {
         return res.status(400).json({ message: 'Please enter the bank name.' });
       }
 
-      await order.update({
-        refund_bank_details: {
+      let refund = await OrderRefund.findOne({
+        where: { order_id: order.id },
+        order: [['created_at', 'DESC']],
+      });
+      if (!refund) {
+        refund = await OrderRefund.create({
+          order_id: order.id,
+          refund_type: REFUND_TYPE.RETURN,
+          amount: 0,
+          status: REFUND_STATUS.PENDING,
+          payment_method: REFUND_PAYMENT_METHOD.BANK_TRANSFER,
+        });
+      }
+      await refund.update({
+        bank_details: {
           account_holder_name: accountHolderName,
           account_number_last4: accountNumber.slice(-4),
           account_number: accountNumber,
@@ -692,7 +722,8 @@ class OrderController {
           branch_name: branchName || null,
           updated_at: new Date().toISOString(),
         },
-        refund_status: order.refund_status || 'Bank Details Submitted',
+        payment_method: REFUND_PAYMENT_METHOD.BANK_TRANSFER,
+        status: refund.status === REFUND_STATUS.NOT_REQUIRED ? refund.status : REFUND_STATUS.PENDING,
       });
 
       return res.status(200).json({ message: 'Bank details saved for refund.' });
@@ -711,19 +742,24 @@ class OrderController {
       const refundStatus = String(req.body.refund_status || '').trim();
       if (!refundStatus) return res.status(400).json({ message: 'refund_status is required' });
 
-      const updatePayload = {
-        refund_status: refundStatus,
-        refund_note: req.body.refund_note || order.refund_note,
-        refund_payment_reference: req.body.refund_payment_reference || order.refund_payment_reference,
-      };
+      const refund = await OrderRefund.findOne({
+        where: { order_id: order.id },
+        order: [['created_at', 'DESC']],
+      });
+      if (!refund) return res.status(404).json({ message: 'No refund record found for this order.' });
 
-      if (String(refundStatus).toLowerCase().includes('paid') || String(refundStatus).toLowerCase().includes('processed')) {
-        updatePayload.refund_processed_at = new Date();
-        updatePayload.refund_processed_by = req.user?.id || null;
-      }
+      const isCompleted = String(refundStatus).toLowerCase().includes('paid') || String(refundStatus).toLowerCase().includes('processed') || String(refundStatus).toLowerCase().includes('completed');
+      await refund.update({
+        status: refundStatus,
+        note: req.body.refund_note || refund.note,
+        gateway_refund_id: req.body.refund_payment_reference || refund.gateway_refund_id,
+        ...(isCompleted ? { processed_at: new Date(), processed_by: req.user?.id || null } : {}),
+      });
 
-      await order.update(updatePayload);
-      return res.status(200).json({ message: 'Refund status updated.', order: serializeOrder(order) });
+      const updatedOrder = await Order.findByPk(order.id, {
+        include: [{ model: OrderRefund, as: 'Refunds' }],
+      });
+      return res.status(200).json({ message: 'Refund status updated.', order: serializeOrder(updatedOrder) });
     } catch (error) {
       console.error('[Order] updateRefundStatus error:', error.message);
       return res.status(500).json({ message: 'Unable to update refund status right now.' });
@@ -737,14 +773,17 @@ class OrderController {
       const { email } = req.params;
       const orders = await Order.findAll({
         where: { customer_email: email },
-        include: [{
-          model: OrderItem,
-          include: [
-            { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
-            { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
-            { model: OrderItemAction },
-          ],
-        }],
+        include: [
+          {
+            model: OrderItem,
+            include: [
+              { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
+              { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
+              { model: OrderItemAction },
+            ],
+          },
+          { model: OrderRefund, as: 'Refunds' },
+        ],
         order: [['createdAt', 'DESC']],
       });
       res.status(200).json(orders.map(serializeOrder));
@@ -809,14 +848,17 @@ class OrderController {
             { customer_id: null, customer_email: req.user.email },
           ],
         },
-        include: [{
-          model: OrderItem,
-          include: [
-            { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
-            { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
-            { model: OrderItemAction },
-          ],
-        }],
+        include: [
+          {
+            model: OrderItem,
+            include: [
+              { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
+              { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
+              { model: OrderItemAction },
+            ],
+          },
+          { model: OrderRefund, as: 'Refunds' },
+        ],
         order: [['createdAt', 'DESC']],
         limit: pageSize,
         offset,
@@ -853,14 +895,17 @@ class OrderController {
             { customer_id: null, customer_email: req.user.email },
           ],
         },
-        include: [{
-          model: OrderItem,
-          include: [
-            { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
-            { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
-            { model: OrderItemAction },
-          ],
-        }],
+        include: [
+          {
+            model: OrderItem,
+            include: [
+              { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
+              { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
+              { model: OrderItemAction },
+            ],
+          },
+          { model: OrderRefund, as: 'Refunds' },
+        ],
       });
 
       if (!order) return res.status(404).json({ message: 'Order not found' });
@@ -898,6 +943,11 @@ class OrderController {
       if (['cancelled', 'delivered'].includes(currentStatus)) {
         await t.rollback();
         return res.status(400).json({ message: `Order is already ${order.status}.` });
+      }
+
+      if (order.is_modified) {
+        await t.rollback();
+        return res.status(400).json({ message: 'This order has already been modified and cannot be cancelled.' });
       }
 
       const createdAt = new Date(order.createdAt);
@@ -967,17 +1017,25 @@ class OrderController {
         refundNote += ` | Reason: ${reason.trim()}`;
       }
 
+      const isCod = paymentMethod.toUpperCase() === 'COD';
       const columns = await ensureOrderAccountingColumns();
       const updatePayload = keepExistingColumns({
         status: 'Cancelled',
         cancelled_at: new Date(),
-        refund_status: paymentMethod.toUpperCase() === 'COD' ? 'Not Required' : 'Refund Pending',
-        refund_note: refundNote,
-        refund_amount: paymentMethod.toUpperCase() === 'COD' ? 0 : paidAmount,
-        payment_status: paymentMethod.toUpperCase() === 'COD' ? 'Cancelled' : 'Refund Pending',
+        payment_status: isCod ? 'Cancelled' : 'Refund Pending',
+        status_history: appendOrderStatusHistory(order, 'Cancelled', 'customer', reason?.trim() || null),
       }, columns);
 
       await order.update(updatePayload, { transaction: t });
+
+      await OrderRefund.create({
+        order_id: order.id,
+        refund_type: REFUND_TYPE.FULL_CANCEL,
+        amount: isCod ? 0 : paidAmount,
+        status: isCod ? REFUND_STATUS.NOT_REQUIRED : REFUND_STATUS.PENDING,
+        payment_method: isCod ? REFUND_PAYMENT_METHOD.NOT_REQUIRED : REFUND_PAYMENT_METHOD.ORIGINAL_GATEWAY,
+        note: refundNote,
+      }, { transaction: t });
 
       // Refund wallet amount if customer paid with wallet
       const walletRefund = Number(order.wallet_amount || 0);
@@ -1000,10 +1058,14 @@ class OrderController {
       await t.commit();
 
       // Initiate Razorpay refund for prepaid orders (fire & forget — wallet credit already given)
-      if (paymentMethod.toUpperCase() !== 'COD' && order.gateway_payment_id) {
-        razorpayRefund(order.gateway_payment_id, paidAmount, {
-          reason: 'Customer cancellation',
-          orderId: String(order.id),
+      if (paymentMethod.toUpperCase() !== 'COD') {
+        Payment.findOne({ where: { order_id: order.id, status: 'Paid' } }).then((payment) => {
+          if (payment?.gateway_payment_id) {
+            return razorpayRefund(payment.gateway_payment_id, paidAmount, {
+              reason: 'Customer cancellation',
+              orderId: String(order.id),
+            });
+          }
         }).catch((err) => {
           console.error(`[Razorpay] Refund failed for order #${order.id}:`, err?.message || err);
         });
@@ -1014,13 +1076,16 @@ class OrderController {
       });
 
       const updatedOrder = await Order.findByPk(id, {
-        include: [{
-          model: OrderItem,
-          include: [
-            { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
-            { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
-          ],
-        }],
+        include: [
+          {
+            model: OrderItem,
+            include: [
+              { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
+              { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
+            ],
+          },
+          { model: OrderRefund, as: 'Refunds' },
+        ],
       });
 
       return res.status(200).json({
@@ -1060,6 +1125,11 @@ class OrderController {
       if (['cancelled', 'delivered'].includes(currentStatus)) {
         await t.rollback();
         return res.status(400).json({ message: `Order is already ${order.status}.` });
+      }
+
+      if (order.is_modified) {
+        await t.rollback();
+        return res.status(400).json({ message: 'This order has already been modified and cannot be changed again.' });
       }
 
       const createdAt = new Date(order.createdAt);
@@ -1135,18 +1205,26 @@ class OrderController {
           refundNote += ` | Reason: ${reason.trim()}`;
         }
 
+        const isCodFull = paymentMethod.toUpperCase() === 'COD';
         const columns = await ensureOrderAccountingColumns();
         const updatePayload = keepExistingColumns({
           status: 'Cancelled',
           cancelled_at: new Date(),
-          refund_status: paymentMethod.toUpperCase() === 'COD' ? 'Not Required' : 'Refund Pending',
-          refund_note: refundNote,
-          refund_amount: paymentMethod.toUpperCase() === 'COD' ? 0 : paidAmount,
-          payment_status: paymentMethod.toUpperCase() === 'COD' ? 'Cancelled' : 'Refund Pending',
+          payment_status: isCodFull ? 'Cancelled' : 'Refund Pending',
+          status_history: appendOrderStatusHistory(order, 'Cancelled', 'customer', `Item cancelled: ${item.product_name}`),
         }, columns);
 
         await order.update(updatePayload, { transaction: t });
         await item.update({ status: 'Cancelled' }, { transaction: t });
+
+        await OrderRefund.create({
+          order_id: order.id,
+          refund_type: REFUND_TYPE.FULL_CANCEL,
+          amount: isCodFull ? 0 : paidAmount,
+          status: isCodFull ? REFUND_STATUS.NOT_REQUIRED : REFUND_STATUS.PENDING,
+          payment_method: isCodFull ? REFUND_PAYMENT_METHOD.NOT_REQUIRED : REFUND_PAYMENT_METHOD.ORIGINAL_GATEWAY,
+          note: refundNote,
+        }, { transaction: t });
 
         // Decrement coupon usage count on full cancellation
         if (order.coupon_code) {
@@ -1176,21 +1254,48 @@ class OrderController {
           );
         }
       } else {
-        // Recalculate and update order totals
-        const newSubtotal = Math.max(0, Number(order.subtotal_amount || 0) - itemPrice);
-        const newTotal = Math.max(0, Number(order.total_amount || 0) - itemPrice);
-        const newPayable = Math.max(0, Number(order.payable_amount || 0) - itemPrice);
+        // Partial cancellation with coupon recalculation
+        const newSubtotal = roundMoney(Math.max(0, Number(order.subtotal_amount || 0) - itemPrice));
+
+        let newCouponDiscount = roundMoney(Number(order.discount_amount || 0));
+        if (order.coupon_code) {
+          const Coupon = require('../models/Coupon');
+          const coupon = await Coupon.findOne({ where: { code: order.coupon_code, is_active: true }, transaction: t });
+          if (coupon) {
+            if (String(coupon.discount_type || '').toLowerCase() === 'percentage') {
+              newCouponDiscount = (newSubtotal * Number(coupon.discount_percent || 0)) / 100;
+              if (coupon.max_discount_amount) {
+                newCouponDiscount = Math.min(newCouponDiscount, Number(coupon.max_discount_amount));
+              }
+            } else {
+              newCouponDiscount = Math.min(Number(coupon.discount_amount || 0), newSubtotal);
+            }
+            newCouponDiscount = roundMoney(newCouponDiscount);
+          } else {
+            newCouponDiscount = 0;
+          }
+        }
+
+        const fixedCharges = roundMoney(
+          Number(order.shipping_charge || 0)
+          - Number(order.shipping_discount || 0)
+          + Number(order.payment_fee || 0)
+          - Number(order.payment_discount || 0),
+        );
+        const walletUsed = roundMoney(Number(order.wallet_amount || 0));
+        const newTotal = roundMoney(Math.max(0, newSubtotal + fixedCharges - newCouponDiscount - walletUsed));
+        const newPayable = newTotal;
+        const paidAmountItem = roundMoney(Number(order.payable_amount ?? order.total_amount ?? 0));
+        const refundAmount = roundMoney(Math.max(0, paidAmountItem - newPayable));
 
         const paymentMethod = String(order.payment_method || 'COD');
         let refundNote = paymentMethod.toUpperCase() === 'COD'
-          ? `Item '${item.product_name}' cancelled. Remaining COD collection adjusted to Rs. ${newPayable.toLocaleString('en-IN')}.`
-          : `Refund of Rs. ${itemPrice.toLocaleString('en-IN')} for cancelled item '${item.product_name}' will be processed in 1-2 days.`;
+          ? `Item '${item.product_name}' cancelled. Remaining COD amount: Rs. ${newTotal.toLocaleString('en-IN')}.`
+          : `Refund of Rs. ${refundAmount.toLocaleString('en-IN')} for cancelled item will be processed.`;
         if (reason && reason.trim()) {
-          refundNote += ` | Item Reason: ${reason.trim()}`;
+          refundNote += ` | Reason: ${reason.trim()}`;
         }
 
-        // Cancel the old Shiprocket order so merchant can re-push with updated items.
-        // Clear the stored IDs so the order is not confused with a cancelled SR shipment.
         if (order.shiprocket_order_id) {
           try {
             shiprocketCancel = await ShipRocketService.cancelOrders([order.shiprocket_order_id]);
@@ -1199,19 +1304,32 @@ class OrderController {
           }
         }
 
+        const isCodPartial = paymentMethod.toUpperCase() === 'COD';
         const columns = await ensureOrderAccountingColumns();
         const updatePayload = keepExistingColumns({
           subtotal_amount: newSubtotal,
+          discount_amount: newCouponDiscount,
           total_amount: newTotal,
           payable_amount: newPayable,
-          refund_note: order.refund_note ? `${order.refund_note} | ${refundNote}` : refundNote,
-          refund_status: paymentMethod.toUpperCase() === 'COD' ? 'Not Required' : 'Refund Pending',
+          is_modified: true,
+          modified_at: new Date(),
+          payment_status: isCodPartial ? order.payment_status : 'Refund Pending',
+          status_history: appendOrderStatusHistory(order, 'Partially Cancelled', 'customer', `Item cancelled: ${item.product_name}`),
           shiprocket_order_id: null,
           shiprocket_awb: null,
         }, columns);
 
         await order.update(updatePayload, { transaction: t });
         await item.update({ status: 'Cancelled' }, { transaction: t });
+
+        await OrderRefund.create({
+          order_id: order.id,
+          refund_type: REFUND_TYPE.PARTIAL_CANCEL,
+          amount: isCodPartial ? 0 : refundAmount,
+          status: isCodPartial ? REFUND_STATUS.NOT_REQUIRED : REFUND_STATUS.PENDING,
+          payment_method: isCodPartial ? REFUND_PAYMENT_METHOD.NOT_REQUIRED : REFUND_PAYMENT_METHOD.ORIGINAL_GATEWAY,
+          note: refundNote,
+        }, { transaction: t });
       }
 
       await t.commit();
@@ -1223,13 +1341,16 @@ class OrderController {
       });
 
       const updatedOrder = await Order.findByPk(orderId, {
-        include: [{
-          model: OrderItem,
-          include: [
-            { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
-            { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
-          ],
-        }],
+        include: [
+          {
+            model: OrderItem,
+            include: [
+              { model: Product, attributes: ['id', 'name', 'slug', 'images'] },
+              { model: Color, attributes: ['id', 'name', 'slug', 'hex_code'] },
+            ],
+          },
+          { model: OrderRefund, as: 'Refunds' },
+        ],
       });
 
       return res.status(200).json({
@@ -1256,11 +1377,49 @@ class OrderController {
       if (!order) return res.status(404).json({ message: 'Order not found' });
 
       const normalized = String(status).trim();
-      const isDelivered = normalized.toLowerCase() === 'delivered';
+      const normalizedLower = normalized.toLowerCase();
+      const isDelivered = normalizedLower === 'delivered';
+      const isRtoDelivered = normalizedLower === 'rto delivered';
 
-      const updatePayload = { status: normalized };
+      const updatePayload = {
+        status: normalized,
+        status_history: appendOrderStatusHistory(order, normalized, 'admin'),
+      };
       if (isDelivered && !order.delivered_at) {
         updatePayload.delivered_at = new Date();
+      }
+
+      // RTO Delivered: set tracking flags, calculate refund, block COD for customer
+      if (isRtoDelivered) {
+        const nextRtoCount = Number(order.rto_count || 0) + 1;
+        const rtoRefundAmount = calculateRtoRefundAmount(order, nextRtoCount);
+        const rtoPaymentMethod = String(order.payment_method || '').toUpperCase();
+        Object.assign(updatePayload, {
+          is_rto: true,
+          rto_count: nextRtoCount,
+          customer_cod_blocked: true,
+          cod_blocked_at: new Date(),
+          cod_block_reason: `Order #${order.order_number || order.id} returned to seller (RTO #${nextRtoCount}).`,
+        });
+        if (rtoPaymentMethod !== 'COD') {
+          updatePayload.payment_status = 'Refund Pending';
+        }
+        await blockCustomerCodForOrder(
+          order,
+          `COD blocked: RTO on order #${order.order_number || order.id}.`,
+          t,
+        );
+
+        await OrderRefund.create({
+          order_id: order.id,
+          refund_type: REFUND_TYPE.RTO,
+          amount: rtoPaymentMethod === 'COD' ? 0 : rtoRefundAmount,
+          status: rtoPaymentMethod === 'COD' ? REFUND_STATUS.NOT_REQUIRED : REFUND_STATUS.PENDING,
+          payment_method: rtoPaymentMethod === 'COD' ? REFUND_PAYMENT_METHOD.NOT_REQUIRED : REFUND_PAYMENT_METHOD.ORIGINAL_GATEWAY,
+          note: rtoPaymentMethod === 'COD'
+            ? 'COD order returned to seller. No payment was collected.'
+            : `RTO received. Refund of Rs. ${rtoRefundAmount.toLocaleString('en-IN')} will be processed after deducting logistics charges.`,
+        }, { transaction: t });
       }
 
       await order.update(updatePayload, { transaction: t });
@@ -1281,7 +1440,7 @@ class OrderController {
         'seller cancelled',
         'cancelled',
       ]);
-      if (itemShipmentStatuses.has(normalized.toLowerCase())) {
+      if (itemShipmentStatuses.has(normalizedLower)) {
         const orderItems = await OrderItem.findAll({
           where: { order_id: order.id },
           transaction: t,

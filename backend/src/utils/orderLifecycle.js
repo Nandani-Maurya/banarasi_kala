@@ -14,7 +14,9 @@ const ORDER_LIFECYCLE_COLUMNS = {
   customer_cod_blocked: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   cod_blocked_at: { type: DataTypes.DATE, allowNull: true },
   cod_block_reason: { type: DataTypes.TEXT, allowNull: true },
-  refund_amount: { type: DataTypes.DECIMAL(10, 2), allowNull: true, defaultValue: 0 },
+  is_modified: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+  modified_at: { type: DataTypes.DATE, allowNull: true },
+  status_history: { type: DataTypes.JSONB, allowNull: true, defaultValue: [] },
 };
 
 const CUSTOMER_COD_COLUMNS = {

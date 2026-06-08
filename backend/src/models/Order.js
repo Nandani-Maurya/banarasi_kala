@@ -119,42 +119,6 @@ const Order = sequelize.define('Order', {
     type: DataTypes.STRING,
     defaultValue: 'Paid'
   },
-  payment_gateway: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-  gateway_order_id: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-  gateway_payment_id: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-  gateway_signature: {
-    type: DataTypes.TEXT,
-    allowNull: true
-  },
-  gateway_amount_paise: {
-    type: DataTypes.INTEGER,
-    allowNull: true
-  },
-  gateway_currency: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-  payment_verified_at: {
-    type: DataTypes.DATE,
-    allowNull: true
-  },
-  payment_gateway_response: {
-    type: DataTypes.JSONB,
-    allowNull: true
-  },
-  payment_failure_reason: {
-    type: DataTypes.TEXT,
-    allowNull: true
-  },
   shiprocket_order_id: {
     type: DataTypes.STRING,
     allowNull: true
@@ -213,58 +177,21 @@ const Order = sequelize.define('Order', {
     type: DataTypes.DATE,
     allowNull: true
   },
-  refund_amount: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: true,
-    defaultValue: 0
+  is_modified: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
   },
-  refund_status: {
-    type: DataTypes.STRING,
+  modified_at: {
+    type: DataTypes.DATE,
     allowNull: true
   },
-  refund_note: {
-    type: DataTypes.TEXT,
-    allowNull: true
-  },
-  refund_bank_details: {
+  // Full status timeline — each entry: { status, timestamp, actor, note }
+  // actor is 'customer' | 'admin' | 'system'
+  status_history: {
     type: DataTypes.JSONB,
-    allowNull: true
-  },
-  refund_payment_reference: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-  refund_processed_at: {
-    type: DataTypes.DATE,
-    allowNull: true
-  },
-  refund_processed_by: {
-    type: DataTypes.INTEGER,
-    allowNull: true
-  },
-  return_requested_at: {
-    type: DataTypes.DATE,
-    allowNull: true
-  },
-  exchange_requested_at: {
-    type: DataTypes.DATE,
-    allowNull: true
-  },
-  shiprocket_return_order_id: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-  shiprocket_exchange_order_id: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-  shiprocket_return_awb: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-  shiprocket_exchange_awb: {
-    type: DataTypes.STRING,
-    allowNull: true
+    allowNull: true,
+    defaultValue: []
   }
 }, {
   tableName: 'orders',

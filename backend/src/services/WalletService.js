@@ -9,7 +9,6 @@ const REFERRAL_MILESTONE_BONUS = "REFERRAL_MILESTONE_BONUS";
 const isOrderStillRewardEligible = (order) =>
   order &&
   order.delivered_at &&
-  !order.return_requested_at &&
   !order.cancelled_at &&
   !String(order.status || "").toLowerCase().includes("return") &&
   !String(order.status || "").toLowerCase().includes("cancel");
