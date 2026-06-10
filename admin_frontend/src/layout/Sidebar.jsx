@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { API_ENDPOINTS } from "../config/api";
 import {
   LayoutDashboard,
   Users,
@@ -69,6 +70,27 @@ const navItems = [
 ];
 
 export default function Sidebar({ currentSection }) {
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem("accessToken");
+      if (token) {
+        await fetch(`${API_ENDPOINTS.auth}/logout`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+    } catch {
+      // proceed with local logout even if request fails
+    } finally {
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("admin_user");
+      navigate("/login");
+    }
+  };
+
   return (
     <aside className="w-64 bg-[#FAF8F6] border-r border-[#D4AF37]/20 flex flex-col z-50 transition-all duration-300">
       <div className="p-6 mb-2 border-b border-[#D4AF37]/10">
@@ -114,13 +136,13 @@ export default function Sidebar({ currentSection }) {
       </nav>
 
       <div className="p-4 border-t border-[#D4AF37]/10">
-        <Link
-          to="/login"
+        <button
+          onClick={handleLogout}
           className="w-full flex items-center justify-center gap-2 py-2.5 bg-white border border-[#800020]/20 text-[#800020] rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-[#800020] hover:text-white transition-all"
         >
           <LogOut className="w-4 h-4" />
           Logout
-        </Link>
+        </button>
       </div>
     </aside>
   );

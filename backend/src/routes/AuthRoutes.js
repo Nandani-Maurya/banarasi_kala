@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const rateLimit = require("express-rate-limit");
 const AuthController = require("../controllers/AuthController");
+const { authMiddleware } = require("../middleware/authMiddleware");
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -25,6 +26,8 @@ router.post("/login", authLimiter, AuthController.login);
 
 // Public admin auth entrypoint
 router.post("/admin-login", authLimiter, AuthController.adminLogin);
+router.post("/admin-forgot-password", otpLimiter, AuthController.adminForgotPassword);
+router.post("/admin-reset-password", authLimiter, AuthController.adminResetPassword);
 
 // Public token/password helpers
 router.post("/refresh-token", AuthController.refreshToken);
@@ -32,5 +35,8 @@ router.post("/forgot-password", otpLimiter, AuthController.forgotPassword);
 router.post("/reset-password", authLimiter, AuthController.resetPassword);
 router.post("/send-email-otp", otpLimiter, AuthController.sendEmailOtp);
 router.post("/verify-email-otp", authLimiter, AuthController.verifyEmailOtp);
+
+// Protected
+router.post("/logout", authMiddleware, AuthController.logout);
 
 module.exports = router;

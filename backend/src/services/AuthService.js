@@ -171,14 +171,10 @@ class AuthService {
 
     try {
       const decoded = jwt.verify(token, config.refreshTokenSecret);
-      
-      let user = await Customer.findByPk(decoded.id);
-      let role = "customer";
-      
-      if (!user) {
-        user = await Admin.findByPk(decoded.id);
-        role = "admin";
-      }
+      const role = decoded.role || "customer";
+      const user = role === "admin"
+        ? await Admin.findByPk(decoded.id)
+        : await Customer.findByPk(decoded.id);
 
       if (!user || user.refresh_token !== token) {
         throw new Error("Invalid refresh token");
@@ -226,6 +222,29 @@ class AuthService {
     };
   }
 
+  async adminForgotPassword(email) {
+    const cleanEmail = normalizeEmail(email);
+    const admin = await Admin.findOne({ where: { email: cleanEmail } });
+    if (!admin) throw new Error("No admin account found with this email.");
+    return this.createOtpSession({ email: cleanEmail, purpose: "forgot_password", name: admin.name });
+  }
+
+  async adminResetPassword(email, emailOtpToken, newPassword) {
+    const cleanEmail = normalizeEmail(email);
+    const admin = await Admin.findOne({ where: { email: cleanEmail } });
+    if (!admin) throw new Error("No admin account found with this email.");
+    if (!newPassword || String(newPassword).length < 8) throw new Error("Password must be at least 8 characters.");
+    const otpRecord = otpStore.get(emailOtpToken);
+    if (!otpRecord || !otpRecord.verified || otpRecord.purpose !== "forgot_password" || otpRecord.email !== cleanEmail) {
+      throw new Error("OTP verification is required.");
+    }
+    const salt = await bcrypt.genSalt(10);
+    admin.password = await bcrypt.hash(newPassword, salt);
+    await admin.save();
+    otpStore.delete(emailOtpToken);
+    return { message: "Password reset successfully" };
+  }
+
   async startPasswordReset(email) {
     const cleanEmail = normalizeEmail(email);
     const user = await Customer.findOne({ where: { email: cleanEmail } });
@@ -261,11 +280,12 @@ class AuthService {
     return { message: "Password reset successfully" };
   }
 
-  async logout(customerId) {
-    const customer = await Customer.findByPk(customerId);
-    if (customer) {
-      customer.refresh_token = null;
-      await customer.save();
+  async logout(userId, role = "customer") {
+    const Model = role === "admin" ? Admin : Customer;
+    const user = await Model.findByPk(userId);
+    if (user) {
+      user.refresh_token = null;
+      await user.save();
     }
   }
 }

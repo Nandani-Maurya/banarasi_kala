@@ -109,9 +109,31 @@ class AuthController {
     }
   }
 
+  async adminForgotPassword(req, res) {
+    try {
+      const { email } = req.body;
+      const result = await AuthService.adminForgotPassword(email);
+      res.json(result);
+    } catch (error) {
+      console.error("[AuthController:adminForgotPassword]", error.message);
+      res.status(400).json({ message: error.message });
+    }
+  }
+
+  async adminResetPassword(req, res) {
+    try {
+      const { email, email_otp_token, newPassword } = req.body;
+      const result = await AuthService.adminResetPassword(email, email_otp_token, newPassword);
+      res.json(result);
+    } catch (error) {
+      console.error("[AuthController:adminResetPassword]", error.message);
+      res.status(400).json({ message: error.message });
+    }
+  }
+
   async logout(req, res) {
     try {
-      await AuthService.logout(req.customer.id);
+      await AuthService.logout(req.user.id, req.userRole);
       res.json({ message: "Logged out successfully" });
     } catch (error) {
       console.error("[AuthController:logout]", error.message);

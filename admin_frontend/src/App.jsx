@@ -22,6 +22,7 @@ import Payments from "./pages/Payments/Payments";
 import Login from "./pages/Auth/Login";
 import Profile from "./pages/Profile/Profile";
 import OrderActions from "./pages/OrderActions/OrderActions";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 export default function App() {
   return (
@@ -30,24 +31,24 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/users" element={<Users />} />
-          <Route path="/products" element={<Products />} />
-          <Route path="/varieties" element={<Varieties />} />
-          <Route path="/sizes" element={<Sizes />} />
-          <Route path="/colors" element={<Colors />} />
-          <Route path="/fabrics" element={<Fabrics />} />
-          <Route path="/coupons" element={<EnhancedCoupons />} />
-          <Route path="/occasions" element={<Occasions />} />
-          <Route path="/orders" element={<Orders />} />
-          <Route path="/cancellations" element={<OrderActions type="cancel" />} />
-          <Route path="/returns" element={<OrderActions type="return" />} />
-          <Route path="/exchanges" element={<OrderActions type="exchange" />} />
-          <Route path="/inventory" element={<Inventory />} />
-          <Route path="/reviews" element={<Reviews />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/payments" element={<Payments />} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/users" element={<ProtectedRoute><Users /></ProtectedRoute>} />
+          <Route path="/products" element={<ProtectedRoute><Products /></ProtectedRoute>} />
+          <Route path="/varieties" element={<ProtectedRoute><Varieties /></ProtectedRoute>} />
+          <Route path="/sizes" element={<ProtectedRoute><Sizes /></ProtectedRoute>} />
+          <Route path="/colors" element={<ProtectedRoute><Colors /></ProtectedRoute>} />
+          <Route path="/fabrics" element={<ProtectedRoute><Fabrics /></ProtectedRoute>} />
+          <Route path="/coupons" element={<ProtectedRoute><EnhancedCoupons /></ProtectedRoute>} />
+          <Route path="/occasions" element={<ProtectedRoute><Occasions /></ProtectedRoute>} />
+          <Route path="/orders" element={<ProtectedRoute><Orders /></ProtectedRoute>} />
+          <Route path="/cancellations" element={<ProtectedRoute><OrderActions type="cancel" /></ProtectedRoute>} />
+          <Route path="/returns" element={<ProtectedRoute><OrderActions type="return" /></ProtectedRoute>} />
+          <Route path="/exchanges" element={<ProtectedRoute><OrderActions type="exchange" /></ProtectedRoute>} />
+          <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
+          <Route path="/reviews" element={<ProtectedRoute><Reviews /></ProtectedRoute>} />
+          <Route path="/analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
+          <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
         </Routes>
       </Layout>
     </Router>

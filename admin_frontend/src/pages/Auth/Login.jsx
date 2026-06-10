@@ -1,14 +1,17 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { Lock, Mail, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { API_ENDPOINTS } from '../../config/api';
 
 export default function Login() {
+  if (localStorage.getItem('accessToken')) return <Navigate to="/dashboard" replace />;
+
   const navigate = useNavigate();
   const [activeMode, setActiveMode] = useState('login'); // 'login', 'forgot', 'verify', 'reset'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
+  const [otpToken, setOtpToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,6 +34,7 @@ export default function Login() {
 
       if (response.ok) {
         localStorage.setItem('accessToken', data.accessToken);
+        localStorage.setItem('refreshToken', data.refreshToken);
         localStorage.setItem('admin_user', JSON.stringify(data.admin || data.user));
         navigate('/dashboard');
       } else {
@@ -49,13 +53,14 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_ENDPOINTS.auth}/forgot-password`, {
+      const res = await fetch(`${API_ENDPOINTS.auth}/admin-forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, role: "admin" }),
+        body: JSON.stringify({ email }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
+      setOtpToken(data.token);
       setSuccess("OTP sent to your email.");
       setActiveMode("verify");
     } catch (err) {
@@ -70,10 +75,10 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_ENDPOINTS.auth}/verify-otp`, {
+      const res = await fetch(`${API_ENDPOINTS.auth}/verify-email-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp, role: "admin" }),
+        body: JSON.stringify({ token: otpToken, otp, purpose: "forgot_password" }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
@@ -95,14 +100,16 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_ENDPOINTS.auth}/reset-password`, {
+      const res = await fetch(`${API_ENDPOINTS.auth}/admin-reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp, newPassword, role: "admin" }),
+        body: JSON.stringify({ email, email_otp_token: otpToken, newPassword }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
       setSuccess("Password reset successful. Please login.");
+      setOtpToken('');
+      setOtp('');
       setActiveMode("login");
     } catch (err) {
       setError(err.message);

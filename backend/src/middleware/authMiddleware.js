@@ -63,7 +63,7 @@ const optionalAuthMiddleware = async (req, res, next) => {
 };
 
 const adminMiddleware = (req, res, next) => {
-  if (req.userRole === "admin" || (req.user && req.user.role === "admin")) {
+  if (req.userRole === "admin") {
     next();
   } else {
     res.status(403).json({ success: false, message: "Access denied. Admin only." });
