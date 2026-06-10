@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Calculator, Hash, AlertTriangle, Package, Sparkles, Star, Search } from "lucide-react";
+import { X, Calculator, Hash, AlertTriangle, Package, Sparkles, Star, Search, Video } from "lucide-react";
 
 const ProductModal = ({
   isOpen,
@@ -14,6 +14,10 @@ const ProductModal = ({
   onRemoveNewColorImage,
   onCoverImageSelect,
   newColorImageFiles,
+  newColorVideoFiles,
+  onColorVideoUpload,
+  onRemoveNewColorVideo,
+  onRemoveSavedColorVideo,
   onSave,
   submitting,
   editingProduct,
@@ -282,6 +286,9 @@ const ProductModal = ({
                       const savedImages = (formData.images || []).filter(img => img.color_id === colorIdNum);
                       const localFiles = newColorImageFiles?.[colorIdStr] || [];
                       const totalImages = savedImages.length + localFiles.length;
+                      const savedVideos = (formData.videos || []).filter(v => v.color_id === colorIdNum);
+                      const localVideoFiles = newColorVideoFiles?.[colorIdStr] || [];
+                      const totalVideos = savedVideos.length + localVideoFiles.length;
 
                       return (
                         <div key={color.id} className={`p-2.5 rounded-xl border transition-all flex flex-col items-center gap-2 ${qty > 0 ? 'bg-[#800020]/5 border-[#800020]/30 shadow-md ring-1 ring-[#800020]/10' : 'bg-white border-gray-100 opacity-60 hover:opacity-100 shadow-sm'}`}>
@@ -375,6 +382,39 @@ const ProductModal = ({
                                     </div>
                                   );
                                 })}
+                              </div>
+
+                              {/* Videos */}
+                              <div className="w-full space-y-1 mt-2 pt-2 border-t border-dashed border-gray-200">
+                                <label className="block text-[9px] font-bold uppercase text-gray-500 text-center">
+                                  Videos ({totalVideos}/3)
+                                </label>
+                                {totalVideos < 3 && (
+                                  <input
+                                    type="file"
+                                    accept="video/mp4,video/webm,video/quicktime"
+                                    multiple
+                                    onChange={(e) => {
+                                      onColorVideoUpload(colorIdStr, e.target.files);
+                                      e.target.value = "";
+                                    }}
+                                    className="w-full text-[9px] text-gray-500 file:mr-0 file:px-2 file:py-1 file:rounded file:border-0 file:bg-indigo-600 file:text-white file:cursor-pointer"
+                                  />
+                                )}
+                                {savedVideos.map((v) => (
+                                  <div key={v.url} className="flex items-center gap-1 bg-gray-50 rounded px-1.5 py-1 border border-gray-100">
+                                    <Video className="w-3 h-3 text-indigo-400 flex-shrink-0" />
+                                    <span className="text-[8px] text-gray-500 truncate flex-1">Saved</span>
+                                    <button type="button" onClick={() => onRemoveSavedColorVideo(colorIdNum, v.url)} className="text-[7px] px-1 rounded bg-red-500 text-white">X</button>
+                                  </div>
+                                ))}
+                                {localVideoFiles.map((file, vIdx) => (
+                                  <div key={`${file.name}-${vIdx}`} className="flex items-center gap-1 bg-indigo-50 rounded px-1.5 py-1 border border-indigo-100">
+                                    <Video className="w-3 h-3 text-indigo-500 flex-shrink-0" />
+                                    <span className="text-[8px] text-indigo-600 truncate flex-1">{file.name}</span>
+                                    <button type="button" onClick={() => onRemoveNewColorVideo(colorIdStr, vIdx)} className="text-[7px] px-1 rounded bg-red-500 text-white">X</button>
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           )}
@@ -597,6 +637,7 @@ const ProductModal = ({
                 </div>
               </div>
             </div>
+
           </div>
         </form>
 

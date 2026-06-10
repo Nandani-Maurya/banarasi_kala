@@ -7,7 +7,7 @@ import "./Products.css";
 const INITIAL_FORM_STATE = {
   name: "", sku: "", description: "", short_description: "",
   selling_price: "", mrp_price: "", cost_price: "", discount_percent: "",
-  images: [], cover_color_id: "", stock_quantity: 0, low_stock_threshold: 5,
+  images: [], videos: [], cover_color_id: "", stock_quantity: 0, low_stock_threshold: 5,
   color_stocks: {},
   weight: "", length: "6.5", width: "1.1", height: "5",
   material_id: "", variety_id: "", occasion_id: "",
@@ -30,6 +30,7 @@ export default function Products() {
   const [editingProduct, setEditingProduct] = useState(null);
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [newColorImageFiles, setNewColorImageFiles] = useState({});
+  const [newColorVideoFiles, setNewColorVideoFiles] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
   const [filters, setFilters] = useState({
     material: "",
@@ -169,10 +170,12 @@ export default function Products() {
         mrp_price: product.mrp_price?.toString() || product.old_price?.toString() || "",
         color_stocks: product.color_stocks && typeof product.color_stocks === "object" ? product.color_stocks : {},
         images: Array.isArray(product.images) ? product.images : [],
+        videos: Array.isArray(product.videos) ? product.videos : [],
         cover_color_id: product.images?.find((img) => img.is_cover)?.color_id || "",
       });
     } else { setEditingProduct(null); setFormData(INITIAL_FORM_STATE); }
     setNewColorImageFiles({});
+    setNewColorVideoFiles({});
     setIsModalOpen(true);
   };
 
@@ -288,6 +291,38 @@ export default function Products() {
     }));
   };
 
+  const handleColorVideoUpload = (colorId, files) => {
+    const incoming = Array.from(files || []);
+    if (!incoming.length) return;
+    setNewColorVideoFiles((prev) => {
+      const existingNew = prev[colorId] || [];
+      const existingSaved = (formData.videos || []).filter((v) => v.color_id === parseInt(colorId, 10));
+      const slots = Math.max(0, 3 - existingSaved.length - existingNew.length);
+      const accepted = incoming.slice(0, slots);
+      if (accepted.length < incoming.length) {
+        showModal("warning", "Video limit reached", "Maximum 3 videos per color.");
+      }
+      return { ...prev, [colorId]: [...existingNew, ...accepted] };
+    });
+  };
+
+  const handleRemoveNewColorVideo = (colorId, index) => {
+    setNewColorVideoFiles((prev) => {
+      const next = { ...prev };
+      const updated = (next[colorId] || []).filter((_, i) => i !== index);
+      if (updated.length > 0) next[colorId] = updated;
+      else delete next[colorId];
+      return next;
+    });
+  };
+
+  const handleRemoveSavedColorVideo = (colorId, url) => {
+    setFormData((prev) => ({
+      ...prev,
+      videos: (prev.videos || []).filter((v) => !(parseInt(v.color_id, 10) === colorId && v.url === url)),
+    }));
+  };
+
 
 
   const calculateDiscount = () => {
@@ -367,6 +402,12 @@ export default function Products() {
     Object.entries(newColorImageFiles).forEach(([colorId, files]) => {
       (files || []).forEach((file) => {
         formPayload.append(`color_${colorId}`, file);
+      });
+    });
+
+    Object.entries(newColorVideoFiles).forEach(([colorId, files]) => {
+      (files || []).forEach((file) => {
+        formPayload.append(`color_video_${colorId}`, file);
       });
     });
 
@@ -635,6 +676,10 @@ export default function Products() {
         onRemoveNewColorImage={handleRemoveNewColorImage}
         onCoverImageSelect={handleCoverImageSelect}
         newColorImageFiles={newColorImageFiles}
+        newColorVideoFiles={newColorVideoFiles}
+        onColorVideoUpload={handleColorVideoUpload}
+        onRemoveNewColorVideo={handleRemoveNewColorVideo}
+        onRemoveSavedColorVideo={handleRemoveSavedColorVideo}
         onSave={handleSave}
         onCalculateDiscount={calculateDiscount}
         submitting={submitting}

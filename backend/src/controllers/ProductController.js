@@ -1,5 +1,5 @@
 const ProductService = require('../services/ProductService');
-const { uploadBufferToCloudinary } = require("../config/cloudinary");
+const { uploadBufferToCloudinary, uploadVideoToCloudinary } = require("../config/cloudinary");
 
 const logServerError = (scope, error) => {
   console.error(`[ProductController:${scope}]`, error);
@@ -13,12 +13,15 @@ const userFacingMessage = (error, fallback) => {
   if (raw.includes("maximum 6 images")) return raw;
   if (raw.includes("At least one product color is required")) return raw;
   if (raw.includes("At least one product image is required")) return raw;
+  if (raw.includes("can have maximum 3 videos")) return raw;
   if (raw.includes("Choose at least one payment option")) return raw;
   if (raw.includes("Choose at least one return/exchange option")) return raw;
   if (raw.includes("Product not found")) return "Product not found.";
 
   return fallback;
 };
+
+const VIDEO_MIME_TYPES = new Set(["video/mp4", "video/webm", "video/quicktime"]);
 
 const buildProductPayloadWithImages = async (req) => {
   const rawProductData = req.body.productData;
@@ -27,11 +30,17 @@ const buildProductPayloadWithImages = async (req) => {
   }
 
   const productData = typeof rawProductData === "string" ? JSON.parse(rawProductData) : rawProductData;
-  
+
   const existingImages = Array.isArray(productData.images) ? productData.images : [];
-  
+
   const files = Array.isArray(req.files) ? req.files : [];
-  const uploadTargets = files
+  const imageFiles = files.filter((f) => !VIDEO_MIME_TYPES.has(f.mimetype));
+  const colorVideoTargets = files
+    .filter((f) => VIDEO_MIME_TYPES.has(f.mimetype))
+    .map((file) => ({ file, match: /^color_video_(\d+)$/.exec(file.fieldname || "") }))
+    .filter(({ match }) => match !== null);
+
+  const uploadTargets = imageFiles
     .map((file) => ({ file, match: /^color_(\d+)$/.exec(file.fieldname || "") }))
     .filter(({ match }) => match !== null);
 
@@ -70,9 +79,30 @@ const buildProductPayloadWithImages = async (req) => {
     is_cover: parseInt(image.color_id, 10) === effectiveCoverColorId,
   }));
 
+  // Handle per-color videos (max 3 per color)
+  const existingVideos = Array.isArray(productData.videos) ? productData.videos : [];
+  const newVideos = await Promise.all(
+    colorVideoTargets.map(async ({ file, match }) => {
+      const colorId = parseInt(match[1], 10);
+      const result = await uploadVideoToCloudinary(file.buffer);
+      return { color_id: colorId, url: result.secure_url };
+    })
+  );
+  const finalVideos = [...existingVideos, ...newVideos];
+  selectedColorIds.forEach((colorId) => {
+    const count = finalVideos.filter((v) => parseInt(v.color_id, 10) === colorId).length;
+    if (count > 3) throw new Error(`Color ${colorId} can have maximum 3 videos`);
+  });
+  const videos = finalVideos.map((v, index) => ({
+    color_id: parseInt(v.color_id, 10),
+    url: v.url,
+    display_order: parseInt(v.display_order, 10) || index,
+  }));
+
   return {
     ...productData,
     images,
+    videos,
     cover_color_id: effectiveCoverColorId,
   };
 };

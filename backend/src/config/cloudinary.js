@@ -23,4 +23,20 @@ const uploadBufferToCloudinary = (buffer, folder = "vns-saree/products") =>
     stream.end(buffer);
   });
 
-module.exports = { cloudinary, uploadBufferToCloudinary };
+const uploadVideoToCloudinary = (buffer, folder = "vns-saree/product-videos") =>
+  new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder,
+        resource_type: "video",
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        return resolve(result);
+      },
+    );
+
+    stream.end(buffer);
+  });
+
+module.exports = { cloudinary, uploadBufferToCloudinary, uploadVideoToCloudinary };

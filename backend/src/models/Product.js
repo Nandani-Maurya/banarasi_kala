@@ -102,6 +102,13 @@ const Product = sequelize.define(
       allowNull: false,
     },
 
+    // Product videos (max 3). Each entry: { url, display_order }
+    videos: {
+      type: DataTypes.JSONB,
+      defaultValue: [],
+      allowNull: false,
+    },
+
     // Foreign Keys
     material_id: {
       type: DataTypes.INTEGER,
