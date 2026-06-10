@@ -1,8 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Home, ChevronRight, Bell, LogOut } from 'lucide-react';
+import { Home, ChevronRight, Bell, LogOut, Menu } from 'lucide-react';
 import { API_ENDPOINTS } from '../config/api';
 
-export default function Header({ currentSection }) {
+export default function Header({ currentSection, onMenuToggle }) {
   const navigate = useNavigate();
   const formattedSection = currentSection.charAt(0).toUpperCase() + currentSection.slice(1).replace('-', ' ');
   const adminUser = JSON.parse(localStorage.getItem('admin_user') || '{}');
@@ -28,12 +28,21 @@ export default function Header({ currentSection }) {
   };
 
   return (
-    <header className="h-16 bg-white border-b border-[#D4AF37]/10 px-8 flex items-center justify-between shadow-sm z-40">
-      <div className="flex items-center gap-2 text-xs font-semibold text-gray-400">
-        <Home className="w-4 h-4 text-[#D4AF37]" />
-        <span>Admin</span>
-        <ChevronRight className="w-4 h-4" />
-        <span className="text-[#800020]">{formattedSection}</span>
+    <header className="h-16 bg-white border-b border-[#D4AF37]/10 px-4 md:px-8 flex items-center justify-between shadow-sm z-40">
+      <div className="flex items-center gap-3">
+        {/* Hamburger — mobile only */}
+        <button
+          onClick={onMenuToggle}
+          className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+        >
+          <Menu className="w-5 h-5 text-gray-600" />
+        </button>
+        <div className="flex items-center gap-2 text-xs font-semibold text-gray-400">
+          <Home className="w-4 h-4 text-[#D4AF37] hidden sm:block" />
+          <span className="hidden sm:block">Admin</span>
+          <ChevronRight className="w-4 h-4 hidden sm:block" />
+          <span className="text-[#800020]">{formattedSection}</span>
+        </div>
       </div>
 
       <div className="flex items-center gap-4">
