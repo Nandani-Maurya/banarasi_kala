@@ -8,7 +8,9 @@ export default function Layout({ children }) {
   const currentSection = location.pathname.split('/')[1] || 'dashboard';
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  if (currentSection === 'login') {
+  const isAuthenticated = !!localStorage.getItem('accessToken');
+
+  if (currentSection === 'login' || !isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#F5F1ED] text-[#4A3F35]">
         {children}
