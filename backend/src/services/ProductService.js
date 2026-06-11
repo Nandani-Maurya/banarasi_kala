@@ -153,7 +153,7 @@ const normalizeProduct = (product) => {
   return {
     ...plain,
     images,
-  };   
+  };
 };
 
 const attachReviewSummaries = async (products = []) => {
