@@ -7,6 +7,8 @@ const Product = require('../models/Product');
 const Color = require('../models/Color');
 const Customer = require('../models/Customer');
 const WalletTransaction = require('../models/WalletTransaction');
+const Payment = require('../models/Payment');
+const { refundPayment: razorpayRefund } = require('../services/RazorpayService');
 const { Transaction, Op } = require('sequelize');
 const { sequelize } = require('../config/db');
 const {
@@ -575,23 +577,81 @@ class OrderItemActionController {
 
       await transaction.commit();
 
-      // Send return or exchange completion email
+      // Fire-and-forget: post-completion side-effects
       if (nextStatus === ACTION_STATUS.COMPLETED) {
         const EmailService = require('../services/EmailService');
-        // Load updated order for email context
-        Order.findByPk(action.order_id).then((fullOrder) => {
-          if (fullOrder) {
+        setImmediate(async () => {
+          try {
+            const fullOrder = await Order.findByPk(action.order_id);
+            if (!fullOrder) return;
+
+            // Send customer status email
             const emailStatus = action.action_type === ACTION_TYPES.RETURN ? 'Return Completed' : 'Exchange Completed';
             EmailService.sendOrderStatusUpdate(fullOrder, emailStatus).catch((err) => {
-              console.error('[Email] Manual action complete email failed:', err.message);
+              console.error('[Email] Completion email failed:', err.message);
             });
+
+            if (action.action_type === ACTION_TYPES.RETURN) {
+              const refund = await OrderRefund.findOne({ where: { order_item_action_id: action.id } });
+
+              // Bug #2: Wallet proportional refund
+              const walletTotal = Number(fullOrder.wallet_amount || 0);
+              if (walletTotal > 0 && fullOrder.customer_id) {
+                const subtotal = Number(fullOrder.subtotal_amount || 0);
+                const refundAmt = Number(refund?.amount || 0);
+                const walletShare = subtotal > 0 && refundAmt > 0
+                  ? Math.round((refundAmt / subtotal) * walletTotal * 100) / 100
+                  : 0;
+                if (walletShare > 0) {
+                  const dedupeKey = `return_wallet:${action.id}`;
+                  const existing = await WalletTransaction.findOne({ where: { dedupe_key: dedupeKey } });
+                  if (!existing) {
+                    await WalletTransaction.create({
+                      customer_id: fullOrder.customer_id,
+                      amount: walletShare,
+                      type: 'RETURN_REFUND',
+                      status: 'completed',
+                      dedupe_key: dedupeKey,
+                      meta: { order_id: fullOrder.id, action_id: action.id },
+                    });
+                    await Customer.increment({ wallet_balance: walletShare }, { where: { id: fullOrder.customer_id } });
+                  }
+                }
+              }
+
+              // Bug #1: Razorpay gateway refund
+              if (refund && Number(refund.amount) > 0 && refund.payment_method === REFUND_PAYMENT_METHOD.ORIGINAL_GATEWAY) {
+                const payment = await Payment.findOne({ where: { order_id: fullOrder.id, status: 'Paid' } });
+                if (payment?.gateway_payment_id) {
+                  razorpayRefund(payment.gateway_payment_id, Number(refund.amount), {
+                    reason: 'Customer return approved',
+                  }).then(() => refund.update({ status: REFUND_STATUS.PROCESSING }))
+                    .catch((err) => console.error('[Razorpay] Return refund failed:', err.message));
+                }
+              }
+            }
+
+            // Bug #5: Exchange replacement admin alert
+            if (action.action_type === ACTION_TYPES.EXCHANGE) {
+              const adminEmail = process.env.ADMIN_EMAIL;
+              if (adminEmail && EmailService.sendOrderStatusUpdate) {
+                const alertOrder = { ...fullOrder.toJSON(), exchange_alert: true };
+                EmailService.sendOrderStatusUpdate(alertOrder, 'Exchange Completed - Replacement Required').catch(() => {});
+              }
+              console.warn(`[Exchange] Action #${action.id} for Order #${fullOrder.order_number || fullOrder.id} completed — replacement shipment must be created manually.`);
+            }
+          } catch (err) {
+            console.error('[OrderItemAction] post-complete async error:', err.message);
           }
-        }).catch((err) => {
-          console.error('[Email] Load order for completion email failed:', err.message);
         });
       }
 
-      return res.status(200).json({ message: 'Request updated.', action: serializeAction(action) });
+      const replacementRequired = nextStatus === ACTION_STATUS.COMPLETED && action.action_type === ACTION_TYPES.EXCHANGE;
+      return res.status(200).json({
+        message: 'Request updated.',
+        action: serializeAction(action),
+        ...(replacementRequired ? { replacement_required: true } : {}),
+      });
     } catch (error) {
       await transaction.rollback();
       console.error('[OrderItemAction] admin update error:', error);

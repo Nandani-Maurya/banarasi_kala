@@ -610,10 +610,24 @@ export default function MyOrders() {
 
     try {
       if (type === "cancel_item") {
-        await api.post(`/api/orders/${orderId}/items/${itemId}/cancel`, { reason: finalReason });
-        showNotification(`${itemName} cancelled successfully.`, "success");
+        const currentOrder = orders.find((o) => String(o.id) === String(orderId));
+        const orderItem = (currentOrder?.OrderItems || []).find((i) => String(i.id) === String(itemId));
+        const response = await api.post(`/api/orders/${orderId}/item-actions/cancel`, {
+          actionType: "cancel",
+          items: [{ orderItemId: Number(itemId), quantity: Number(orderItem?.quantity || 1) }],
+          reason: finalReason,
+        });
+        showNotification(response.data?.refund_message || `${itemName} cancelled successfully.`, "success");
       } else if (type === "cancel_order") {
-        const response = await api.post(`/api/orders/${orderId}/cancel`, { reason: finalReason });
+        const currentOrder = orders.find((o) => String(o.id) === String(orderId));
+        const activeItems = (currentOrder?.OrderItems || [])
+          .filter((i) => !["Cancelled", "Returned", "Exchanged"].includes(i.status))
+          .map((i) => ({ orderItemId: i.id, quantity: i.quantity }));
+        const response = await api.post(`/api/orders/${orderId}/item-actions/cancel`, {
+          actionType: "cancel",
+          items: activeItems,
+          reason: finalReason,
+        });
         showNotification(response.data?.refund_message || "Order cancelled successfully.", "success");
       } else if (type === "return") {
         const response = await api.post("/api/shiprocket/create-return", { orderId, reason: finalReason });
@@ -877,6 +891,43 @@ export default function MyOrders() {
         const isCancelReturn = type === "cancel_return";
         const isCancelExchange = type === "cancel_exchange";
 
+        const fmt = (n) => `₹${Number(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+
+        const currentOrder = orders.find((o) => String(o.id) === String(actionModal.orderId));
+        const bd = currentOrder ? getOrderBreakdown(currentOrder) : null;
+        const isCod = bd && String(bd.paymentMethod).toUpperCase() === "COD";
+
+        let refundInfo = null;
+        if (bd && (type === "cancel_order" || type === "cancel_item")) {
+          if (type === "cancel_order") {
+            refundInfo = {
+              rows: [
+                ...(bd.payable > 0 ? [{ label: "Paid via payment", value: fmt(bd.payable) }] : []),
+                ...(bd.walletAmount > 0 ? [{ label: "Wallet used", value: fmt(bd.walletAmount) }] : []),
+              ],
+              total: isCod ? 0 : bd.payable + bd.walletAmount,
+              walletRefund: isCod ? 0 : bd.walletAmount,
+              gatewayRefund: isCod ? 0 : bd.payable,
+              isCod,
+            };
+          } else {
+            const item = (currentOrder?.OrderItems || []).find((i) => String(i.id) === String(actionModal.itemId));
+            const itemValue = Number(item?.price || 0) * Number(item?.quantity || 1);
+            const discountRatio = bd.subtotal > 0 ? bd.couponDiscount / bd.subtotal : 0;
+            const itemDiscount = Math.round(itemValue * discountRatio * 100) / 100;
+            const estimatedRefund = Math.max(0, itemValue - itemDiscount);
+            refundInfo = {
+              rows: [
+                { label: "Item value", value: fmt(itemValue) },
+                ...(itemDiscount > 0 ? [{ label: "Coupon adjustment", value: `− ${fmt(itemDiscount)}` }] : []),
+              ],
+              total: isCod ? 0 : estimatedRefund,
+              isCod,
+              isEstimate: true,
+            };
+          }
+        }
+
         let modalTitle = "Confirm Cancellation";
         let subTextPrefix = "Please specify reason for cancelling";
         let btnText = "Confirm Cancellation";
@@ -924,6 +975,36 @@ export default function MyOrders() {
                 <p>{subTextPrefix} <strong>{actionModal.itemName}</strong></p>
               </div>
               
+              {refundInfo && (
+                <div className="cancel-refund-box">
+                  <p className="cancel-refund-title">Refund summary</p>
+                  {refundInfo.isCod ? (
+                    <p className="cancel-refund-note">This is a Cash on Delivery order — no online refund applicable.</p>
+                  ) : (
+                    <>
+                      {refundInfo.rows.map((row, i) => (
+                        <div key={i} className="cancel-refund-row">
+                          <span>{row.label}</span>
+                          <span>{row.value}</span>
+                        </div>
+                      ))}
+                      <div className="cancel-refund-total">
+                        <span>{refundInfo.isEstimate ? "Estimated refund" : "Total refund"}</span>
+                        <strong>{fmt(refundInfo.total)}</strong>
+                      </div>
+                      <div className="cancel-refund-mode">
+                        {refundInfo.walletRefund > 0 && refundInfo.gatewayRefund > 0
+                          ? `${fmt(refundInfo.gatewayRefund)} to original payment · ${fmt(refundInfo.walletRefund)} to wallet`
+                          : refundInfo.walletRefund > 0
+                          ? "Credited back to your wallet"
+                          : "Refunded to original payment method"}
+                        {refundInfo.isEstimate && <span className="cancel-refund-approx"> · Exact amount may vary</span>}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
               <form onSubmit={handleModalSubmit} className="cancel-modal-form">
                 <div className="form-group">
                   <label htmlFor="action-reason">Select Reason</label>

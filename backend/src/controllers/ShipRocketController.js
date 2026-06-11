@@ -445,7 +445,7 @@ class ShipRocketController {
           product_id: oi.product_id,
           action_type: ACTION_TYPES.EXCHANGE,
           quantity: oi.quantity,
-          status: ACTION_STATUS.APPROVED,
+          status: ACTION_STATUS.INITIATED,
           shiprocket_return_order_id: i === 0 ? srReturnId : null,
         });
         if (i === 0) firstActionId = action.id;
