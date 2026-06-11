@@ -1,8 +1,8 @@
 const PRODUCT_PREFIX = 'BKS';
 const ORDER_PREFIX = 'BKS';
 
-// BKS00001 → product SKU
-const formatProductCode = (id) => `${PRODUCT_PREFIX}${String(id)}`;
+// BKS00001 → product SKU (5-digit zero-padded)
+const formatProductCode = (id) => `${PRODUCT_PREFIX}${String(id).padStart(5, '0')}`;
 
 const slugifyCodePart = (value, fallback = 'variant') => {
   const slug = String(value || '')

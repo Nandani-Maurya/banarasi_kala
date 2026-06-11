@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { imgUrl } from "../../utils/cloudinary";
 import { X, Calculator, Hash, AlertTriangle, Package, Sparkles, Star, Search, Video } from "lucide-react";
 
 const ProductModal = ({
@@ -312,7 +313,7 @@ const ProductModal = ({
                               <label className="block text-[9px] font-bold uppercase text-gray-500 text-center">Images ({totalImages}/6)</label>
                               <input
                                 type="file"
-                                accept="image/*"
+                                accept="image/*,.heic,.heif"
                                 multiple
                                 onChange={(e) => {
                                   onColorImageUpload(colorIdStr, e.target.files);
@@ -330,7 +331,7 @@ const ProductModal = ({
                                       onClick={() => setPreviewImage({ url: img.url, name: `${color.name} image` })}
                                       className="w-full bg-white cursor-zoom-in"
                                     >
-                                      <img src={img.url} alt={`${color.name}`} className="w-full h-10 object-contain bg-white" />
+                                      <img src={imgUrl(img.url)} alt={`${color.name}`} className="w-full h-10 object-contain bg-white" />
                                     </button>
                                     <div className="absolute top-0 left-0 right-0 flex justify-between p-0.5 bg-black/45">
                                       <button
@@ -690,7 +691,7 @@ const ProductModal = ({
               <X className="w-4 h-4" />
             </button>
             <img
-              src={previewImage.url}
+              src={imgUrl(previewImage.url)}
               alt={previewImage.name || "Preview"}
               className="w-full h-[80vh] object-contain bg-white rounded-lg"
             />

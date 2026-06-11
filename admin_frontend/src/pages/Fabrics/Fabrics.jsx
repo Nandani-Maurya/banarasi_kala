@@ -423,7 +423,7 @@ export default function Fabrics() {
                 </label>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.heic,.heif"
                   onChange={(event) => {
                     const file = event.target.files?.[0] || null;
                     setImageFile(file);

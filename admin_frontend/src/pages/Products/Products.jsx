@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { imgUrl } from "../../utils/cloudinary";
 import { Plus, Pencil, Trash2, Search, Filter, ChevronLeft, ChevronRight, Package, AlertCircle, Star, Sparkles, CheckCircle, AlertTriangle, X } from "lucide-react";
 import { API_ENDPOINTS } from "../../config/api";
 import ProductModal from "./ProductModal";
@@ -611,7 +612,7 @@ export default function Products() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <button type="button" onClick={() => setImagePreviewUrl(p.images?.find(img => img.is_cover)?.url || p.images?.[0]?.url)}>
-                            <img src={p.images?.find(img => img.is_cover)?.url || p.images?.[0]?.url} alt={p.name} className="w-12 h-12 object-cover rounded-lg" />
+                            <img src={imgUrl(p.images?.find(img => img.is_cover)?.url || p.images?.[0]?.url)} alt={p.name} className="w-12 h-12 object-cover rounded-lg" />
                           </button>
                           <div>
                             <p className="font-medium text-[#4A3F35] text-sm">{p.name}</p>
@@ -729,7 +730,7 @@ export default function Products() {
       {imagePreviewUrl && (
         <div className="fixed inset-0 z-[140] bg-black/80 flex items-center justify-center p-4" onClick={() => setImagePreviewUrl("")}>
           <div className="bg-white rounded-xl p-3 max-w-5xl w-full max-h-[92vh]" onClick={(e) => e.stopPropagation()}>
-            <img src={imagePreviewUrl} alt="Preview" className="w-full h-[80vh] object-contain" />
+            <img src={imgUrl(imagePreviewUrl)} alt="Preview" className="w-full h-[80vh] object-contain" />
           </div>
         </div>
       )}
