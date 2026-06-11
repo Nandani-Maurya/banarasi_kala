@@ -564,6 +564,7 @@ class ProductService {
         "mrp_price",
         "discount_percent",
         "images",
+        "videos",
         "color_stocks",
         "stock_quantity",
         "low_stock_threshold",

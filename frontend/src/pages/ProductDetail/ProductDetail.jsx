@@ -1,5 +1,6 @@
 import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { imgUrl } from "../../utils/cloudinary";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import { useAuth } from "../../context/AuthContext";
@@ -121,6 +122,7 @@ const ProductDetail = () => {
   const [activeAccordion, setActiveAccordion] = useState("description");
   const [isGalleryHovering, setIsGalleryHovering] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [activeVideoUrl, setActiveVideoUrl] = useState(null);
   const [relatedHoverId, setRelatedHoverId] = useState(null);
   const [relatedSlides, setRelatedSlides] = useState({});
   const [deliveryPincode, setDeliveryPincode] = useState("");
@@ -288,6 +290,13 @@ const ProductDetail = () => {
     return colorImagesById[String(selectedColorId)] || [];
   }, [product, selectedColorId, colorImagesById]);
 
+  const visibleVideos = useMemo(() => {
+    const all = Array.isArray(product?.videos) ? product.videos : [];
+    if (!selectedColorId) return all;
+    return all.filter((v) => String(v.color_id) === String(selectedColorId))
+      .sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0));
+  }, [product, selectedColorId]);
+
   const distinctColors = useMemo(() => {
     return allColors;
   }, [allColors]);
@@ -376,6 +385,7 @@ const ProductDetail = () => {
       setSelectedColorId(colorId);
       updateColorInUrl(colorId);
       setActiveImageIndex(0);
+      setActiveVideoUrl(null);
     if (cachedImages?.length) {
       setMainImage(cachedImages[0].url);
       return;
@@ -1147,7 +1157,16 @@ const ProductDetail = () => {
             >
               <div className="product-3d-frame product-image-frame" ref={frameRef}>
                 {loadingColorId ? <span className="product-image-loader" aria-hidden="true" /> : null}
-                {visibleImages.length > 0 ? (
+                {activeVideoUrl ? (
+                  <video
+                    key={activeVideoUrl}
+                    className="product-main-video"
+                    src={activeVideoUrl}
+                    controls
+                    autoPlay
+                    playsInline
+                  />
+                ) : visibleImages.length > 0 ? (
                   <div
                     className="product-main-image-track"
                     style={{ transform: `translateX(-${activeImageIndex * 100}%)` }}
@@ -1155,14 +1174,14 @@ const ProductDetail = () => {
                     {visibleImages.map((image, index) => (
                       <img
                         key={`${image.url}-${index}`}
-                        src={image.url}
+                        src={imgUrl(image.url)}
                         alt={index === activeImageIndex ? productName : ""}
                         className="product-main-image"
                       />
                     ))}
                   </div>
                 ) : mainImage ? (
-                  <img src={mainImage} alt={productName} className="product-main-image" />
+                  <img src={imgUrl(mainImage)} alt={productName} className="product-main-image" />
                 ) : null}
                 {Number(product.discount_percent || 0) > 0 && (
                   <span className="product-discount-badge">{product.discount_percent}% OFF</span>
@@ -1175,7 +1194,7 @@ const ProductDetail = () => {
                     <Icon icon="lucide:share-2" />
                   </button>
                 </div>
-                {visibleImages.length > 1 && (
+                {!activeVideoUrl && visibleImages.length > 1 && (
                   <div className="product-image-dots" aria-hidden="true">
                     {visibleImages.map((image, index) => (
                       <span key={`${image.url}-dot`} className={index === activeImageIndex ? "active" : ""} />
@@ -1200,15 +1219,30 @@ const ProductDetail = () => {
                       onClick={() => {
                         setActiveImageIndex(index);
                         setMainImage(image.url);
+                        setActiveVideoUrl(null);
                       }}
-                      onFocus={() => setActiveImageIndex(index)}
+                      onFocus={() => { setActiveImageIndex(index); setActiveVideoUrl(null); }}
                       onMouseEnter={() => setActiveImageIndex(index)}
-                      className={`product-thumb ${mainImage === image.url ? "active" : ""}`}
+                      className={`product-thumb ${!activeVideoUrl && mainImage === image.url ? "active" : ""}`}
                       aria-label={`View image ${index + 1}`}
                     >
-                      <img src={image.url} alt="" />
+                      <img src={imgUrl(image.url)} alt="" />
                     </button>
                   ))}
+              {visibleVideos.map((video, index) => (
+                <button
+                  key={`${video.url}-${index}`}
+                  type="button"
+                  onClick={() => setActiveVideoUrl(video.url)}
+                  className={`product-thumb product-video-thumb ${activeVideoUrl === video.url ? "active" : ""}`}
+                  aria-label={`Play video ${index + 1}`}
+                >
+                  <video src={video.url} preload="metadata" muted playsInline />
+                  <span className="product-video-thumb-icon" aria-hidden="true">
+                    <Icon icon="lucide:play" />
+                  </span>
+                </button>
+              ))}
             </div>
 
             {distinctColors.length > 0 && (
@@ -1462,7 +1496,7 @@ const ProductDetail = () => {
                       onClick={() => setReviewGalleryIndex(index)}
                       key={`${image.url}-${index}`}
                     >
-                      <img src={image.url} alt="Uploaded product photo" loading="lazy" />
+                      <img src={imgUrl(image.url)} alt="Uploaded product photo" loading="lazy" />
                       {showMore && <span>+{remaining} more</span>}
                     </button>
                   );
@@ -1496,7 +1530,7 @@ const ProductDetail = () => {
                               setReviewGalleryIndex(galleryIndex >= 0 ? galleryIndex : 0);
                             }}
                           >
-                            <img src={image.url} alt="" loading="lazy" />
+                            <img src={imgUrl(image.url)} alt="" loading="lazy" />
                           </button>
                         ))}
                       </div>
@@ -1537,7 +1571,7 @@ const ProductDetail = () => {
                         style={{ transform: `translateX(-${activeSlide * 100}%)` }}
                       >
                         {slideImages.map((image, index) => (
-                          <img key={`${item.id}-${image.url}-${index}`} src={image.url} alt={index === 0 ? relatedProductName : ""} />
+                          <img key={`${item.id}-${image.url}-${index}`} src={imgUrl(image.url)} alt={index === 0 ? relatedProductName : ""} />
                         ))}
                       </div>
                       {hasDiscount && <span className="product-related-discount">{item.discount_percent}% off</span>}
@@ -1590,7 +1624,7 @@ const ProductDetail = () => {
             </button>
           )}
           <img
-            src={approvedReviewImages[reviewGalleryIndex].url}
+            src={imgUrl(approvedReviewImages[reviewGalleryIndex].url)}
             alt="Uploaded product photo"
             onClick={(event) => event.stopPropagation()}
           />

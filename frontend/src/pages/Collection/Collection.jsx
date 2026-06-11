@@ -1,5 +1,6 @@
 import { Icon } from "@iconify/react";
 import { useState, useEffect, useRef } from "react";
+import { imgUrl } from "../../utils/cloudinary";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useWishlist } from "../../context/WishlistContext";
@@ -517,7 +518,7 @@ const Collection = () => {
                       {sliderImages.map((image, imageIndex) => (
                         <img
                           key={`${product.id}-${image.url}-${imageIndex}`}
-                          src={image.url}
+                          src={imgUrl(image.url)}
                           alt={imageIndex === 0 ? product.name : ""}
                           className="card-img"
                           loading="lazy"

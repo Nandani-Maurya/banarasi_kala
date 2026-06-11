@@ -1,5 +1,6 @@
 import { Icon } from "@iconify/react";
 import { Link } from "react-router-dom";
+import { imgUrl } from "../../utils/cloudinary";
 import toast from "react-hot-toast";
 import { useEffect, useRef, useState } from "react";
 import { useCart } from "../../context/CartContext";
@@ -196,7 +197,7 @@ const Cart = () => {
             return (
               <div key={`${item.id}-${item.colorId}`} className="cart-card">
                 <Link to={`/product/${item.slug}`} className="cart-card-image" aria-label={item.name}>
-                  <img src={item.image_url} alt={item.name} />
+                  <img src={imgUrl(item.image_url)} alt={item.name} />
                 </Link>
 
                 <div className="cart-card-body">

@@ -1,4 +1,5 @@
 import { Icon } from "@iconify/react";
+import { imgUrl } from "../utils/cloudinary";
 import CheckoutReviewSummary from "./CheckoutReviewSummary";
 import "./CheckoutOrderPanel.css";
 
@@ -172,7 +173,7 @@ const CheckoutOrderPanel = ({
                   <span>Products</span>
                   {reviewItems.map((item) => (
                     <div key={item.key} className={`checkout-review-product ${item.unavailable ? "unavailable" : ""}`}>
-                      {item.image && <img src={item.image} alt="" />}
+                      {item.image && <img src={imgUrl(item.image)} alt="" />}
                       <div>
                         <strong>{item.name}</strong>
                         {item.meta && <small>{item.meta}</small>}

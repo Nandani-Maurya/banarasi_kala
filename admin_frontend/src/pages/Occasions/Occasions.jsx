@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { imgUrl } from "../../utils/cloudinary";
 import {
   Plus,
   Pencil,
@@ -339,7 +340,7 @@ export default function Occasions() {
                   </td>
                   <td className="px-4 py-4">
                     {occasion.image ? (
-                      <img src={occasion.image} alt={occasion.name} className="w-10 h-10 rounded object-cover" />
+                      <img src={imgUrl(occasion.image)} alt={occasion.name} className="w-10 h-10 rounded object-cover" />
                     ) : (
                       <div className="w-10 h-10 rounded bg-gray-100 flex items-center justify-center text-gray-400 text-xs">No img</div>
                     )}
@@ -442,7 +443,7 @@ export default function Occasions() {
                 />
                 {imagePreview && (
                   <div className="mt-2">
-                    <img src={imagePreview} alt="Preview" className="w-20 h-20 object-cover rounded" />
+                    <img src={imgUrl(imagePreview)} alt="Preview" className="w-20 h-20 object-cover rounded" />
                   </div>
                 )}
               </div>

@@ -1,5 +1,6 @@
 import { Icon } from "@iconify/react";
 import { useEffect, useMemo, useState } from "react";
+import { imgUrl } from "../../utils/cloudinary";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import api from "../../utils/api";
 import { getOrderDisplayNumber } from "../../utils/itemCode";
@@ -745,11 +746,11 @@ export default function OrderConfirmation() {
                   <div className="confirmation-item-top">
                     {productUrl ? (
                       <Link to={productUrl} className="confirmation-item-media" aria-label={`Open ${item.product_name}`}>
-                        {getItemImage(item) ? <img src={getItemImage(item)} alt={item.product_name} /> : <Icon icon="lucide:image-off" />}
+                        {getItemImage(item) ? <img src={imgUrl(getItemImage(item))} alt={item.product_name} /> : <Icon icon="lucide:image-off" />}
                       </Link>
                     ) : (
                       <div className="confirmation-item-media">
-                        {getItemImage(item) ? <img src={getItemImage(item)} alt={item.product_name} /> : <Icon icon="lucide:image-off" />}
+                        {getItemImage(item) ? <img src={imgUrl(getItemImage(item))} alt={item.product_name} /> : <Icon icon="lucide:image-off" />}
                       </div>
                     )}
                     <div className="confirmation-item-copy">

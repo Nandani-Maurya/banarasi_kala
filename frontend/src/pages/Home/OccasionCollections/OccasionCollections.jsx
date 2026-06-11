@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { imgUrl } from "../../../utils/cloudinary";
 import { API_ENDPOINTS } from "../../../config/api";
 import "./OccasionCollections.css";
 
@@ -55,7 +56,7 @@ const OccasionCollections = () => {
                 style={{ "--bk-occasion-delay": `${Math.min(index * 90, 360)}ms` }}
                 onClick={() => openOccasion(occasion.id)}
               >
-                <img src={occasion.image} alt={occasion.name} />
+                <img src={imgUrl(occasion.image)} alt={occasion.name} />
                 <span className="bk-occasion-overlay" />
                 <span className="bk-occasion-name">{occasion.name}</span>
               </button>

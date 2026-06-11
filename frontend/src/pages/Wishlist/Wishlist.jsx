@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "@iconify/react";
+import { imgUrl } from "../../utils/cloudinary";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../../context/CartContext";
 import { useNotification } from "../../context/NotificationContext";
@@ -258,7 +259,7 @@ const Wishlist = () => {
             return (
               <article key={item.wishlistItemId || `${item.id}-${item.colorId}`} className={`wishlist-card ${cardIsOos ? "out-of-stock" : ""}`}>
                 <Link to={`/product/${item.slug}${item.colorId ? `?color=${item.colorId}` : ""}`} className="wishlist-card-image">
-                  <img src={item.image_url} alt={item.name} loading="lazy" />
+                  <img src={imgUrl(item.image_url)} alt={item.name} loading="lazy" />
                   {hasDiscount && discountPercent > 0 && !cardIsOos && (
                     <span className="wishlist-discount-badge">{discountPercent}% off</span>
                   )}
@@ -343,7 +344,7 @@ const Wishlist = () => {
             </button>
 
             <div className="wishlist-modal-product">
-              <img src={colorModalProduct.image_url} alt={colorModalProduct.name} />
+              <img src={imgUrl(colorModalProduct.image_url)} alt={colorModalProduct.name} />
               <div>
                 <span>Choose Color</span>
                 <h2 id="wishlist-color-title">{colorModalProduct.name}</h2>

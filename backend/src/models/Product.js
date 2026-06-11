@@ -87,11 +87,11 @@ const Product = sequelize.define(
       allowNull: true,
     },
     width: {
-      type: DataTypes.DECIMAL(4, 2),
+      type: DataTypes.DECIMAL(6, 2),
       allowNull: true,
     },
     height: {
-      type: DataTypes.DECIMAL(4, 2),
+      type: DataTypes.DECIMAL(6, 2),
       allowNull: true,
     },
 

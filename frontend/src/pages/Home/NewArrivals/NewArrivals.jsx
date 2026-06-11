@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { imgUrl } from "../../../utils/cloudinary";
 import { useAuth } from "../../../context/AuthContext";
 import { useWishlist } from "../../../context/WishlistContext";
 import { API_ENDPOINTS } from "../../../config/api";
@@ -180,8 +181,8 @@ const NewArrivals = () => {
                         >
                           {sliderImages.map((image, imageIndex) => (
                             <span className="bk-arrival-slide" key={`${image.url}-${imageIndex}`}>
-                              <img src={image.url} alt="" className="bk-arrival-image-bg" aria-hidden="true" />
-                              <img src={image.url} alt={product.name} className="bk-arrival-image" />
+                              <img src={imgUrl(image.url)} alt="" className="bk-arrival-image-bg" aria-hidden="true" />
+                              <img src={imgUrl(image.url)} alt={product.name} className="bk-arrival-image" />
                             </span>
                           ))}
                         </div>

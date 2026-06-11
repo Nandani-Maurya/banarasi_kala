@@ -1,5 +1,6 @@
 import { Icon } from "@iconify/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { imgUrl } from "../../utils/cloudinary";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { useNotification } from "../../context/NotificationContext";
@@ -337,7 +338,7 @@ const OrderCard = ({ order, onFeedback }) => {
             >
               <div className="order-product-media">
                 {imageUrl ? (
-                  <img src={imageUrl} alt={productName} loading="lazy" />
+                  <img src={imgUrl(imageUrl)} alt={productName} loading="lazy" />
                 ) : (
                   <div className="order-product-placeholder">
                     <Icon icon="lucide:image-off" />

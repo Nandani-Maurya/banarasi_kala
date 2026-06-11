@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { imgUrl } from "../../utils/cloudinary";
 import {
   Plus,
   Pencil,
@@ -334,7 +335,7 @@ export default function Fabrics() {
                   </td>
                   <td className="px-4 py-4">
                     {fabric.image ? (
-                      <img src={fabric.image} alt={fabric.name} className="w-12 h-12 rounded-lg object-cover border border-[#D4AF37]/20" />
+                      <img src={imgUrl(fabric.image)} alt={fabric.name} className="w-12 h-12 rounded-lg object-cover border border-[#D4AF37]/20" />
                     ) : (
                       <span className="text-xs text-gray-400">No image</span>
                     )}
@@ -432,7 +433,7 @@ export default function Fabrics() {
                   className="w-full mt-1.5 px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#800020]/20 focus:border-[#800020] outline-none transition-all"
                 />
                 {imagePreview && (
-                  <img src={imagePreview} alt="Fabric preview" className="mt-3 w-20 h-20 object-cover rounded-lg border border-[#D4AF37]/20" />
+                  <img src={imgUrl(imagePreview)} alt="Fabric preview" className="mt-3 w-20 h-20 object-cover rounded-lg border border-[#D4AF37]/20" />
                 )}
               </div>
               <div className="flex justify-end gap-3 pt-4 border-t mt-6">

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { imgUrl } from "../../../utils/cloudinary";
 import { useAuth } from "../../../context/AuthContext";
 import { useWishlist } from "../../../context/WishlistContext";
 import { API_ENDPOINTS } from "../../../config/api";
@@ -182,8 +183,8 @@ const PopularSarees = () => {
                       >
                         {sliderImages.map((image, imageIndex) => (
                           <span key={`${image.url}-${imageIndex}`} className="bk-popular-slide">
-                            <img src={image.url} alt="" className="bk-popular-image-bg" aria-hidden="true" />
-                            <img src={image.url} alt={product.name} className="bk-popular-image" />
+                            <img src={imgUrl(image.url)} alt="" className="bk-popular-image-bg" aria-hidden="true" />
+                            <img src={imgUrl(image.url)} alt={product.name} className="bk-popular-image" />
                           </span>
                         ))}
                       </div>

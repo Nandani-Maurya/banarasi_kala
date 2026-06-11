@@ -1,5 +1,6 @@
 import { Icon } from "@iconify/react";
 import { useState, useEffect, useRef } from "react";
+import { imgUrl } from "../../utils/cloudinary";
 import { Link, useNavigate } from "react-router-dom";
 import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../context/AuthContext";
@@ -829,7 +830,7 @@ const Checkout = () => {
                     <span>Products</span>
                     {cart.map((item) => (
                       <div key={`${item.id}-${item.colorId}-review`} className="checkout-review-product">
-                        <img src={item.image_url} alt="" />
+                        <img src={imgUrl(item.image_url)} alt="" />
                         <div>
                           <strong>{item.name}</strong>
                           <small>Qty {item.quantity} x Rs. {Number(item.price).toLocaleString("en-IN")}</small>
@@ -916,7 +917,7 @@ const Checkout = () => {
 
                       return (
                       <div key={`${item.id}-${item.colorId}`} className="flex items-center space-x-4">
-                        <Link to={`/product/${item.slug}`} className="w-16 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-[#F5F1E8]" aria-label={`Open ${productName}`}><img src={item.image_url} className="w-full h-full object-cover" alt={productName} /></Link>
+                        <Link to={`/product/${item.slug}`} className="w-16 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-[#F5F1E8]" aria-label={`Open ${productName}`}><img src={imgUrl(item.image_url)} className="w-full h-full object-cover" alt={productName} /></Link>
                         <div className="flex-grow">
                           <Link to={`/product/${item.slug}`} className="checkout-summary-product-link">
                             <h4 className="text-xs font-bold text-[#3D2817] tracking-wider">{productName}</h4>

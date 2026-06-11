@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { imgUrl } from "../../../utils/cloudinary";
 import { API_ENDPOINTS } from "../../../config/api";
 import "./BrowseCircles.css";
 
@@ -164,7 +165,7 @@ const BrowseCircles = () => {
                   onClick={() => openItem(item.href)}
                 >
                   <span className="bk-browse-circle">
-                    {item.image ? <img src={item.image} alt={item.name} /> : <span>{item.name.slice(0, 1)}</span>}
+                    {item.image ? <img src={imgUrl(item.image)} alt={item.name} /> : <span>{item.name.slice(0, 1)}</span>}
                   </span>
                   <span className="bk-browse-name">{item.name}</span>
                 </button>
@@ -190,7 +191,7 @@ const BrowseCircles = () => {
                     onClick={() => openItem(item.href)}
                   >
                     <span className="bk-browse-circle">
-                      {item.image ? <img src={item.image} alt={item.name} /> : <span>{item.name.slice(0, 1)}</span>}
+                      {item.image ? <img src={imgUrl(item.image)} alt={item.name} /> : <span>{item.name.slice(0, 1)}</span>}
                     </span>
                     <span className="bk-browse-name">{item.name}</span>
                   </button>

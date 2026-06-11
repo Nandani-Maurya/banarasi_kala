@@ -411,6 +411,44 @@
   border-radius: 12px;
 }
 
+.product-video-thumb {
+  position: relative;
+}
+
+.product-video-thumb video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.product-video-thumb-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.32);
+  border-radius: 10px;
+  color: #fff;
+  font-size: 24px;
+  transition: background 160ms ease;
+}
+
+.product-video-thumb:hover .product-video-thumb-icon,
+.product-video-thumb.active .product-video-thumb-icon {
+  background: rgba(128, 0, 32, 0.55);
+}
+
+.product-main-video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  background: #1a1a1a;
+}
+
 .product-mobile-color-card {
   display: none;
 }

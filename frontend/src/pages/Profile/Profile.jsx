@@ -1,5 +1,6 @@
 import { Icon } from "@iconify/react";
 import { useEffect, useRef, useState } from "react";
+import { imgUrl } from "../../utils/cloudinary";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import api from "../../utils/api";
@@ -858,7 +859,7 @@ export default function Profile() {
           <div className="profile-identity">
             <div className="profile-avatar">
               {profile?.avatar_url ? (
-                <img src={profile.avatar_url} alt="Profile" />
+                <img src={imgUrl(profile.avatar_url)} alt="Profile" />
               ) : (
                 <div className="profile-avatar-fallback" aria-label="Default profile avatar">
                   <Icon icon="lucide:user-round" />
