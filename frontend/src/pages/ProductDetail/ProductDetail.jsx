@@ -122,7 +122,8 @@ const ProductDetail = () => {
   const [activeAccordion, setActiveAccordion] = useState("description");
   const [isGalleryHovering, setIsGalleryHovering] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [activeVideoUrl, setActiveVideoUrl] = useState(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const videoRefs = useRef({});
   const [relatedHoverId, setRelatedHoverId] = useState(null);
   const [relatedSlides, setRelatedSlides] = useState({});
   const [deliveryPincode, setDeliveryPincode] = useState("");
@@ -285,17 +286,38 @@ const ProductDetail = () => {
     };
   }, [loading]);
 
+  useEffect(() => {
+    Object.entries(videoRefs.current).forEach(([idx, el]) => {
+      if (!el) return;
+      if (Number(idx) === activeImageIndex) {
+        el.play().catch(() => {
+          // Browser blocked autoplay with sound — fall back to muted
+          el.muted = true;
+          setIsMuted(true);
+          el.play().catch(() => {});
+        });
+      } else {
+        el.pause();
+        el.currentTime = 0;
+      }
+    });
+  }, [activeImageIndex]);
+
   const visibleImages = useMemo(() => {
     if (!selectedColorId) return getSortedImages(product);
     return colorImagesById[String(selectedColorId)] || [];
   }, [product, selectedColorId, colorImagesById]);
 
-  const visibleVideos = useMemo(() => {
-    const all = Array.isArray(product?.videos) ? product.videos : [];
-    if (!selectedColorId) return all;
-    return all.filter((v) => String(v.color_id) === String(selectedColorId))
-      .sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0));
-  }, [product, selectedColorId]);
+  const visibleMedia = useMemo(() => {
+    const imgs = visibleImages.map((img) => ({ ...img, type: "image" }));
+    const allVideos = Array.isArray(product?.videos) ? product.videos : [];
+    const vids = (selectedColorId
+      ? allVideos.filter((v) => String(v.color_id) === String(selectedColorId))
+      : allVideos
+    ).sort((a, b) => Number(a.display_order || 0) - Number(b.display_order || 0))
+      .map((v) => ({ ...v, type: "video" }));
+    return [...imgs, ...vids];
+  }, [visibleImages, product, selectedColorId]);
 
   const distinctColors = useMemo(() => {
     return allColors;
@@ -385,7 +407,6 @@ const ProductDetail = () => {
       setSelectedColorId(colorId);
       updateColorInUrl(colorId);
       setActiveImageIndex(0);
-      setActiveVideoUrl(null);
     if (cachedImages?.length) {
       setMainImage(cachedImages[0].url);
       return;
@@ -414,18 +435,21 @@ const ProductDetail = () => {
   };
 
   useEffect(() => {
-    if (!isGalleryHovering || visibleImages.length <= 1) return undefined;
+    if (!isGalleryHovering || visibleMedia.length <= 1) return undefined;
+    // When a video is active, let its onEnded handle the advance
+    if (visibleMedia[activeImageIndex]?.type === "video") return undefined;
 
     const timer = window.setInterval(() => {
       setActiveImageIndex((current) => {
-        const next = (current + 1) % visibleImages.length;
-        setMainImage(visibleImages[next]?.url || "");
+        const next = (current + 1) % visibleMedia.length;
+        const nextItem = visibleMedia[next];
+        if (nextItem?.type === "image") setMainImage(nextItem.url);
         return next;
       });
     }, 1450);
 
     return () => window.clearInterval(timer);
-  }, [isGalleryHovering, visibleImages]);
+  }, [isGalleryHovering, visibleMedia, activeImageIndex]);
 
   useEffect(() => {
     if (!relatedHoverId) return undefined;
@@ -1157,27 +1181,35 @@ const ProductDetail = () => {
             >
               <div className="product-3d-frame product-image-frame" ref={frameRef}>
                 {loadingColorId ? <span className="product-image-loader" aria-hidden="true" /> : null}
-                {activeVideoUrl ? (
-                  <video
-                    key={activeVideoUrl}
-                    className="product-main-video"
-                    src={activeVideoUrl}
-                    controls
-                    autoPlay
-                    playsInline
-                  />
-                ) : visibleImages.length > 0 ? (
+                {visibleMedia.length > 0 ? (
                   <div
                     className="product-main-image-track"
                     style={{ transform: `translateX(-${activeImageIndex * 100}%)` }}
                   >
-                    {visibleImages.map((image, index) => (
-                      <img
-                        key={`${image.url}-${index}`}
-                        src={imgUrl(image.url)}
-                        alt={index === activeImageIndex ? productName : ""}
-                        className="product-main-image"
-                      />
+                    {visibleMedia.map((item, index) => (
+                      item.type === "video" ? (
+                        <video
+                          key={`${item.url}-${index}`}
+                          ref={(el) => { if (el) videoRefs.current[index] = el; else delete videoRefs.current[index]; }}
+                          className="product-main-video"
+                          src={item.url}
+                          muted={isMuted}
+                          playsInline
+                          onEnded={() => {
+                            const next = (index + 1) % visibleMedia.length;
+                            const nextItem = visibleMedia[next];
+                            if (nextItem?.type === "image") setMainImage(nextItem.url);
+                            setActiveImageIndex(next);
+                          }}
+                        />
+                      ) : (
+                        <img
+                          key={`${item.url}-${index}`}
+                          src={imgUrl(item.url)}
+                          alt={index === activeImageIndex ? productName : ""}
+                          className="product-main-image"
+                        />
+                      )
                     ))}
                   </div>
                 ) : mainImage ? (
@@ -1193,11 +1225,16 @@ const ProductDetail = () => {
                   <button type="button" onClick={handleShare} aria-label="Share">
                     <Icon icon="lucide:share-2" />
                   </button>
+                  {visibleMedia[activeImageIndex]?.type === "video" && (
+                    <button type="button" onClick={() => setIsMuted((m) => !m)} aria-label={isMuted ? "Unmute" : "Mute"}>
+                      <Icon icon={isMuted ? "lucide:volume-x" : "lucide:volume-2"} />
+                    </button>
+                  )}
                 </div>
-                {!activeVideoUrl && visibleImages.length > 1 && (
+                {visibleMedia.length > 1 && (
                   <div className="product-image-dots" aria-hidden="true">
-                    {visibleImages.map((image, index) => (
-                      <span key={`${image.url}-dot`} className={index === activeImageIndex ? "active" : ""} />
+                    {visibleMedia.map((item, index) => (
+                      <span key={`${item.url}-dot`} className={index === activeImageIndex ? "active" : ""} />
                     ))}
                   </div>
                 )}
@@ -1212,37 +1249,34 @@ const ProductDetail = () => {
                 ? Array.from({ length: 6 }).map((_, index) => (
                     <span key={`thumb-skeleton-${index}`} className="product-thumb-skeleton" aria-hidden="true" />
                   ))
-                : visibleImages.map((image, index) => (
-                    <button
-                      key={`${image.url}-${index}`}
-                      type="button"
-                      onClick={() => {
-                        setActiveImageIndex(index);
-                        setMainImage(image.url);
-                        setActiveVideoUrl(null);
-                      }}
-                      onFocus={() => { setActiveImageIndex(index); setActiveVideoUrl(null); }}
-                      onMouseEnter={() => setActiveImageIndex(index)}
-                      className={`product-thumb ${!activeVideoUrl && mainImage === image.url ? "active" : ""}`}
-                      aria-label={`View image ${index + 1}`}
-                    >
-                      <img src={imgUrl(image.url)} alt="" />
-                    </button>
+                : visibleMedia.map((item, index) => (
+                    item.type === "video" ? (
+                      <button
+                        key={`${item.url}-${index}`}
+                        type="button"
+                        onClick={() => { setActiveImageIndex(index); }}
+                        className={`product-thumb product-video-thumb ${activeImageIndex === index ? "active" : ""}`}
+                        aria-label={`Play video ${index + 1}`}
+                      >
+                        <video src={item.url} preload="metadata" muted playsInline />
+                        <span className="product-video-thumb-icon" aria-hidden="true">
+                          <Icon icon={activeImageIndex === index ? "lucide:pause" : "lucide:play"} />
+                        </span>
+                      </button>
+                    ) : (
+                      <button
+                        key={`${item.url}-${index}`}
+                        type="button"
+                        onClick={() => { setActiveImageIndex(index); setMainImage(item.url); }}
+                        onFocus={() => setActiveImageIndex(index)}
+                        onMouseEnter={() => setActiveImageIndex(index)}
+                        className={`product-thumb ${activeImageIndex === index ? "active" : ""}`}
+                        aria-label={`View image ${index + 1}`}
+                      >
+                        <img src={imgUrl(item.url)} alt="" />
+                      </button>
+                    )
                   ))}
-              {visibleVideos.map((video, index) => (
-                <button
-                  key={`${video.url}-${index}`}
-                  type="button"
-                  onClick={() => setActiveVideoUrl(video.url)}
-                  className={`product-thumb product-video-thumb ${activeVideoUrl === video.url ? "active" : ""}`}
-                  aria-label={`Play video ${index + 1}`}
-                >
-                  <video src={video.url} preload="metadata" muted playsInline />
-                  <span className="product-video-thumb-icon" aria-hidden="true">
-                    <Icon icon="lucide:play" />
-                  </span>
-                </button>
-              ))}
             </div>
 
             {distinctColors.length > 0 && (
